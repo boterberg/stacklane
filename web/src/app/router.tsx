@@ -26,6 +26,7 @@ import { VpsServersPage } from '../pages/vps/ServersPage'
 import { FirewallPage } from '../pages/vps/FirewallPage'
 import { FirewallsPage } from '../pages/vps/FirewallsPage'
 import { IsosPage } from '../pages/vps/IsosPage'
+import { UsersPage } from '../pages/vps/UsersPage'
 import { SnapshotsPage } from '../pages/vps/SnapshotsPage'
 import { VolumesPage } from '../pages/vps/VolumesPage'
 import { OrderWebhostingPage } from '../pages/webhosting/OrderWebhostingPage'
@@ -35,6 +36,7 @@ import { SshKeysPage } from '../pages/vps/SshKeysPage'
 import { GameServersPage } from '../pages/gameservers/GameServersPage'
 import { AccountPage } from '../pages/account/AccountPage'
 import { SecurityPage } from '../pages/account/SecurityPage'
+import { SharedAccessPage } from '../pages/account/SharedAccessPage'
 import { IntegrationsPage } from '../pages/admin/IntegrationsPage'
 import { AdminInvoicePage } from '../pages/admin/InvoicePage'
 import { AdminInvoicesPage } from '../pages/admin/InvoicesPage'
@@ -86,6 +88,8 @@ export const router = createBrowserRouter([
       { path: '/vps/firewalls', element: <FirewallsPage /> },
       { path: '/vps/firewalls/:id', element: <FirewallPage /> },
       { path: '/vps/ssh-keys', element: <SshKeysPage /> },
+      { path: '/vps/users', element: <UsersPage /> },
+      { path: '/account/shared-access', element: <SharedAccessPage /> },
       { path: '/admin/services', element: <ServicesPage /> },
       { path: '/admin/products', element: <ProductsPage /> },
       { path: '/admin/integrations', element: <IntegrationsPage /> },
