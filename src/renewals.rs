@@ -71,8 +71,8 @@ async fn create_invoice(
     due: &Due,
     billing: &Billing,
 ) -> AppResult<Option<(i64, i64)>> {
-    let items: Vec<(String, i32)> = sqlx::query_as(
-        "SELECT description, monthly_price_cents FROM subscription_items WHERE subscription_id = $1 ORDER BY description",
+    let items: Vec<(String, i32, Option<i32>)> = sqlx::query_as(
+        "SELECT description, monthly_price_cents, period_price_cents FROM subscription_items WHERE subscription_id = $1 ORDER BY description",
     )
     .bind(due.id)
     .fetch_all(&state.db)
@@ -85,12 +85,12 @@ async fn create_invoice(
     let end = renewal_end(due.expires_at, &due.billing_interval);
     let lines: Vec<Line> = items
         .into_iter()
-        .map(|(description, price)| Line {
+        .map(|(description, price, period_price)| Line {
             subscription_id: Some(due.id),
             description,
             period_start: Some(start),
             period_end: Some(end),
-            amount_cents: i64::from(price) * months,
+            amount_cents: period_price.map_or(i64::from(price) * months, i64::from),
         })
         .collect();
     let due_at = start.max(OffsetDateTime::now_utc().date());
