@@ -266,9 +266,6 @@ fn english(message: &str) -> Option<&'static str> {
         "Vul twee tot zes geldige nameservers in." => "Enter two to six valid name servers.",
         "Kies een flavor." => "Choose a flavor.",
         "Kies TCP, UDP of ICMP." => "Choose TCP, UDP or ICMP.",
-        "Vul een poort in, zoals 22, 80,443 of 8000:8100." => {
-            "Enter a port, such as 22, 80,443 or 8000:8100."
-        }
         "Vul een IPv4-adres of -reeks in, zoals 203.0.113.4 of 10.0.0.0/8." => {
             "Enter an IPv4 address or range, such as 203.0.113.4 or 10.0.0.0/8."
         }
@@ -366,6 +363,18 @@ fn english(message: &str) -> Option<&'static str> {
             "It is busy right now. Try again in a few seconds."
         }
         "Gebruik hoogstens 100 tekens." => "Use at most 100 characters.",
+        "Vul hoogstens 15 poorten of reeksen in, zoals 22, 80,443 of 8000:8100." => {
+            "Enter at most 15 ports or ranges, such as 22, 80,443 or 8000:8100."
+        }
+        "Deze server heeft al 100 firewallregels. Verwijder er eerst een paar." => {
+            "This server already has 100 firewall rules. Remove some first."
+        }
+        "Een firewall heeft samen hoogstens 100 poorten of reeksen." => {
+            "A firewall has at most 100 ports or ranges in total."
+        }
+        "Je hebt al 20 firewalls. Verwijder er eerst een." => {
+            "You already have 20 firewalls. Remove one first."
+        }
         _ => return None,
     })
 }

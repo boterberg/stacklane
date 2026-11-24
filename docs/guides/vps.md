@@ -57,6 +57,8 @@ Stacklane zet de regels van een firewall bovenaan de firewall van de server en h
 | OpenStack | Alleen toestaan. Een poortlijst wordt per poort een aparte regel in de security group. |
 | VirtFusion | Geen firewalls van Stacklane; de server staat niet in de lijst. |
 
+Een klant heeft hoogstens 20 firewalls. Een regel heeft hoogstens 15 poorten of reeksen, een firewall samen hoogstens 100, en een server hoogstens 100 regels. Zo kan één klant het quotum voor security groups van een gedeeld OpenStack-project niet opmaken.
+
 Lukt het bijwerken van een server niet, dan slaat Stacklane de firewall toch op en toont het welke server niet is bijgewerkt en waarom.
 
 ### Volumes

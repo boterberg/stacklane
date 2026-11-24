@@ -236,11 +236,21 @@ fn clean(input: &mut FirewallInput) -> AppResult<()> {
     }
     for rule in &mut input.rules {
         validate_rule(rule)?;
-        rule.comment = rule
-            .comment
-            .as_deref()
-            .map(|comment| comment.trim().chars().take(80).collect::<String>())
-            .filter(|comment| !comment.is_empty());
+    }
+    let entries: usize = input
+        .rules
+        .iter()
+        .map(|rule| {
+            rule.dport
+                .as_deref()
+                .map_or(1, |ports| ports.split(',').count())
+        })
+        .sum();
+    if entries > 100 {
+        return Err(AppError::field(
+            "rules",
+            "Een firewall heeft samen hoogstens 100 poorten of reeksen.",
+        ));
     }
     Ok(())
 }
@@ -496,6 +506,16 @@ pub async fn create(
     actor.require("firewalls.create")?;
     clean(&mut input)?;
     check_rights(&state, &actor, None, &input).await?;
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM vps_firewalls WHERE user_id = $1")
+        .bind(actor.owner)
+        .fetch_one(&state.db)
+        .await?;
+    if count >= 20 {
+        return Err(AppError::field(
+            "name",
+            "Je hebt al 20 firewalls. Verwijder er eerst een.",
+        ));
+    }
     let id = Uuid::new_v4();
     store(&state, &actor, id, &input).await?;
     let problems = sync_all(
