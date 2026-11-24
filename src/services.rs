@@ -374,6 +374,50 @@ pub async fn change_state_because(
     .bind(reason)
     .execute(&state.db)
     .await?;
+    if action == "terminate" {
+        end_billing(state, service_id).await?;
+    }
+    Ok(())
+}
+
+async fn end_billing(state: &AppState, service_id: Uuid) -> AppResult<()> {
+    let subscription: Option<Uuid> =
+        sqlx::query_scalar("SELECT subscription_id FROM services WHERE id = $1")
+            .bind(service_id)
+            .fetch_one(&state.db)
+            .await?;
+    let Some(subscription) = subscription else {
+        return Ok(());
+    };
+    let others: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM services WHERE subscription_id = $1 AND id <> $2 AND status <> 'terminated')",
+    )
+    .bind(subscription)
+    .bind(service_id)
+    .fetch_one(&state.db)
+    .await?;
+    if others {
+        return Ok(());
+    }
+    let mut transaction = state.db.begin().await?;
+    sqlx::query(
+        "UPDATE subscriptions SET status = 'cancelled', cancelled_at = COALESCE(cancelled_at, now())
+         WHERE id = $1 AND status IN ('pending', 'active', 'suspended')",
+    )
+    .bind(subscription)
+    .execute(&mut *transaction)
+    .await?;
+    sqlx::query(
+        "UPDATE invoices v SET status = 'cancelled'
+         WHERE v.status = 'open'
+           AND EXISTS (SELECT 1 FROM invoice_lines l WHERE l.invoice_id = v.id)
+           AND NOT EXISTS (SELECT 1 FROM invoice_lines l WHERE l.invoice_id = v.id
+                           AND l.subscription_id IS DISTINCT FROM $1)",
+    )
+    .bind(subscription)
+    .execute(&mut *transaction)
+    .await?;
+    transaction.commit().await?;
     Ok(())
 }
 

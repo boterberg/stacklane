@@ -350,6 +350,41 @@ pub fn next_expiry(current: OffsetDateTime, interval: &str) -> OffsetDateTime {
     add_months(current, interval_months(interval))
 }
 
+async fn flag_late_payment(state: &AppState, invoice_id: i64) -> AppResult<()> {
+    let cancelled: bool =
+        sqlx::query_scalar("SELECT status = 'cancelled' FROM invoices WHERE id = $1")
+            .bind(invoice_id)
+            .fetch_optional(&state.db)
+            .await?
+            .unwrap_or(false);
+    if !cancelled {
+        return Ok(());
+    }
+    tracing::warn!(invoice_id, "a payment came in for a cancelled invoice");
+    let admins: Vec<Uuid> =
+        sqlx::query_scalar("SELECT id FROM users WHERE role = 'admin' AND deleted_at IS NULL")
+            .fetch_all(&state.db)
+            .await?;
+    for admin in admins {
+        crate::renewals::notify(
+            state,
+            admin,
+            (
+                format!("Betaling op geannuleerde factuur {invoice_id}"),
+                format!("Er is betaald voor factuur {invoice_id}, maar die factuur was al geannuleerd. Controleer de betaling en betaal hem zo nodig terug."),
+            ),
+            (
+                format!("Payment on cancelled invoice {invoice_id}"),
+                format!("Invoice {invoice_id} was paid after it had been cancelled. Check the payment and refund it if needed."),
+            ),
+            &format!("/admin/invoices/{invoice_id}"),
+        )
+        .await
+        .ok();
+    }
+    Ok(())
+}
+
 pub async fn mark_invoice_paid(state: &AppState, invoice_id: i64) -> AppResult<()> {
     let user_id: Option<Uuid> = sqlx::query_scalar(
         "UPDATE invoices SET status = 'paid', paid_at = now() WHERE id = $1 AND status = 'open' RETURNING user_id",
@@ -358,7 +393,7 @@ pub async fn mark_invoice_paid(state: &AppState, invoice_id: i64) -> AppResult<(
     .fetch_optional(&state.db)
     .await?;
     let Some(user_id) = user_id else {
-        return Ok(());
+        return flag_late_payment(state, invoice_id).await;
     };
 
     let covered: Vec<(Uuid, Option<time::Date>)> = sqlx::query_as(
