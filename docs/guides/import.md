@@ -26,6 +26,29 @@ Wat er gebeurt:
 
 Nieuwe klanten krijgen geen wachtwoord. Ze stellen er zelf een in met **Wachtwoord vergeten**; zorg dus dat [`SMTP_URL`](/docs/installation/configuration) ingesteld is.
 
-## Uit WHMCS, Paymenter, Blesta en HostBill
+## Uit WHMCS
+
+De import leest de WHMCS-database rechtstreeks, alleen lezend. Geef een MySQL-gebruiker op; het wachtwoord vraagt het commando apart, zodat het niet in je shellgeschiedenis komt:
+
+```sh
+sudo stacklane import whmcs --database mysql://whmcs@db.jouwbedrijf.nl/whmcs --dry-run
+sudo stacklane import whmcs --database mysql://whmcs@db.jouwbedrijf.nl/whmcs
+```
+
+Wat er meekomt:
+
+| Uit WHMCS | In Stacklane |
+| --- | --- |
+| Klanten, met adres en bedrijfsnaam | Klanten. Hun wachtwoord blijft werken en wordt bij de eerste keer inloggen opnieuw versleuteld. |
+| Producten en hun prijs | Producten, met een maandprijs. Verborgen producten worden inactief. |
+| Diensten (`tblhosting`) | Abonnementen en diensten, met status, vervaldatum en interval |
+| Facturen en factuurregels | Facturen, met hetzelfde nummer en dezelfde status |
+| Tickets en reacties | Tickets met het hele gesprek. Afdelingen die nog niet bestaan, worden aangemaakt. |
+
+Wat de import overslaat, staat aan het eind van de uitvoer: klanten zonder geldig e-mailadres, tickets van gasten zonder account en losse betalingen. Diensten met een cyclus van twee of drie jaar komen binnen als jaarlijks.
+
+De hele import is één transactie. Gaat er halverwege iets mis, dan verandert er niets.
+
+## Uit Paymenter, Blesta en HostBill
 
 Deze imports komen in de volgende versies.

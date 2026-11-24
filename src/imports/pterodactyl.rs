@@ -72,10 +72,10 @@ async fn ensure_user(
         .fetch_optional(pool)
         .await?
     {
-        report.users_matched += 1;
+        report.existing("Klanten");
         return Ok(Some(id));
     }
-    report.users_created += 1;
+    report.created("Klanten");
     if dry_run {
         return Ok(Some(Uuid::nil()));
     }
@@ -140,7 +140,7 @@ pub async fn run(
         .fetch_one(pool)
         .await?;
         if exists {
-            report.services_existing += 1;
+            report.existing("Diensten");
             continue;
         }
         let Some(user_id) = accounts.get(&server.owner_external_id).copied() else {
@@ -150,7 +150,7 @@ pub async fn run(
             ));
             continue;
         };
-        report.services_created += 1;
+        report.created("Diensten");
         if dry_run {
             continue;
         }

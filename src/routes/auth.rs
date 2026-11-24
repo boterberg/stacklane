@@ -147,7 +147,16 @@ pub async fn login(
             .await?;
 
     let user_id = match account {
-        Some((id, hash)) if auth::verify_password(&input.password, &hash) => id,
+        Some((id, hash)) if auth::verify_password(&input.password, &hash) => {
+            if auth::needs_rehash(&hash) {
+                sqlx::query("UPDATE users SET password_hash = $2 WHERE id = $1")
+                    .bind(id)
+                    .bind(auth::hash_password(&input.password)?)
+                    .execute(&state.db)
+                    .await?;
+            }
+            id
+        }
         _ => {
             return Err(AppError::field(
                 "email",
