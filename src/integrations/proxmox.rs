@@ -193,8 +193,17 @@ impl Proxmox {
         )
         .await
         .with_context(|| format!("node {} niet gevonden", self.settings.node))?;
+        let firewall = self
+            .request(Method::GET, "/cluster/firewall/options", None)
+            .await
+            .unwrap_or_default();
+        let warning = if firewall["enable"].as_i64() == Some(1) {
+            ""
+        } else {
+            ", let op: de firewall van het datacenter staat uit, zet die aan zodat servers elkaars IP-adres niet kunnen overnemen"
+        };
         Ok(format!(
-            "Proxmox VE {}",
+            "Proxmox VE {}{warning}",
             version["version"].as_str().unwrap_or("?")
         ))
     }
@@ -285,16 +294,55 @@ impl Proxmox {
             ]),
         )
         .await?;
+        self.bind_address(server.vmid, server.ipv4).await?;
+        self.power(server.vmid, "start").await
+    }
+
+    async fn bind_address(&self, vmid: u32, ipv4: Ipv4Addr) -> anyhow::Result<()> {
+        let firewall = format!("{}/firewall", self.vm_path(vmid));
+        self.request(
+            Method::POST,
+            &format!("{firewall}/ipset"),
+            Some(&[("name", "ipfilter-net0".to_owned())]),
+        )
+        .await
+        .ok();
+        self.request(
+            Method::POST,
+            &format!("{firewall}/ipset/ipfilter-net0"),
+            Some(&[("cidr", ipv4.to_string())]),
+        )
+        .await
+        .ok();
+        let listed = self
+            .request(
+                Method::GET,
+                &format!("{firewall}/ipset/ipfilter-net0"),
+                None,
+            )
+            .await?;
+        anyhow::ensure!(
+            listed
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|entry| entry["cidr"]
+                    .as_str()
+                    .is_some_and(|cidr| cidr.trim_end_matches("/32") == ipv4.to_string())),
+            "het IP-adres staat niet in het IP-filter van de server"
+        );
         self.request(
             Method::PUT,
-            &format!("{}/firewall/options", self.vm_path(server.vmid)),
+            &format!("{firewall}/options"),
             Some(&[
                 ("enable", "1".to_owned()),
+                ("ipfilter", "1".to_owned()),
+                ("macfilter", "1".to_owned()),
                 ("policy_in", "ACCEPT".to_owned()),
             ]),
         )
         .await?;
-        self.power(server.vmid, "start").await
+        Ok(())
     }
 
     pub async fn status(&self, vmid: u32) -> anyhow::Result<Status> {
@@ -532,6 +580,46 @@ mod tests {
             token_secret: "s".into(),
         };
         (Proxmox::new(&base, credentials, settings()).unwrap(), calls)
+    }
+
+    fn filtering_node(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+        match (method, path) {
+            ("GET", path) if path.ends_with("/ipset/ipfilter-net0") => {
+                (200, json!({ "data": [{ "cidr": "192.0.2.10" }] }))
+            }
+            _ => (200, json!({ "data": null })),
+        }
+    }
+
+    #[tokio::test]
+    async fn binds_each_vm_to_its_own_address() {
+        let (base, calls) = crate::testing::fake_api(filtering_node).await;
+        let credentials = Credentials {
+            token_id: "t".into(),
+            token_secret: "s".into(),
+        };
+        let client = Proxmox::new(&base, credentials, settings()).unwrap();
+        client
+            .bind_address(101, "192.0.2.10".parse().unwrap())
+            .await
+            .unwrap();
+        let calls = calls.lock().unwrap().clone();
+        assert!(
+            calls.contains(
+                &"POST /api2/json/nodes/pve/qemu/101/firewall/ipset/ipfilter-net0 cidr=192.0.2.10"
+                    .to_owned()
+            )
+        );
+        assert!(calls.iter().any(|call| {
+            call.starts_with("PUT /api2/json/nodes/pve/qemu/101/firewall/options")
+                && call.contains("ipfilter=1")
+        }));
+        assert!(
+            client
+                .bind_address(102, "192.0.2.11".parse().unwrap())
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]
