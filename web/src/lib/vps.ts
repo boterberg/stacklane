@@ -29,7 +29,7 @@ export type LiveStatus = { state: string; cpu: number; cpus: number; memory: num
 
 export type Snapshot = { name: string; description: string; created_at: number | null }
 
-export type FirewallRule = { pos: number; type: 'in' | 'out'; action: string; proto?: string | null; dport?: string | null; source?: string | null; comment?: string | null }
+export type FirewallRule = { id: string; type: 'in' | 'out'; action: string; proto?: string | null; dport?: string | null; source?: string | null; comment?: string | null }
 
 export type SshKey = { id: string; name: string; fingerprint: string; created_at: string }
 
@@ -100,11 +100,11 @@ export function useFirewall(id: string, enabled: boolean) {
 }
 
 export function useAddFirewallRule(id: string) {
-  return useServerMutation(id, 'firewall', (rule: Omit<FirewallRule, 'pos'>) => api<void>(`/vps/servers/${id}/firewall`, { method: 'POST', body: rule }))
+  return useServerMutation(id, 'firewall', (rule: Omit<FirewallRule, 'id'>) => api<void>(`/vps/servers/${id}/firewall`, { method: 'POST', body: rule }))
 }
 
 export function useDeleteFirewallRule(id: string) {
-  return useServerMutation(id, 'firewall', (pos: number) => api<void>(`/vps/servers/${id}/firewall/${pos}`, { method: 'DELETE' }))
+  return useServerMutation(id, 'firewall', (rule: string) => api<void>(`/vps/servers/${id}/firewall/${rule}`, { method: 'DELETE' }))
 }
 
 export function useSshKeys() {

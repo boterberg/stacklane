@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::error::{AppError, AppResult};
-use crate::integrations::{self, proxmox};
+use crate::integrations::{self, vps};
 use crate::payments::reveal;
 use crate::state::AppState;
 
@@ -31,7 +31,7 @@ pub struct Server {
 pub struct ServerDetail {
     #[serde(flatten)]
     server: Server,
-    live: Option<proxmox::Status>,
+    live: Option<vps::Status>,
 }
 
 const SELECT: &str = "SELECT s.id, s.name, s.status, s.details - 'root_password' - 'ssh_key_ids' AS details, s.last_error,
@@ -50,11 +50,7 @@ async fn load(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<Serve
         .ok_or(AppError::NotFound)
 }
 
-async fn machine(
-    state: &AppState,
-    user: &CurrentUser,
-    id: Uuid,
-) -> AppResult<(proxmox::Proxmox, u32)> {
+async fn machine(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<vps::Machine> {
     let (integration_id, external_id, status): (Option<Uuid>, Option<String>, String) = sqlx::query_as(
         "SELECT integration_id, external_id, status FROM services WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
     )
@@ -75,7 +71,7 @@ async fn machine(
         return Err(AppError::field("server", "Deze server is nog niet klaar."));
     };
     match integrations::driver(state, integration_id).await? {
-        integrations::Driver::Proxmox(client) => Ok((client, vmid)),
+        integrations::Driver::Proxmox(client) => Ok(vps::Machine::Proxmox(client, vmid)),
         _ => Err(AppError::NotFound),
     }
 }
@@ -105,7 +101,7 @@ pub async fn show(
 ) -> AppResult<Json<ServerDetail>> {
     let server = load(&state, &user, id).await?;
     let live = match machine(&state, &user, id).await {
-        Ok((client, vmid)) => client.status(vmid).await.ok(),
+        Ok(machine) => machine.status().await.ok(),
         Err(_) => None,
     };
     Ok(Json(ServerDetail { server, live }))
@@ -128,8 +124,8 @@ pub async fn power(
     ) {
         return Err(AppError::field("action", "Onbekende actie."));
     }
-    let (client, vmid) = machine(&state, &user, id).await?;
-    client.power(vmid, &input.action).await.map_err(failed)?;
+    let machine = machine(&state, &user, id).await?;
+    machine.power(&input.action).await.map_err(failed)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -163,9 +159,9 @@ pub async fn snapshots(
     State(state): State<AppState>,
     user: CurrentUser,
     Path(id): Path<Uuid>,
-) -> AppResult<Json<Vec<proxmox::Snapshot>>> {
-    let (client, vmid) = machine(&state, &user, id).await?;
-    Ok(Json(client.snapshots(vmid).await.map_err(failed)?))
+) -> AppResult<Json<Vec<vps::Snapshot>>> {
+    let machine = machine(&state, &user, id).await?;
+    Ok(Json(machine.snapshots().await.map_err(failed)?))
 }
 
 #[derive(Deserialize)]
@@ -181,8 +177,8 @@ pub async fn create_snapshot(
     Path(id): Path<Uuid>,
     Json(input): Json<NewSnapshot>,
 ) -> AppResult<StatusCode> {
-    let (client, vmid) = machine(&state, &user, id).await?;
-    if client.snapshots(vmid).await.map_err(failed)?.len() >= MAX_SNAPSHOTS {
+    let machine = machine(&state, &user, id).await?;
+    if machine.snapshots().await.map_err(failed)?.len() >= MAX_SNAPSHOTS {
         return Err(AppError::field(
             "description",
             "Je hebt al 3 snapshots. Verwijder er eerst een.",
@@ -194,14 +190,14 @@ pub async fn create_snapshot(
         ))
         .map_err(anyhow::Error::from)?;
     let description = input.description.unwrap_or_default();
-    client
-        .create_snapshot(vmid, &name, description.trim())
+    machine
+        .create_snapshot(&name, description.trim())
         .await
         .map_err(failed)?;
     Ok(StatusCode::CREATED)
 }
 
-fn snapshot_name(name: &str) -> AppResult<&str> {
+fn identifier(name: &str) -> AppResult<&str> {
     if name.is_empty()
         || name.len() > 40
         || !name.chars().all(|character| {
@@ -218,9 +214,9 @@ pub async fn rollback_snapshot(
     user: CurrentUser,
     Path((id, name)): Path<(Uuid, String)>,
 ) -> AppResult<StatusCode> {
-    let (client, vmid) = machine(&state, &user, id).await?;
-    client
-        .rollback_snapshot(vmid, snapshot_name(&name)?)
+    let machine = machine(&state, &user, id).await?;
+    machine
+        .rollback_snapshot(identifier(&name)?)
         .await
         .map_err(failed)?;
     Ok(StatusCode::NO_CONTENT)
@@ -231,9 +227,9 @@ pub async fn delete_snapshot(
     user: CurrentUser,
     Path((id, name)): Path<(Uuid, String)>,
 ) -> AppResult<StatusCode> {
-    let (client, vmid) = machine(&state, &user, id).await?;
-    client
-        .delete_snapshot(vmid, snapshot_name(&name)?)
+    let machine = machine(&state, &user, id).await?;
+    machine
+        .delete_snapshot(identifier(&name)?)
         .await
         .map_err(failed)?;
     Ok(StatusCode::NO_CONTENT)
@@ -243,9 +239,9 @@ pub async fn firewall(
     State(state): State<AppState>,
     user: CurrentUser,
     Path(id): Path<Uuid>,
-) -> AppResult<Json<Vec<proxmox::FirewallRule>>> {
-    let (client, vmid) = machine(&state, &user, id).await?;
-    Ok(Json(client.firewall_rules(vmid).await.map_err(failed)?))
+) -> AppResult<Json<Vec<vps::FirewallRule>>> {
+    let machine = machine(&state, &user, id).await?;
+    Ok(Json(machine.firewall_rules().await.map_err(failed)?))
 }
 
 fn valid_ports(ports: &str) -> bool {
@@ -272,7 +268,7 @@ pub async fn add_firewall_rule(
     State(state): State<AppState>,
     user: CurrentUser,
     Path(id): Path<Uuid>,
-    Json(mut rule): Json<proxmox::FirewallRule>,
+    Json(mut rule): Json<vps::FirewallRule>,
 ) -> AppResult<StatusCode> {
     rule.direction = rule.direction.to_lowercase();
     rule.action = rule.action.to_uppercase();
@@ -311,22 +307,19 @@ pub async fn add_firewall_rule(
             "Vul een IPv4-adres of -reeks in, zoals 203.0.113.4 of 10.0.0.0/8.",
         ));
     }
-    let (client, vmid) = machine(&state, &user, id).await?;
-    client
-        .add_firewall_rule(vmid, &rule)
-        .await
-        .map_err(failed)?;
+    let machine = machine(&state, &user, id).await?;
+    machine.add_firewall_rule(&rule).await.map_err(failed)?;
     Ok(StatusCode::CREATED)
 }
 
 pub async fn delete_firewall_rule(
     State(state): State<AppState>,
     user: CurrentUser,
-    Path((id, pos)): Path<(Uuid, u32)>,
+    Path((id, rule)): Path<(Uuid, String)>,
 ) -> AppResult<StatusCode> {
-    let (client, vmid) = machine(&state, &user, id).await?;
-    client
-        .delete_firewall_rule(vmid, pos)
+    let machine = machine(&state, &user, id).await?;
+    machine
+        .delete_firewall_rule(identifier(&rule)?)
         .await
         .map_err(failed)?;
     Ok(StatusCode::NO_CONTENT)

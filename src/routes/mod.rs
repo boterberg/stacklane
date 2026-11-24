@@ -63,7 +63,7 @@ pub fn router(state: AppState) -> Router {
             get(vps::firewall).post(vps::add_firewall_rule),
         )
         .route(
-            "/vps/servers/{id}/firewall/{pos}",
+            "/vps/servers/{id}/firewall/{rule}",
             delete(vps::delete_firewall_rule),
         )
         .route("/shop/products", get(shop::products))

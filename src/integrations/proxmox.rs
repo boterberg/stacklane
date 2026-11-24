@@ -6,6 +6,8 @@ use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use super::vps::{FirewallRule, Snapshot, Status};
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Credentials {
     pub token_id: String,
@@ -69,40 +71,6 @@ pub struct NewServer<'a> {
     pub ssh_keys: &'a [String],
     pub password: &'a str,
     pub description: &'a str,
-}
-
-#[derive(Serialize)]
-pub struct Status {
-    pub state: String,
-    pub cpu: f64,
-    pub cpus: u64,
-    pub memory: u64,
-    pub max_memory: u64,
-    pub uptime: u64,
-}
-
-#[derive(Serialize)]
-pub struct Snapshot {
-    pub name: String,
-    pub description: String,
-    pub created_at: Option<i64>,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct FirewallRule {
-    #[serde(default)]
-    pub pos: u32,
-    #[serde(rename = "type")]
-    pub direction: String,
-    pub action: String,
-    #[serde(default)]
-    pub proto: Option<String>,
-    #[serde(default)]
-    pub dport: Option<String>,
-    #[serde(default)]
-    pub source: Option<String>,
-    #[serde(default)]
-    pub comment: Option<String>,
 }
 
 pub struct Proxmox {
@@ -435,7 +403,23 @@ impl Proxmox {
                 None,
             )
             .await?;
-        Ok(serde_json::from_value(rules).unwrap_or_default())
+        Ok(rules
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|rule| {
+                let text = |key: &str| rule[key].as_str().map(str::to_owned);
+                FirewallRule {
+                    id: rule["pos"].as_u64().unwrap_or_default().to_string(),
+                    direction: text("type").unwrap_or_default(),
+                    action: text("action").unwrap_or_default(),
+                    proto: text("proto"),
+                    dport: text("dport"),
+                    source: text("source"),
+                    comment: text("comment"),
+                }
+            })
+            .collect())
     }
 
     pub async fn add_firewall_rule(&self, vmid: u32, rule: &FirewallRule) -> anyhow::Result<()> {

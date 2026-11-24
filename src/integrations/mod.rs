@@ -1,5 +1,6 @@
 pub mod proxmox;
 pub mod pterodactyl;
+pub mod vps;
 
 use anyhow::Context;
 use serde::Serialize;

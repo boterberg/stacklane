@@ -223,7 +223,7 @@ function Firewall({ server }: { server: VpsServer }) {
       ) : (
         <ul className="divide-y divide-zinc-200 rounded-xl border border-zinc-200 bg-white dark:divide-white/10 dark:border-white/10 dark:bg-white/10">
           {(rules ?? []).map((item: FirewallRule) => (
-            <li key={item.pos} className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 text-sm">
+            <li key={item.id} className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 text-sm">
               <div className="flex flex-wrap items-center gap-3">
                 <Badge color={item.action === 'ACCEPT' ? 'green' : 'red'}>{item.action === 'ACCEPT' ? t('Toestaan') : t('Blokkeren')}</Badge>
                 <span className="text-zinc-800 dark:text-white">
@@ -233,7 +233,7 @@ function Firewall({ server }: { server: VpsServer }) {
                 <span className="text-zinc-500 dark:text-white/60">{item.source ? t('vanaf {source}', { source: item.source }) : t('vanaf iedereen')}</span>
                 {item.comment && <span className="text-zinc-400 dark:text-white/50">{item.comment}</span>}
               </div>
-              <Button size="sm" icon={TrashIcon} disabled={remove.isPending} onClick={() => remove.mutate(item.pos)}>
+              <Button size="sm" icon={TrashIcon} disabled={remove.isPending} onClick={() => remove.mutate(item.id)}>
                 {t('Verwijderen')}
               </Button>
             </li>
