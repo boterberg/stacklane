@@ -87,6 +87,9 @@ pub struct InvoiceDetail {
     pub(crate) summary: InvoiceSummary,
     pub(crate) tax_cents: i32,
     pub(crate) tax_rate_basis_points: i32,
+    pub(crate) vat_scheme: String,
+    pub(crate) vat_country: Option<String>,
+    pub(crate) customer_vat_number: Option<String>,
     #[serde(with = "time::serde::rfc3339::option")]
     pub(crate) paid_at: Option<OffsetDateTime>,
     pub(crate) customer: serde_json::Value,
@@ -245,6 +248,9 @@ struct InvoiceRow {
     total_cents: i32,
     tax_cents: i32,
     tax_rate_basis_points: i32,
+    vat_scheme: String,
+    vat_country: Option<String>,
+    customer_vat_number: Option<String>,
     paid_at: Option<OffsetDateTime>,
     billing_snapshot: serde_json::Value,
     user_id: Uuid,
@@ -256,7 +262,8 @@ pub async fn load_invoice(
     id: i64,
 ) -> AppResult<InvoiceDetail> {
     let row: InvoiceRow = sqlx::query_as(
-        "SELECT id, status, issued_at, due_at, total_cents, tax_cents, tax_rate_basis_points, paid_at, billing_snapshot, user_id
+        "SELECT id, status, issued_at, due_at, total_cents, tax_cents, tax_rate_basis_points, vat_scheme, vat_country::text,
+                customer_vat_number, paid_at, billing_snapshot, user_id
          FROM invoices WHERE id = $1 AND ($2::uuid IS NULL OR user_id = $2)",
     )
     .bind(id)
@@ -298,6 +305,9 @@ pub async fn load_invoice(
         },
         tax_cents: row.tax_cents,
         tax_rate_basis_points: row.tax_rate_basis_points,
+        vat_scheme: row.vat_scheme,
+        vat_country: row.vat_country,
+        customer_vat_number: row.customer_vat_number,
         paid_at: row.paid_at,
         customer,
         lines,

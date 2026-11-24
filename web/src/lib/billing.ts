@@ -39,6 +39,9 @@ export type SubscriptionDetail = SubscriptionSummary & {
 export type InvoiceDetail = InvoiceSummary & {
   tax_cents: number
   tax_rate_basis_points: number
+  vat_scheme: 'domestic' | 'oss' | 'reverse_charge' | 'outside_eu'
+  vat_country: string | null
+  customer_vat_number: string | null
   paid_at: string | null
   customer: {
     name?: string
