@@ -21,6 +21,7 @@ mod services;
 mod settings;
 mod state;
 mod updates;
+mod vat;
 
 use anyhow::Context;
 use sqlx::PgPool;

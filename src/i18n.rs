@@ -275,6 +275,11 @@ fn english(message: &str) -> Option<&'static str> {
         "Vul een IPv4-adres of -reeks in, zoals 203.0.113.4 of 10.0.0.0/8." => {
             "Enter an IPv4 address or range, such as 203.0.113.4 or 10.0.0.0/8."
         }
+        "Kies het land van je bedrijf." => "Choose the country of your business.",
+        "Vul een btw-nummer uit de EU in, zoals NL123456789B01." => {
+            "Enter an EU VAT number, such as NL123456789B01."
+        }
+        "Dit btw-nummer is niet geldig volgens VIES." => "VIES says this VAT number is not valid.",
         "Vul je voornaam in." => "Enter your first name.",
         "In de demo kun je het e-mailadres niet wijzigen." => {
             "You cannot change the email address in the demo."

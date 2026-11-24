@@ -60,7 +60,17 @@ pub async fn update(
         }
         settings::set(&state.db, "company", &company).await?;
     }
-    if let Some(billing) = input.billing {
+    if let Some(mut billing) = input.billing {
+        billing.home_country = billing.home_country.trim().to_uppercase();
+        if crate::vat::eu_rate(&billing.home_country).is_none() {
+            billing.oss = false;
+        }
+        if billing.home_country.len() != 2 {
+            return Err(AppError::field(
+                "home_country",
+                "Kies het land van je bedrijf.",
+            ));
+        }
         if !(0..=10_000).contains(&billing.tax_rate_basis_points) {
             return Err(AppError::field(
                 "tax_rate_basis_points",
