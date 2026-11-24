@@ -155,6 +155,15 @@ fn english(message: &str) -> Option<&'static str> {
         "In de demo kun je het wachtwoord niet wijzigen." => {
             "You cannot change the password in the demo."
         }
+        "In de demo kun je 2FA niet aanzetten." => "You cannot turn on 2FA in the demo.",
+        "2FA staat al aan." => "2FA is already on.",
+        "Begin opnieuw met instellen." => "Start the setup again.",
+        "Deze code klopt niet. Kijk of de tijd op je telefoon goed staat." => {
+            "This code is not correct. Check that the time on your phone is right."
+        }
+        "Zet eerst 2FA aan." => "Turn on 2FA first.",
+        "Vul de code uit je authenticator-app in." => "Enter the code from your authenticator app.",
+        "Deze code klopt niet." => "This code is not correct.",
         "Vul de naam van je bedrijf in." => "Enter the name of your company.",
         "Kies een btw-tarief tussen 0 en 100 procent." => {
             "Choose a VAT rate between 0 and 100 percent."

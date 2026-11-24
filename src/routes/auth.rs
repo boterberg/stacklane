@@ -13,6 +13,7 @@ use crate::i18n::Locale;
 
 use crate::mail::Email;
 use crate::routes::me::{Profile, load_profile};
+use crate::routes::two_factor;
 use crate::state::AppState;
 
 pub const MIN_PASSWORD_LENGTH: usize = 10;
@@ -34,6 +35,7 @@ pub struct LoginRequest {
     password: String,
     #[serde(default)]
     remember: bool,
+    code: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -142,14 +144,17 @@ pub async fn login(
     Json(input): Json<LoginRequest>,
 ) -> AppResult<(CookieJar, Json<Profile>)> {
     let email = input.email.trim().to_lowercase();
-    let account: Option<(Uuid, String)> =
-        sqlx::query_as("SELECT id, password_hash FROM users WHERE email = $1")
+    let account: Option<(Uuid, String, Option<String>)> =
+        sqlx::query_as("SELECT id, password_hash, totp_secret FROM users WHERE email = $1")
             .bind(&email)
             .fetch_optional(&state.db)
             .await?;
 
     let user_id = match account {
-        Some((id, hash)) if auth::verify_password(&input.password, &hash) => {
+        Some((id, hash, totp_secret)) if auth::verify_password(&input.password, &hash) => {
+            if let Some(sealed) = totp_secret {
+                two_factor::check_login_code(&state, id, &sealed, input.code.as_deref()).await?;
+            }
             if auth::needs_rehash(&hash) {
                 sqlx::query("UPDATE users SET password_hash = $2 WHERE id = $1")
                     .bind(id)

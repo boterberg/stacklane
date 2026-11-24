@@ -20,7 +20,7 @@ pub struct Confirm {
     password: String,
 }
 
-async fn check_password(
+pub(super) async fn check_password(
     state: &AppState,
     user: &CurrentUser,
     password: &str,

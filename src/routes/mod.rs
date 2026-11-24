@@ -13,6 +13,7 @@ mod payments;
 mod security;
 mod support;
 mod system;
+mod two_factor;
 
 use axum::http::StatusCode;
 use axum::routing::{any, delete, get, patch, post, put};
@@ -32,6 +33,14 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/reset-password", post(auth::reset_password))
         .route("/me", get(me::show))
         .route("/account/password", put(security::change_password))
+        .route("/account/two-factor", get(two_factor::status))
+        .route("/account/two-factor/setup", post(two_factor::setup))
+        .route("/account/two-factor/enable", post(two_factor::enable))
+        .route("/account/two-factor/disable", post(two_factor::disable))
+        .route(
+            "/account/two-factor/recovery-codes",
+            post(two_factor::new_recovery_codes),
+        )
         .route(
             "/account/sessions/logout-others",
             post(security::logout_other_sessions),
