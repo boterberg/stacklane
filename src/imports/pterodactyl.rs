@@ -67,13 +67,16 @@ async fn ensure_user(
     else {
         return Ok(None);
     };
-    if let Some(id) = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE email = $1")
-        .bind(&email)
-        .fetch_optional(pool)
-        .await?
-    {
-        report.existing("Klanten");
-        return Ok(Some(id));
+    match super::matching_account(pool, &email).await? {
+        super::Account::Usable(id) => {
+            report.existing("Klanten");
+            return Ok(Some(id));
+        }
+        super::Account::Unconfirmed => {
+            report.unconfirmed(&email);
+            return Ok(None);
+        }
+        super::Account::Missing => {}
     }
     report.created("Klanten");
     if dry_run {
@@ -82,7 +85,8 @@ async fn ensure_user(
     let id = Uuid::new_v4();
     let unusable = hex::encode(rand::random::<[u8; 32]>());
     sqlx::query(
-        "INSERT INTO users (id, email, password_hash, first_name, last_name, role) VALUES ($1, $2, $3, $4, $5, 'customer')",
+        "INSERT INTO users (id, email, password_hash, first_name, last_name, role, imported_at)
+         VALUES ($1, $2, $3, $4, $5, 'customer', now())",
     )
     .bind(id)
     .bind(&email)
