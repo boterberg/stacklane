@@ -643,6 +643,29 @@ pub fn renew_domain_in_background(state: AppState, service_id: Uuid) {
                 .bind(format!("Verlengen mislukt: {error:#}"))
                 .execute(&state.db)
                 .await;
+            let admins: Vec<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM users WHERE role = 'admin' AND deleted_at IS NULL",
+            )
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default();
+            for admin in admins {
+                crate::renewals::notify(
+                    &state,
+                    admin,
+                    (
+                        "Domein niet verlengd".to_owned(),
+                        "Een klant heeft een domein betaald, maar de registrar wilde het niet verlengen. Verleng het met de hand voordat het verloopt.".to_owned(),
+                    ),
+                    (
+                        "Domain not renewed".to_owned(),
+                        "A customer paid for a domain but the registrar refused the renewal. Renew it by hand before it expires.".to_owned(),
+                    ),
+                    "/admin/services",
+                )
+                .await
+                .ok();
+            }
         }
     });
 }
