@@ -159,6 +159,16 @@ pub async fn place(
     user: CurrentUser,
     Json(input): Json<NewOrder>,
 ) -> AppResult<(StatusCode, Json<OrderPlaced>)> {
+    let key = format!("orders {}", user.id);
+    crate::locks::exclusive(&state, key, place_order(&state, user, input)).await
+}
+
+async fn place_order(
+    state: &AppState,
+    user: CurrentUser,
+    input: NewOrder,
+) -> AppResult<(StatusCode, Json<OrderPlaced>)> {
+    let state = state.clone();
     if state.config.demo_mode {
         return Err(AppError::field(
             "product_id",

@@ -12,6 +12,7 @@ mod integrations;
 mod invoice_pdf;
 mod invoicing;
 mod limits;
+mod locks;
 mod mail;
 mod pagination;
 mod payments;
