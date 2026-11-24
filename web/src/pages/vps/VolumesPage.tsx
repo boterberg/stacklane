@@ -6,6 +6,7 @@ import { SlideOver } from '../../components/layout/SlideOver'
 import { Badge } from '../../components/ui/Badge'
 import { Button, ButtonLink } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { Modal } from '../../components/ui/Modal'
 import { Field, Input, Select } from '../../components/ui/Field'
 import { PageHeader } from '../../components/ui/Heading'
 import { ListToolbar, SearchField, ToolbarSpacer, ViewToggle, type ListView } from '../../components/ui/ListToolbar'
@@ -16,12 +17,7 @@ import { t } from '../../lib/i18n'
 import { intervalLabels, serviceStatusColors, serviceStatusLabels } from '../../lib/labels'
 import { useOrderVolume, useVolumeAction, useVolumeOptions, useVolumes, type Volume } from '../../lib/volumes'
 
-const intervals = [
-  { value: 'monthly', months: 1 },
-  { value: 'quarterly', months: 3 },
-  { value: 'half_yearly', months: 6 },
-  { value: 'yearly', months: 12 },
-]
+const intervals = [{ value: 'monthly' }, { value: 'quarterly' }, { value: 'half_yearly' }, { value: 'yearly' }]
 
 function errorText(error: unknown) {
   if (!(error instanceof ApiError)) return null
@@ -34,12 +30,11 @@ function OrderVolume({ open, onClose }: { open: boolean; onClose: () => void }) 
   const navigate = useNavigate()
   const [serverId, setServerId] = useState('')
   const [name, setName] = useState('')
-  const [size, setSize] = useState('20')
+  const [size, setSize] = useState('10')
   const [interval, setInterval] = useState('monthly')
   const option = options.find((item) => item.server_id === serverId) ?? options[0]
   const sizeGb = Math.round(Number(size)) || 0
-  const months = intervals.find((item) => item.value === interval)?.months ?? 1
-  const total = option ? option.price_per_gb_cents * sizeGb * months : 0
+  const perGb = option?.price_per_gb_cents ?? 0
   const errors = order.error instanceof ApiError ? order.error.fieldErrors : {}
 
   function close() {
@@ -51,24 +46,24 @@ function OrderVolume({ open, onClose }: { open: boolean; onClose: () => void }) 
     event.preventDefault()
     if (!option) return
     order.mutate(
-      { product_id: option.product_id, server_id: option.server_id, name, size_gb: sizeGb, billing_interval: interval },
+      { product_id: option.product_id, server_id: option.server_id, name: name.trim() || t('volume'), size_gb: sizeGb, billing_interval: interval },
       { onSuccess: ({ invoice_id }) => navigate(`/billing/invoices/${invoice_id}`) },
     )
   }
 
   return (
-    <SlideOver
+    <Modal
       open={open}
       onClose={close}
       title={t('Volume bestellen')}
-      description={t('Extra schijfruimte voor een van je servers. Je kunt het volume later aan een andere server op hetzelfde platform koppelen.')}
+      description={t('Extra opslag om aan een server te koppelen.')}
       footer={
         <>
-          <Button variant="ghost" onClick={close}>
-            {t('Annuleren')}
-          </Button>
+          <p className="text-sm text-zinc-500 dark:text-white/70">
+            {t('Totaal per maand')} <span className="font-medium text-zinc-800 dark:text-white">{formatEuro(perGb * sizeGb)}</span>
+          </p>
           <Button variant="primary" type="submit" form="order-volume" disabled={!option || order.isPending}>
-            {order.isPending ? t('Bezig...') : t('Bestellen en betalen')}
+            {order.isPending ? t('Bezig...') : t('Bestellen')}
           </Button>
         </>
       }
@@ -76,7 +71,19 @@ function OrderVolume({ open, onClose }: { open: boolean; onClose: () => void }) 
       {options.length === 0 ? (
         <p className="text-sm text-zinc-500 dark:text-white/60">{t('Er zijn nog geen volumes te bestellen voor je servers.')}</p>
       ) : (
-        <form id="order-volume" onSubmit={submit} className="space-y-6" noValidate>
+        <form id="order-volume" onSubmit={submit} className="space-y-5" noValidate>
+          <Field label={t('Grootte')} description={t('Minimaal 10 GB, maximaal 1 TB.')} error={errors.size_gb}>
+            {(id) => (
+              <div className="flex">
+                <div className="min-w-0 flex-1">
+                  <Input id={id} icon={CircleStackIcon} inputMode="numeric" className="rounded-r-none" invalid={!!errors.size_gb} value={size} onChange={(event) => setSize(event.target.value)} />
+                </div>
+                <span className="inline-flex items-center rounded-r-lg border border-l-0 border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-500 dark:border-white/10 dark:bg-white/5 dark:text-white/70">
+                  GB
+                </span>
+              </div>
+            )}
+          </Field>
           <Field label={t('Server')} error={errors.server_id}>
             {(id) => (
               <Select id={id} value={option?.server_id ?? ''} onChange={(event) => setServerId(event.target.value)}>
@@ -91,38 +98,21 @@ function OrderVolume({ open, onClose }: { open: boolean; onClose: () => void }) 
           <Field label={t('Naam')} error={errors.name}>
             {(id) => <Input id={id} placeholder={t('Bijvoorbeeld data')} invalid={!!errors.name} value={name} onChange={(event) => setName(event.target.value)} />}
           </Field>
-          <div className="grid gap-6 sm:grid-cols-2">
-            <Field label={t('Grootte (GB)')} description={t('Tussen 10 en 2000 GB.')} error={errors.size_gb}>
-              {(id) => <Input id={id} inputMode="numeric" invalid={!!errors.size_gb} value={size} onChange={(event) => setSize(event.target.value)} />}
-            </Field>
-            <Field label={t('Betalen per')} error={errors.billing_interval}>
-              {(id) => (
-                <Select id={id} value={interval} onChange={(event) => setInterval(event.target.value)}>
-                  {intervals.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {intervalLabels[item.value]}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-          </div>
-          {option && (
-            <div className="rounded-xl border border-zinc-200 px-5 py-4 text-sm dark:border-white/10">
-              <div className="flex justify-between text-zinc-500 dark:text-white/70">
-                <span>{t('{price} per GB per maand', { price: formatEuro(option.price_per_gb_cents) })}</span>
-                <span>{t('{size} GB', { size: sizeGb })}</span>
-              </div>
-              <div className="mt-2 flex justify-between font-medium text-zinc-800 dark:text-white">
-                <span>{t('Te betalen')}</span>
-                <span>{formatEuro(total)}</span>
-              </div>
-            </div>
-          )}
+          <Field label={t('Betaalinterval')} error={errors.billing_interval}>
+            {(id) => (
+              <Select id={id} value={interval} onChange={(event) => setInterval(event.target.value)}>
+                {intervals.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {intervalLabels[item.value]} · {t('{price} per GB per maand', { price: formatEuro(perGb) })}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
           {errors.product_id && <p className="text-sm font-medium text-red-500 dark:text-red-400">{errors.product_id}</p>}
         </form>
       )}
-    </SlideOver>
+    </Modal>
   )
 }
 
