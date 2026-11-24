@@ -1,10 +1,12 @@
 use axum::extract::FromRequestParts;
+use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use sha2::{Digest, Sha256};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
+use super::tokens;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -16,6 +18,7 @@ const DEFAULT_LIFETIME: Duration = Duration::hours(12);
 pub struct CurrentUser {
     pub id: Uuid,
     pub token_hash: String,
+    pub via_api_token: bool,
 }
 
 pub fn hash_token(token: &str) -> String {
@@ -83,6 +86,15 @@ impl FromRequestParts<AppState> for CurrentUser {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
+        let bearer = parts
+            .headers
+            .get(AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.strip_prefix("Bearer "))
+            .map(str::trim);
+        if let Some(token) = bearer {
+            return from_api_token(parts, state, token).await;
+        }
         let jar = CookieJar::from_headers(&parts.headers);
         let token = jar
             .get(SESSION_COOKIE)
@@ -96,8 +108,40 @@ impl FromRequestParts<AppState> for CurrentUser {
         .fetch_optional(&state.db)
         .await?;
         let id = user_id.ok_or(AppError::Unauthenticated)?;
-        Ok(Self { id, token_hash })
+        Ok(Self {
+            id,
+            token_hash,
+            via_api_token: false,
+        })
     }
+}
+
+async fn from_api_token(
+    parts: &Parts,
+    state: &AppState,
+    token: &str,
+) -> Result<CurrentUser, AppError> {
+    if !token.starts_with(tokens::PREFIX) {
+        return Err(AppError::Unauthenticated);
+    }
+    let token_hash = hash_token(token);
+    let found: Option<(Uuid, Vec<String>)> = sqlx::query_as(
+        "UPDATE api_tokens SET last_used_at = now()
+         WHERE token_hash = $1 AND (expires_at IS NULL OR expires_at > now())
+         RETURNING user_id, scopes",
+    )
+    .bind(&token_hash)
+    .fetch_optional(&state.db)
+    .await?;
+    let (id, scopes) = found.ok_or(AppError::Unauthenticated)?;
+    if !tokens::allows(&scopes, &parts.method, parts.uri.path()) {
+        return Err(AppError::Forbidden);
+    }
+    Ok(CurrentUser {
+        id,
+        token_hash,
+        via_api_token: true,
+    })
 }
 
 pub struct CurrentAdmin {

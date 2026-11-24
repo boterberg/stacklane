@@ -1,6 +1,7 @@
 mod admin_billing;
 mod admin_provisioning;
 mod admin_settings;
+mod api_tokens;
 mod auth;
 pub mod billing;
 mod dashboard;
@@ -29,6 +30,11 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/forgot-password", post(auth::forgot_password))
         .route("/auth/reset-password", post(auth::reset_password))
         .route("/me", get(me::show))
+        .route(
+            "/account/api-tokens",
+            get(api_tokens::index).post(api_tokens::create),
+        )
+        .route("/account/api-tokens/{id}", delete(api_tokens::destroy))
         .route("/me/settings", patch(me::update_settings))
         .route("/dashboard", get(dashboard::show))
         .route("/billing/subscriptions", get(billing::subscriptions))

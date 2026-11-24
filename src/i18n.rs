@@ -142,6 +142,15 @@ fn english(message: &str) -> Option<&'static str> {
         }
         "Kies een opgeslagen betaalmethode." => "Choose a saved payment method.",
         "Deze factuur staat niet meer open." => "This invoice is no longer unpaid.",
+        "Geef de token een naam van hoogstens 80 tekens." => {
+            "Give the token a name of at most 80 characters."
+        }
+        "Kies minstens één bevoegdheid." => "Choose at least one permission.",
+        "Deze bevoegdheid bestaat niet." => "This permission does not exist.",
+        "Kies een geldigheid tussen 1 en 365 dagen." => "Choose a lifetime between 1 and 365 days.",
+        "Je hebt al 25 tokens. Verwijder er eerst een." => {
+            "You already have 25 tokens. Delete one first."
+        }
         "Vul de naam van je bedrijf in." => "Enter the name of your company.",
         "Kies een btw-tarief tussen 0 en 100 procent." => {
             "Choose a VAT rate between 0 and 100 percent."
