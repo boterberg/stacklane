@@ -53,12 +53,20 @@ impl Mailer {
                 Ok(())
             }
             Self::Log => {
-                tracing::info!(
-                    to = email.to,
-                    subject = email.subject,
-                    "mail\n{}",
-                    email.body
-                );
+                if cfg!(debug_assertions) {
+                    tracing::info!(
+                        to = email.to,
+                        subject = email.subject,
+                        "mail\n{}",
+                        email.body
+                    );
+                } else {
+                    tracing::warn!(
+                        to = email.to,
+                        subject = email.subject,
+                        "MAIL_TRANSPORT=log only prints mail bodies in debug builds, mail not sent"
+                    );
+                }
                 Ok(())
             }
             Self::Disabled => {

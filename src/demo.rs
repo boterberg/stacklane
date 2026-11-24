@@ -9,7 +9,6 @@ use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::auth;
-use crate::config::VERSION;
 use crate::error::{AppError, AppResult};
 use crate::routes::me::{Profile, load_profile};
 use crate::state::AppState;
@@ -19,7 +18,6 @@ pub const ADMIN_EMAIL: &str = "beheer@demo.stacklane.io";
 
 #[derive(Serialize)]
 pub struct Meta {
-    version: &'static str,
     demo: bool,
     #[serde(with = "time::serde::rfc3339::option")]
     next_reset_at: Option<OffsetDateTime>,
@@ -44,7 +42,6 @@ pub async fn meta(State(state): State<AppState>) -> AppResult<Json<Meta>> {
     let demo = state.config.demo_mode;
     let company: crate::settings::Company = crate::settings::get(&state.db, "company").await?;
     Ok(Json(Meta {
-        version: VERSION,
         demo,
         next_reset_at: demo.then(|| next_full_hour(OffsetDateTime::now_utc())),
         company: (!company.name.is_empty()).then_some(company),
