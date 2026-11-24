@@ -1,3 +1,4 @@
+pub mod proxmox;
 pub mod pterodactyl;
 
 use anyhow::Context;
@@ -27,42 +28,66 @@ pub struct IntegrationSummary {
 
 pub enum Driver {
     Pterodactyl(pterodactyl::Pterodactyl),
+    Proxmox(proxmox::Proxmox),
+}
+
+fn wrong_kind() -> AppError {
+    AppError::Internal(anyhow::anyhow!(
+        "deze dienst hoort bij een ander soort koppeling"
+    ))
+}
+
+fn vmid(external_id: &str) -> anyhow::Result<u32> {
+    external_id.parse().context("ongeldig VM-nummer")
 }
 
 impl Driver {
     pub fn pterodactyl(&self) -> AppResult<&pterodactyl::Pterodactyl> {
         match self {
             Self::Pterodactyl(client) => Ok(client),
+            _ => Err(wrong_kind()),
         }
     }
 
     pub fn into_pterodactyl(self) -> AppResult<pterodactyl::Pterodactyl> {
         match self {
             Self::Pterodactyl(client) => Ok(client),
+            _ => Err(wrong_kind()),
+        }
+    }
+
+    pub fn proxmox(&self) -> AppResult<&proxmox::Proxmox> {
+        match self {
+            Self::Proxmox(client) => Ok(client),
+            _ => Err(wrong_kind()),
         }
     }
 
     pub async fn test(&self) -> anyhow::Result<String> {
         match self {
             Self::Pterodactyl(client) => client.test().await,
+            Self::Proxmox(client) => client.test().await,
         }
     }
 
     pub async fn suspend(&self, external_id: &str) -> anyhow::Result<()> {
         match self {
             Self::Pterodactyl(client) => client.suspend(external_id).await,
+            Self::Proxmox(client) => client.power(vmid(external_id)?, "stop").await,
         }
     }
 
     pub async fn unsuspend(&self, external_id: &str) -> anyhow::Result<()> {
         match self {
             Self::Pterodactyl(client) => client.unsuspend(external_id).await,
+            Self::Proxmox(client) => client.power(vmid(external_id)?, "start").await,
         }
     }
 
     pub async fn terminate(&self, external_id: &str) -> anyhow::Result<()> {
         match self {
             Self::Pterodactyl(client) => client.terminate(external_id).await,
+            Self::Proxmox(client) => client.destroy(vmid(external_id)?).await,
         }
     }
 }
@@ -74,28 +99,43 @@ pub fn seal_credentials(state: &AppState, credentials: &impl Serialize) -> AppRe
     Ok(secrets.seal(&serde_json::to_vec(credentials).map_err(anyhow::Error::from)?)?)
 }
 
-pub async fn driver(state: &AppState, integration_id: Uuid) -> AppResult<Driver> {
-    let (kind, base_url, sealed): (String, String, Vec<u8>) =
-        sqlx::query_as("SELECT kind, base_url, credentials FROM integrations WHERE id = $1")
-            .bind(integration_id)
-            .fetch_optional(&state.db)
-            .await?
-            .ok_or(AppError::NotFound)?;
-    let secrets = state.config.secrets.as_ref().ok_or_else(|| {
-        AppError::Internal(anyhow::anyhow!("SECRET_KEY ontbreekt in de configuratie"))
-    })?;
-    let credentials = secrets.open(&sealed)?;
-    match kind.as_str() {
+pub fn build(kind: &str, base_url: &str, credentials: &[u8], settings: Value) -> AppResult<Driver> {
+    match kind {
         "pterodactyl" => {
             let credentials =
-                serde_json::from_slice(&credentials).context("ongeldige Pterodactyl-sleutels")?;
+                serde_json::from_slice(credentials).context("ongeldige Pterodactyl-sleutels")?;
             Ok(Driver::Pterodactyl(pterodactyl::Pterodactyl::new(
-                &base_url,
+                base_url,
                 credentials,
+            )?))
+        }
+        "proxmox" => {
+            let credentials =
+                serde_json::from_slice(credentials).context("ongeldige Proxmox-sleutels")?;
+            let settings =
+                serde_json::from_value(settings).context("ongeldige Proxmox-instellingen")?;
+            Ok(Driver::Proxmox(proxmox::Proxmox::new(
+                base_url,
+                credentials,
+                settings,
             )?))
         }
         other => Err(AppError::Internal(anyhow::anyhow!(
             "koppeling {other} wordt nog niet ondersteund"
         ))),
     }
+}
+
+pub async fn driver(state: &AppState, integration_id: Uuid) -> AppResult<Driver> {
+    let (kind, base_url, sealed, settings): (String, String, Vec<u8>, Value) = sqlx::query_as(
+        "SELECT kind, base_url, credentials, settings FROM integrations WHERE id = $1",
+    )
+    .bind(integration_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    let secrets = state.config.secrets.as_ref().ok_or_else(|| {
+        AppError::Internal(anyhow::anyhow!("SECRET_KEY ontbreekt in de configuratie"))
+    })?;
+    build(&kind, &base_url, &secrets.open(&sealed)?, settings)
 }

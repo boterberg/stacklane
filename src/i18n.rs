@@ -165,6 +165,39 @@ fn english(message: &str) -> Option<&'static str> {
         "Vul de code uit je authenticator-app in." => "Enter the code from your authenticator app.",
         "Deze code klopt niet." => "This code is not correct.",
         "Kies een tijdzone uit de lijst." => "Choose a time zone from the list.",
+        "Geef de sleutel een naam van hoogstens 60 tekens." => {
+            "Give the key a name of at most 60 characters."
+        }
+        "Dit is geen geldige publieke SSH-sleutel." => "This is not a valid public SSH key.",
+        "Deze sleutel heb je al toegevoegd." => "You already added this key.",
+        "Vul het token-ID (gebruiker@realm!naam) en het geheim in." => {
+            "Enter the token ID (user@realm!name) and the secret."
+        }
+        "Vul de node, de gateway en een geldige reeks IP-adressen in." => {
+            "Enter the node, the gateway and a valid range of IP addresses."
+        }
+        "In de demo kun je niets bestellen." => "You cannot order anything in the demo.",
+        "Kies een pakket." => "Choose a plan.",
+        "Kies hoe vaak je wilt betalen." => "Choose how often you want to pay.",
+        "Geef de server een naam van hoogstens 60 tekens." => {
+            "Give the server a name of at most 60 characters."
+        }
+        "Kies een besturingssysteem." => "Choose an operating system.",
+        "Kies je eigen SSH-sleutels." => "Choose your own SSH keys.",
+        "Deze server is nu niet beschikbaar." => "This server is not available right now.",
+        "Je hebt al 3 snapshots. Verwijder er eerst een." => {
+            "You already have 3 snapshots. Delete one first."
+        }
+        "Kies een richting en of het verkeer mag." => {
+            "Choose a direction and whether traffic is allowed."
+        }
+        "Kies TCP, UDP of ICMP." => "Choose TCP, UDP or ICMP.",
+        "Vul een poort in, zoals 22, 80,443 of 8000:8100." => {
+            "Enter a port, such as 22, 80,443 or 8000:8100."
+        }
+        "Vul een IPv4-adres of -reeks in, zoals 203.0.113.4 of 10.0.0.0/8." => {
+            "Enter an IPv4 address or range, such as 203.0.113.4 or 10.0.0.0/8."
+        }
         "Vul je voornaam in." => "Enter your first name.",
         "In de demo kun je het e-mailadres niet wijzigen." => {
             "You cannot change the email address in the demo."

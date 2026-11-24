@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentAdmin;
 use crate::error::{AppError, AppResult};
-use crate::integrations::{self, IntegrationSummary, KINDS, pterodactyl};
+use crate::integrations::{self, IntegrationSummary, KINDS, proxmox, pterodactyl};
 use crate::services;
 use crate::state::AppState;
 
@@ -20,6 +20,8 @@ pub struct CreateIntegration {
     name: String,
     base_url: String,
     credentials: Value,
+    #[serde(default)]
+    settings: Value,
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -124,7 +126,7 @@ pub async fn create_integration(
     let mut errors = BTreeMap::new();
     if !KINDS.contains(&input.kind.as_str()) {
         errors.insert("kind", "Kies een type.".to_owned());
-    } else if input.kind != "pterodactyl" {
+    } else if !matches!(input.kind.as_str(), "pterodactyl" | "proxmox") {
         errors.insert(
             "kind",
             "Deze koppeling komt in een volgende versie.".to_owned(),
@@ -140,39 +142,68 @@ pub async fn create_integration(
             "Vul een adres in dat met https:// begint.".to_owned(),
         );
     }
-    let credentials: Option<pterodactyl::Credentials> =
-        serde_json::from_value(input.credentials).ok();
-    match &credentials {
-        Some(credentials)
-            if !credentials.application_key.trim().is_empty()
-                && !credentials.client_key.trim().is_empty() => {}
-        _ => {
-            errors.insert(
-                "credentials",
-                "Vul de application- en de client-API-sleutel in.".to_owned(),
-            );
-        }
+    let credentials_ok = match input.kind.as_str() {
+        "pterodactyl" => serde_json::from_value::<pterodactyl::Credentials>(
+            input.credentials.clone(),
+        )
+        .is_ok_and(|credentials| {
+            !credentials.application_key.trim().is_empty()
+                && !credentials.client_key.trim().is_empty()
+        }),
+        "proxmox" => serde_json::from_value::<proxmox::Credentials>(input.credentials.clone())
+            .is_ok_and(|credentials| {
+                credentials.token_id.contains('!') && !credentials.token_secret.trim().is_empty()
+            }),
+        _ => true,
+    };
+    if !credentials_ok {
+        errors.insert(
+            "credentials",
+            match input.kind.as_str() {
+                "proxmox" => "Vul het token-ID (gebruiker@realm!naam) en het geheim in.",
+                _ => "Vul de application- en de client-API-sleutel in.",
+            }
+            .to_owned(),
+        );
     }
+    let settings = if input.kind == "proxmox" {
+        match serde_json::from_value::<proxmox::Settings>(input.settings) {
+            Ok(settings)
+                if settings.ip_from <= settings.ip_to && !settings.node.trim().is_empty() =>
+            {
+                serde_json::to_value(settings).map_err(anyhow::Error::from)?
+            }
+            _ => {
+                errors.insert(
+                    "settings",
+                    "Vul de node, de gateway en een geldige reeks IP-adressen in.".to_owned(),
+                );
+                Value::Null
+            }
+        }
+    } else {
+        json!({})
+    };
     if !errors.is_empty() {
         return Err(AppError::Validation(errors));
     }
-    let credentials = credentials.expect("validated above");
-
-    let probe = pterodactyl::Pterodactyl::new(&base_url, credentials.clone())?;
-    let summary = probe
+    let credentials = serde_json::to_vec(&input.credentials).map_err(anyhow::Error::from)?;
+    let summary = integrations::build(&input.kind, &base_url, &credentials, settings.clone())?
         .test()
         .await
         .map_err(|error| AppError::field("base_url", format!("{error:#}")))?;
 
     let id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO integrations (id, kind, name, base_url, credentials, last_checked_at) VALUES ($1, $2, $3, $4, $5, now())",
+        "INSERT INTO integrations (id, kind, name, base_url, credentials, settings, last_checked_at)
+         VALUES ($1, $2, $3, $4, $5, $6, now())",
     )
     .bind(id)
     .bind(&input.kind)
     .bind(input.name.trim())
     .bind(&base_url)
-    .bind(integrations::seal_credentials(&state, &credentials)?)
+    .bind(integrations::seal_credentials(&state, &input.credentials)?)
+    .bind(settings)
     .execute(&state.db)
     .await?;
     Ok((
@@ -270,10 +301,10 @@ pub async fn create_product(
             "De prijs kan niet negatief zijn.".to_owned(),
         );
     }
-    if input.kind != "gameserver" {
+    if !matches!(input.kind.as_str(), "gameserver" | "vps") {
         errors.insert(
             "kind",
-            "Op dit moment kun je alleen gameserverproducten aanmaken.".to_owned(),
+            "Op dit moment kun je gameserver- en VPS-producten aanmaken.".to_owned(),
         );
     }
     if input.integration_id.is_none() {
@@ -282,22 +313,40 @@ pub async fn create_product(
             "Kies op welke koppeling de servers komen.".to_owned(),
         );
     }
-    let config: Result<pterodactyl::ProductConfig, _> =
-        serde_json::from_value(input.provisioning.clone());
-    match &config {
-        Ok(config)
-            if config.memory >= 128
-                && config.disk >= 256
-                && config.egg_id > 0
-                && config.location_id > 0 => {}
-        _ => {
-            errors.insert(
-                "provisioning",
-                "Kies een locatie en een egg, met minstens 128 MB geheugen en 256 MB schijf."
-                    .to_owned(),
-            );
-        }
-    }
+    let specs = match input.kind.as_str() {
+        "vps" => match serde_json::from_value::<proxmox::ProductConfig>(input.provisioning.clone())
+        {
+            Ok(config) if config.cores >= 1 && config.memory_mb >= 256 && config.disk_gb >= 5 => {
+                proxmox::product_details(&config)
+            }
+            _ => {
+                errors.insert(
+                    "provisioning",
+                    "Geef minstens 1 core, 256 MB geheugen en 5 GB schijf op.".to_owned(),
+                );
+                Value::Null
+            }
+        },
+        _ => match serde_json::from_value::<pterodactyl::ProductConfig>(input.provisioning.clone())
+        {
+            Ok(config)
+                if config.memory >= 128
+                    && config.disk >= 256
+                    && config.egg_id > 0
+                    && config.location_id > 0 =>
+            {
+                json!({ "memory": config.memory, "disk": config.disk, "cpu": config.cpu })
+            }
+            _ => {
+                errors.insert(
+                    "provisioning",
+                    "Kies een locatie en een egg, met minstens 128 MB geheugen en 256 MB schijf."
+                        .to_owned(),
+                );
+                Value::Null
+            }
+        },
+    };
     if !errors.is_empty() {
         return Err(AppError::Validation(errors));
     }
@@ -313,7 +362,6 @@ pub async fn create_product(
             "Er bestaat al een product met deze naam.",
         ));
     }
-    let config = config.expect("validated above");
     let id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO products (id, kind, slug, name, description, specs, monthly_price_cents, integration_id, provisioning)
@@ -324,10 +372,10 @@ pub async fn create_product(
     .bind(&slug)
     .bind(input.name.trim())
     .bind(input.description.filter(|value| !value.trim().is_empty()))
-    .bind(json!({ "memory": config.memory, "disk": config.disk, "cpu": config.cpu }))
+    .bind(specs)
     .bind(input.monthly_price_cents)
     .bind(input.integration_id)
-    .bind(serde_json::to_value(&config).map_err(anyhow::Error::from)?)
+    .bind(&input.provisioning)
     .execute(&state.db)
     .await?;
     Ok((StatusCode::CREATED, Json(json!({ "id": id }))))
