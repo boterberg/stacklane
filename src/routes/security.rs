@@ -62,7 +62,7 @@ pub(super) async fn check_password(
         .bind(user.id)
         .fetch_one(&state.db)
         .await?;
-    if !auth::verify_password(password, &hash) {
+    if !auth::verify(password, Some(&hash)).await? {
         return Err(AppError::field(field, "Dit wachtwoord klopt niet."));
     }
     Ok(())
@@ -88,7 +88,7 @@ pub async fn change_password(
     }
     sqlx::query("UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1")
         .bind(user.id)
-        .bind(auth::hash_password(&input.password)?)
+        .bind(auth::hash(&input.password).await?)
         .execute(&state.db)
         .await?;
     sqlx::query("DELETE FROM password_resets WHERE user_id = $1")

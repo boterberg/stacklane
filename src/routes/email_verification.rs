@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::auth::{self, CurrentUser};
 use crate::error::{AppError, AppResult};
 use crate::i18n::Locale;
+use crate::limits::{self, ClientIp};
 use crate::mail::Email;
 use crate::state::AppState;
 
@@ -121,8 +122,10 @@ pub async fn send(state: &AppState, user_id: Uuid, email: &str) -> AppResult<()>
 
 pub async fn verify(
     State(state): State<AppState>,
+    ClientIp(ip): ClientIp,
     Json(input): Json<VerifyRequest>,
 ) -> AppResult<StatusCode> {
+    state.limits.check(&limits::VERIFY, &ip)?;
     let expired = || {
         AppError::field(
             "token",

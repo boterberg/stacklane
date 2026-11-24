@@ -359,6 +359,12 @@ fn english(message: &str) -> Option<&'static str> {
         "Te veel foute codes. Probeer het over een paar minuten opnieuw." => {
             "Too many wrong codes. Try again in a few minutes."
         }
+        "Te veel pogingen. Probeer het over een minuut opnieuw." => {
+            "Too many attempts. Try again in a minute."
+        }
+        "Het is even te druk. Probeer het over een paar seconden opnieuw." => {
+            "It is busy right now. Try again in a few seconds."
+        }
         _ => return None,
     })
 }

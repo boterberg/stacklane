@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 
 import { Button } from '../../components/ui/Button'
-import { Checkbox, Field, Input, Select } from '../../components/ui/Field'
+import { Checkbox, Field, FormError, Input, Select } from '../../components/ui/Field'
 import { ApiError } from '../../lib/api'
 import { useAuthMutation } from '../../lib/auth'
 import { countries } from '../../lib/countries'
@@ -67,6 +67,7 @@ export function RegisterPage() {
             )}
           </Field>
         )}
+        <FormError error={register.error} />
         <Button type="submit" variant="primary" className="w-full" disabled={register.isPending}>
           {t('Account maken')}
         </Button>

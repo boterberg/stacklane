@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
 import { Button } from '../../components/ui/Button'
-import { Checkbox, Field, Input } from '../../components/ui/Field'
+import { Checkbox, Field, FormError, Input } from '../../components/ui/Field'
 import { ApiError } from '../../lib/api'
 import { useAuthMutation } from '../../lib/auth'
 import { useDemoLogin, useMeta, type DemoRole } from '../../lib/meta'
@@ -49,6 +49,7 @@ export function LoginPage() {
               <Input id={id} autoFocus inputMode="numeric" autoComplete="one-time-code" invalid={!!errors.code} value={code} onChange={(event) => setCode(event.target.value)} />
             )}
           </Field>
+          <FormError error={login.error} />
           <Button type="submit" variant="primary" className="w-full" disabled={login.isPending || !code.trim()}>
             {t('Inloggen')}
           </Button>
@@ -110,6 +111,7 @@ export function LoginPage() {
           <Checkbox label={t('Ingelogd blijven')} checked={form.remember} onChange={(event) => setForm({ ...form, remember: event.target.checked })} />
           <TextLink to="/forgot-password">{t('Wachtwoord vergeten?')}</TextLink>
         </div>
+        <FormError error={login.error} />
         <Button type="submit" variant="primary" className="w-full" disabled={login.isPending}>
           {t('Inloggen')}
         </Button>
