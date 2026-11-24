@@ -6,11 +6,11 @@ import { useParams, useSearchParams } from 'react-router'
 import { Badge } from '../../components/ui/Badge'
 import { Button, ButtonLink } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { invoicePdfUrl, useInvoice } from '../../lib/billing'
+import { invoicePdfUrl, useInvoice, type InvoiceDetail } from '../../lib/billing'
 import { formatDate, formatEuro } from '../../lib/format'
 import { intlLocale, t } from '../../lib/i18n'
 import { invoiceStatusColors, invoiceStatusLabels } from '../../lib/labels'
-import { useMeta } from '../../lib/meta'
+import { useMeta, type Company } from '../../lib/meta'
 import { PayInvoicePanel } from './PayInvoicePanel'
 
 const menuItem = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-zinc-800 data-focus:bg-zinc-50 dark:text-white dark:data-focus:bg-zinc-600'
@@ -20,11 +20,11 @@ function countryName(code?: string | null) {
   return new Intl.DisplayNames([intlLocale()], { type: 'region' }).of(code) ?? code
 }
 
-function DownloadButton({ id }: { id: number }) {
+export function DownloadButton({ href }: { href: string }) {
   return (
     <div className="flex">
       <a
-        href={invoicePdfUrl(id)}
+        href={href}
         className="inline-flex h-10 items-center gap-2 rounded-l-lg border border-zinc-200 border-b-zinc-300/80 bg-white px-4 text-sm font-medium text-zinc-800 shadow-xs hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-700 dark:text-white dark:hover:bg-zinc-600/75"
       >
         <ArrowDownTrayIcon className="-ml-0.5 size-4" aria-hidden />
@@ -47,6 +47,69 @@ function DownloadButton({ id }: { id: number }) {
         </MenuItems>
       </Menu>
     </div>
+  )
+}
+
+export function InvoiceSpecification({ invoice, company }: { invoice: InvoiceDetail; company: Company | null }) {
+  const customer = invoice.customer
+  const taxRate = invoice.tax_rate_basis_points / 100
+  return (
+    <section className="max-w-4xl rounded-xl border border-zinc-200 bg-zinc-50 dark:border-white/7 dark:bg-white/5">
+      <h2 className="px-6 py-4 text-sm font-medium text-zinc-800 dark:text-white">{t('Specificatie')}</h2>
+      <div className="-mx-px rounded-xl border border-zinc-200 bg-white p-6 dark:border-white/7 dark:bg-white/4">
+        <div className="flex flex-wrap justify-between gap-6 text-sm">
+          <div className="text-zinc-500 dark:text-white/70">
+            {customer.company_name && <p>{customer.company_name}</p>}
+            <p>{customer.name}</p>
+            {customer.address_line1 && <p>{customer.address_line1}</p>}
+            {customer.address_line2 && <p>{customer.address_line2}</p>}
+            {(customer.postal_code || customer.city) && <p>{[customer.postal_code, customer.city].filter(Boolean).join(' ')}</p>}
+            {customer.country && <p>{countryName(customer.country)}</p>}
+          </div>
+          <div className="text-right text-zinc-500 dark:text-white/70">
+            <p>{t('Factuurnummer: {number}', { number: invoice.id })}</p>
+            <p>{t('Datum: {date}', { date: formatDate(invoice.issued_at) })}</p>
+            <p>{t('Vervaldatum: {date}', { date: formatDate(invoice.due_at) })}</p>
+          </div>
+        </div>
+
+        <table className="mt-8 w-full text-sm">
+          <thead>
+            <tr className="border-b border-zinc-200 dark:border-white/10">
+              <th className="pb-3 text-left font-medium text-zinc-800 dark:text-white">{t('Beschrijving')}</th>
+              <th className="pb-3 text-right font-medium text-zinc-800 dark:text-white">{t('Bedrag')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invoice.lines.map((line, index) => (
+              <tr key={index} className="border-b border-zinc-200 align-top dark:border-white/10">
+                <td className="py-4">
+                  <p className="text-zinc-800 dark:text-white">{line.description}</p>
+                  {line.period_start && line.period_end && (
+                    <p className="text-zinc-500 dark:text-white/70">{t('{start} t/m {end}', { start: formatDate(line.period_start), end: formatDate(line.period_end) })}</p>
+                  )}
+                  {line.subscription_code && <p className="text-zinc-500 dark:text-white/70">{t('Abonnement #{code}', { code: line.subscription_code })}</p>}
+                </td>
+                <td className="py-4 text-right text-zinc-800 dark:text-white">{formatEuro(line.amount_cents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <dl className="mt-6 grid grid-cols-[1fr_auto] justify-items-end gap-x-10 gap-y-2 text-sm">
+          <dt className="font-medium text-zinc-800 dark:text-white">{t('Totaal')}</dt>
+          <dd className="font-medium text-zinc-800 dark:text-white">{formatEuro(invoice.total_cents)}</dd>
+          <dt className="text-zinc-500 dark:text-white/70">{t('Waarvan btw ({rate}%)', { rate: taxRate })}</dt>
+          <dd className="text-zinc-500 dark:text-white/70">{formatEuro(invoice.tax_cents)}</dd>
+        </dl>
+      </div>
+      {company?.name && (
+        <div className="px-6 py-4 text-center text-xs text-zinc-500 dark:text-white/60">
+          <p>{[company.name, company.coc_number && t('KVK {number}', { number: company.coc_number }), company.vat_number && t('BTW {number}', { number: company.vat_number })].filter(Boolean).join(' · ')}</p>
+          <p>{[company.address, company.email, company.website].filter(Boolean).join(' · ')}</p>
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -74,10 +137,6 @@ export function InvoiceDetailPage() {
     )
   }
 
-  const customer = invoice.customer
-  const company = meta?.company
-  const taxRate = invoice.tax_rate_basis_points / 100
-
   return (
     <>
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
@@ -103,68 +162,13 @@ export function InvoiceDetailPage() {
               {t('Betalen')}
             </Button>
           )}
-          <DownloadButton id={invoice.id} />
+          <DownloadButton href={invoicePdfUrl(invoice.id)} />
         </div>
       </div>
 
       {returned && <PaymentResult status={invoice.status} cancelled={cancelled} />}
 
-      <section className="max-w-4xl rounded-xl border border-zinc-200 bg-zinc-50 dark:border-white/7 dark:bg-white/5">
-        <h2 className="px-6 py-4 text-sm font-medium text-zinc-800 dark:text-white">{t('Specificatie')}</h2>
-        <div className="-mx-px rounded-xl border border-zinc-200 bg-white p-6 dark:border-white/7 dark:bg-white/4">
-          <div className="flex flex-wrap justify-between gap-6 text-sm">
-            <div className="text-zinc-500 dark:text-white/70">
-              {customer.company_name && <p>{customer.company_name}</p>}
-              <p>{customer.name}</p>
-              {customer.address_line1 && <p>{customer.address_line1}</p>}
-              {customer.address_line2 && <p>{customer.address_line2}</p>}
-              {(customer.postal_code || customer.city) && <p>{[customer.postal_code, customer.city].filter(Boolean).join(' ')}</p>}
-              {customer.country && <p>{countryName(customer.country)}</p>}
-            </div>
-            <div className="text-right text-zinc-500 dark:text-white/70">
-              <p>{t('Factuurnummer: {number}', { number: invoice.id })}</p>
-              <p>{t('Datum: {date}', { date: formatDate(invoice.issued_at) })}</p>
-              <p>{t('Vervaldatum: {date}', { date: formatDate(invoice.due_at) })}</p>
-            </div>
-          </div>
-
-          <table className="mt-8 w-full text-sm">
-            <thead>
-              <tr className="border-b border-zinc-200 dark:border-white/10">
-                <th className="pb-3 text-left font-medium text-zinc-800 dark:text-white">{t('Beschrijving')}</th>
-                <th className="pb-3 text-right font-medium text-zinc-800 dark:text-white">{t('Bedrag')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoice.lines.map((line, index) => (
-                <tr key={index} className="border-b border-zinc-200 align-top dark:border-white/10">
-                  <td className="py-4">
-                    <p className="text-zinc-800 dark:text-white">{line.description}</p>
-                    {line.period_start && line.period_end && (
-                      <p className="text-zinc-500 dark:text-white/70">{t('{start} t/m {end}', { start: formatDate(line.period_start), end: formatDate(line.period_end) })}</p>
-                    )}
-                    {line.subscription_code && <p className="text-zinc-500 dark:text-white/70">{t('Abonnement #{code}', { code: line.subscription_code })}</p>}
-                  </td>
-                  <td className="py-4 text-right text-zinc-800 dark:text-white">{formatEuro(line.amount_cents)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <dl className="mt-6 grid grid-cols-[1fr_auto] justify-items-end gap-x-10 gap-y-2 text-sm">
-            <dt className="font-medium text-zinc-800 dark:text-white">{t('Totaal')}</dt>
-            <dd className="font-medium text-zinc-800 dark:text-white">{formatEuro(invoice.total_cents)}</dd>
-            <dt className="text-zinc-500 dark:text-white/70">{t('Waarvan btw ({rate}%)', { rate: taxRate })}</dt>
-            <dd className="text-zinc-500 dark:text-white/70">{formatEuro(invoice.tax_cents)}</dd>
-          </dl>
-        </div>
-        {company?.name && (
-          <div className="px-6 py-4 text-center text-xs text-zinc-500 dark:text-white/60">
-            <p>{[company.name, company.coc_number && t('KVK {number}', { number: company.coc_number }), company.vat_number && t('BTW {number}', { number: company.vat_number })].filter(Boolean).join(' · ')}</p>
-            <p>{[company.address, company.email, company.website].filter(Boolean).join(' · ')}</p>
-          </div>
-        )}
-      </section>
+      <InvoiceSpecification invoice={invoice} company={meta?.company ?? null} />
       {invoice.status === 'open' && <PayInvoicePanel invoice={invoice} open={paying} onClose={() => setPaying(false)} />}
     </>
   )
