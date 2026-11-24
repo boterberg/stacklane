@@ -121,6 +121,7 @@ export default defineConfig({
             { text: 'Gameservers', link: '/docs/guides/gameservers' },
             { text: 'Facturatie', link: '/docs/guides/billing' },
             { text: 'Importeren', link: '/docs/guides/import' },
+            { text: 'API', link: '/docs/guides/api' },
             { text: 'Veelgestelde vragen', link: '/docs/guides/faq' },
           ],
         },
