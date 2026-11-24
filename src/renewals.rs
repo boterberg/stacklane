@@ -400,15 +400,36 @@ pub async fn run_once(state: &AppState) -> AppResult<Run> {
     run
 }
 
+fn counted(step: &str, result: AppResult<usize>) -> usize {
+    result.unwrap_or_else(|error| {
+        tracing::error!(step, error = %error, "a billing step failed");
+        0
+    })
+}
+
+async fn remove_expired(state: &AppState) -> AppResult<usize> {
+    let mut removed = 0;
+    for table in ["sessions", "password_resets", "email_verifications"] {
+        removed += sqlx::query(sqlx::AssertSqlSafe(format!(
+            "DELETE FROM {table} WHERE expires_at < now() - interval '1 day'"
+        )))
+        .execute(&state.db)
+        .await?
+        .rows_affected() as usize;
+    }
+    Ok(removed)
+}
+
 async fn run_locked(state: &AppState) -> AppResult<Run> {
     let billing: Billing = settings::get(&state.db, "billing").await?;
     let run = Run {
-        invoices: issue_renewals(state, &billing).await?,
-        suspended: suspend_overdue(state, &billing).await?,
-        ended: end_cancelled(state).await?,
-        expired: expire_orders(state).await?,
+        invoices: counted("renewals", issue_renewals(state, &billing).await),
+        suspended: counted("suspend", suspend_overdue(state, &billing).await),
+        ended: counted("end", end_cancelled(state).await),
+        expired: counted("expire", expire_orders(state).await),
     };
-    reconcile_suspensions(state).await?;
+    counted("reconcile", reconcile_suspensions(state).await.map(|()| 0));
+    counted("cleanup", remove_expired(state).await);
     Ok(run)
 }
 
