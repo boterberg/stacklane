@@ -57,10 +57,13 @@ async fn main() -> anyhow::Result<()> {
             init_tracing();
             let config = Config::from_env()?;
             let state = AppState::new(connect(&config).await?, config)?;
-            let (invoices, suspended, ended) = renewals::run_once(&state)
+            let run = renewals::run_once(&state)
                 .await
                 .map_err(|error| anyhow::anyhow!("{error}"))?;
-            println!("facturen: {invoices}, opgeschort: {suspended}, beëindigd: {ended}");
+            println!(
+                "facturen: {}, opgeschort: {}, beëindigd: {}, vervallen bestellingen: {}",
+                run.invoices, run.suspended, run.ended, run.expired
+            );
             Ok(())
         }
         "demo-reset" => {

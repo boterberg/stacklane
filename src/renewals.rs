@@ -280,13 +280,60 @@ async fn end_cancelled(state: &AppState) -> AppResult<usize> {
     Ok(ended.len())
 }
 
-pub async fn run_once(state: &AppState) -> AppResult<(usize, usize, usize)> {
+const ORDER_EXPIRES_AFTER_DAYS: i32 = 14;
+
+async fn expire_orders(state: &AppState) -> AppResult<usize> {
+    let mut transaction = state.db.begin().await?;
+    let expired: Vec<Uuid> = sqlx::query_scalar(
+        "UPDATE subscriptions s SET status = 'expired'
+         WHERE s.status = 'pending'
+           AND EXISTS (SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
+                       WHERE l.subscription_id = s.id AND i.status = 'open')
+           AND NOT EXISTS (SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
+                           WHERE l.subscription_id = s.id AND (i.status = 'paid' OR i.due_at >= CURRENT_DATE - $1))
+         RETURNING s.id",
+    )
+    .bind(ORDER_EXPIRES_AFTER_DAYS)
+    .fetch_all(&mut *transaction)
+    .await?;
+    if !expired.is_empty() {
+        sqlx::query(
+            "UPDATE services SET status = 'terminated', updated_at = now()
+             WHERE subscription_id = ANY($1) AND status = 'pending'",
+        )
+        .bind(&expired)
+        .execute(&mut *transaction)
+        .await?;
+        sqlx::query(
+            "UPDATE invoices i SET status = 'cancelled'
+             WHERE i.status = 'open'
+               AND EXISTS (SELECT 1 FROM invoice_lines l WHERE l.invoice_id = i.id AND l.subscription_id = ANY($1))
+               AND NOT EXISTS (SELECT 1 FROM invoice_lines l WHERE l.invoice_id = i.id
+                               AND (l.subscription_id IS NULL OR l.subscription_id <> ALL($1)))",
+        )
+        .bind(&expired)
+        .execute(&mut *transaction)
+        .await?;
+    }
+    transaction.commit().await?;
+    Ok(expired.len())
+}
+
+pub struct Run {
+    pub invoices: usize,
+    pub suspended: usize,
+    pub ended: usize,
+    pub expired: usize,
+}
+
+pub async fn run_once(state: &AppState) -> AppResult<Run> {
     let billing: Billing = settings::get(&state.db, "billing").await?;
-    Ok((
-        issue_renewals(state, &billing).await?,
-        suspend_overdue(state, &billing).await?,
-        end_cancelled(state).await?,
-    ))
+    Ok(Run {
+        invoices: issue_renewals(state, &billing).await?,
+        suspended: suspend_overdue(state, &billing).await?,
+        ended: end_cancelled(state).await?,
+        expired: expire_orders(state).await?,
+    })
 }
 
 pub fn spawn(state: AppState) {
@@ -296,8 +343,14 @@ pub fn spawn(state: AppState) {
     tokio::spawn(async move {
         loop {
             match run_once(&state).await {
-                Ok((invoices, suspended, ended)) if invoices + suspended + ended > 0 => {
-                    tracing::info!(invoices, suspended, ended, "billing run finished");
+                Ok(run) if run.invoices + run.suspended + run.ended + run.expired > 0 => {
+                    tracing::info!(
+                        invoices = run.invoices,
+                        suspended = run.suspended,
+                        ended = run.ended,
+                        expired = run.expired,
+                        "billing run finished"
+                    );
                 }
                 Ok(_) => {}
                 Err(error) => tracing::warn!(?error, "billing run failed"),
