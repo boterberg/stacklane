@@ -457,10 +457,12 @@ pub async fn create_service(
     _admin: CurrentAdmin,
     Json(input): Json<CreateService>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
-    let user_id: Option<Uuid> = sqlx::query_scalar("SELECT id FROM users WHERE email = $1")
-        .bind(input.customer_email.trim().to_lowercase())
-        .fetch_optional(&state.db)
-        .await?;
+    let user_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM users WHERE email = $1 AND role = 'customer' AND deleted_at IS NULL",
+    )
+    .bind(input.customer_email.trim().to_lowercase())
+    .fetch_optional(&state.db)
+    .await?;
     let user_id = user_id.ok_or_else(|| {
         AppError::field("customer_email", "Er is geen klant met dit e-mailadres.")
     })?;
