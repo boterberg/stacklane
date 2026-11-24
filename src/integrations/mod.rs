@@ -1,6 +1,9 @@
+pub mod directadmin;
+pub mod plesk;
 pub mod proxmox;
 pub mod pterodactyl;
 pub mod vps;
+pub mod webhosting;
 
 use anyhow::Context;
 use serde::Serialize;
@@ -11,7 +14,14 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
-pub const KINDS: [&str; 4] = ["pterodactyl", "proxmox", "openstack", "virtfusion"];
+pub const KINDS: [&str; 6] = [
+    "pterodactyl",
+    "proxmox",
+    "openstack",
+    "virtfusion",
+    "directadmin",
+    "plesk",
+];
 
 #[derive(Serialize, sqlx::FromRow)]
 pub struct IntegrationSummary {
@@ -30,6 +40,8 @@ pub struct IntegrationSummary {
 pub enum Driver {
     Pterodactyl(pterodactyl::Pterodactyl),
     Proxmox(proxmox::Proxmox),
+    DirectAdmin(directadmin::DirectAdmin),
+    Plesk(plesk::Plesk),
 }
 
 fn wrong_kind() -> AppError {
@@ -68,6 +80,8 @@ impl Driver {
         match self {
             Self::Pterodactyl(client) => client.test().await,
             Self::Proxmox(client) => client.test().await,
+            Self::DirectAdmin(client) => client.test().await,
+            Self::Plesk(client) => client.test().await,
         }
     }
 
@@ -75,6 +89,8 @@ impl Driver {
         match self {
             Self::Pterodactyl(client) => client.suspend(external_id).await,
             Self::Proxmox(client) => client.power(vmid(external_id)?, "stop").await,
+            Self::DirectAdmin(client) => client.suspend(external_id).await,
+            Self::Plesk(client) => client.suspend(webhosting::plesk_parts(external_id).1).await,
         }
     }
 
@@ -82,6 +98,12 @@ impl Driver {
         match self {
             Self::Pterodactyl(client) => client.unsuspend(external_id).await,
             Self::Proxmox(client) => client.power(vmid(external_id)?, "start").await,
+            Self::DirectAdmin(client) => client.unsuspend(external_id).await,
+            Self::Plesk(client) => {
+                client
+                    .unsuspend(webhosting::plesk_parts(external_id).1)
+                    .await
+            }
         }
     }
 
@@ -89,6 +111,11 @@ impl Driver {
         match self {
             Self::Pterodactyl(client) => client.terminate(external_id).await,
             Self::Proxmox(client) => client.destroy(vmid(external_id)?).await,
+            Self::DirectAdmin(client) => client.terminate(external_id).await,
+            Self::Plesk(client) => {
+                let (username, domain) = webhosting::plesk_parts(external_id);
+                client.terminate(domain, username).await
+            }
         }
     }
 }
@@ -116,6 +143,28 @@ pub fn build(kind: &str, base_url: &str, credentials: &[u8], settings: Value) ->
             let settings =
                 serde_json::from_value(settings).context("ongeldige Proxmox-instellingen")?;
             Ok(Driver::Proxmox(proxmox::Proxmox::new(
+                base_url,
+                credentials,
+                settings,
+            )?))
+        }
+        "directadmin" => {
+            let credentials =
+                serde_json::from_slice(credentials).context("ongeldige DirectAdmin-gegevens")?;
+            let settings =
+                serde_json::from_value(settings).context("ongeldige DirectAdmin-instellingen")?;
+            Ok(Driver::DirectAdmin(directadmin::DirectAdmin::new(
+                base_url,
+                credentials,
+                settings,
+            )?))
+        }
+        "plesk" => {
+            let credentials =
+                serde_json::from_slice(credentials).context("ongeldige Plesk-gegevens")?;
+            let settings =
+                serde_json::from_value(settings).context("ongeldige Plesk-instellingen")?;
+            Ok(Driver::Plesk(plesk::Plesk::new(
                 base_url,
                 credentials,
                 settings,
