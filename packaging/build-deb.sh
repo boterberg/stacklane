@@ -2,13 +2,14 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-VERSION="" BIN="" WEB="" SITE="" OUT=dist ARCH=amd64
+VERSION="" BIN="" WEB="" SITE="" KEYRING="" OUT=dist ARCH=amd64
 while [ $# -gt 0 ]; do
   case "$1" in
     --version) VERSION=$2; shift 2 ;;
     --bin) BIN=$2; shift 2 ;;
     --web) WEB=$2; shift 2 ;;
     --site) SITE=$2; shift 2 ;;
+    --keyring) KEYRING=$2; shift 2 ;;
     --arch) ARCH=$2; shift 2 ;;
     --out) OUT=$2; shift 2 ;;
     *) echo "unknown option: $1" >&2; exit 1 ;;
@@ -16,7 +17,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$VERSION" ] && [ -x "$BIN" ] && [ -f "$WEB/index.html" ] && [ -f "$SITE/index.html" ] || {
-  echo "usage: $0 --version X --bin <stacklane-server> --web <web/dist> --site <site/dist> [--arch amd64] [--out dist]" >&2
+  echo "usage: $0 --version X --bin <stacklane-server> --web <web/dist> --site <site/dist> [--keyring <key.gpg>] [--arch amd64] [--out dist]" >&2
   exit 1
 }
 echo "$VERSION" | grep -Eq '^[0-9][0-9A-Za-z.+~-]*$' || { echo "invalid version: $VERSION" >&2; exit 1; }
@@ -39,6 +40,10 @@ chmod 0644 "$root/usr/share/stacklane/VERSION"
 install -m 0644 packaging/systemd/stacklane.service "$root/lib/systemd/system/stacklane.service"
 install -m 0640 packaging/etc/stacklane.env "$root/etc/stacklane/stacklane.env"
 install -m 0644 packaging/Caddyfile.example README.md "$root/usr/share/doc/stacklane/"
+if [ -n "$KEYRING" ]; then
+  install -d -m 0755 "$root/usr/share/keyrings"
+  install -m 0644 "$KEYRING" "$root/usr/share/keyrings/stacklane-release.gpg"
+fi
 
 size=$(du -sk --exclude=DEBIAN "$root" | cut -f1)
 sed -e "s/@VERSION@/$VERSION/" -e "s/@SIZE@/$size/" -e "s/@ARCH@/$ARCH/" packaging/debian/control.in > "$root/DEBIAN/control"
