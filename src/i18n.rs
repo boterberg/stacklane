@@ -136,6 +136,12 @@ fn english(message: &str) -> Option<&'static str> {
         "Vul eerst de geheime sleutel en het webhookgeheim van Stripe in." => {
             "Enter the Stripe secret key and webhook secret first."
         }
+        "Dit abonnement is al opgezegd." => "This subscription has already been cancelled.",
+        "Dit abonnement kun je niet meer hervatten." => {
+            "This subscription can no longer be resumed."
+        }
+        "Kies een opgeslagen betaalmethode." => "Choose a saved payment method.",
+        "Deze factuur staat niet meer open." => "This invoice is no longer unpaid.",
         "Vul de naam van je bedrijf in." => "Enter the name of your company.",
         "Kies een btw-tarief tussen 0 en 100 procent." => {
             "Choose a VAT rate between 0 and 100 percent."

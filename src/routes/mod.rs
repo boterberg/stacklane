@@ -12,7 +12,7 @@ mod support;
 mod system;
 
 use axum::http::StatusCode;
-use axum::routing::{any, delete, get, patch, post};
+use axum::routing::{any, delete, get, patch, post, put};
 use axum::{Json, Router};
 use serde_json::json;
 use tower_http::services::{ServeDir, ServeFile};
@@ -32,6 +32,18 @@ pub fn router(state: AppState) -> Router {
         .route("/dashboard", get(dashboard::show))
         .route("/billing/subscriptions", get(billing::subscriptions))
         .route("/billing/subscriptions/{code}", get(billing::subscription))
+        .route(
+            "/billing/subscriptions/{code}/cancel",
+            post(billing::cancel_subscription),
+        )
+        .route(
+            "/billing/subscriptions/{code}/resume",
+            post(billing::resume_subscription),
+        )
+        .route(
+            "/billing/subscriptions/{code}/payment-method",
+            put(billing::set_payment_method),
+        )
         .route("/billing/invoices", get(billing::invoices))
         .route("/billing/invoices/{id}", get(billing::invoice))
         .route("/billing/invoices/{id}/pdf", get(billing::invoice_pdf))

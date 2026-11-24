@@ -64,6 +64,8 @@ pub struct SubscriptionDetail {
     summary: SubscriptionSummary,
     #[serde(with = "time::serde::rfc3339")]
     started_at: OffsetDateTime,
+    mandate_id: Option<Uuid>,
+    mandate: Option<String>,
     items: Vec<SubscriptionItem>,
     invoices: Vec<InvoiceSummary>,
 }
@@ -170,11 +172,15 @@ pub async fn subscription(
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound)?;
-    let started_at: OffsetDateTime =
-        sqlx::query_scalar("SELECT started_at FROM subscriptions WHERE id = $1")
-            .bind(summary.id)
-            .fetch_one(&state.db)
-            .await?;
+    let (started_at, mandate_id, mandate): (OffsetDateTime, Option<Uuid>, Option<String>) =
+        sqlx::query_as(
+            "SELECT s.started_at, m.id, m.description FROM subscriptions s
+         LEFT JOIN payment_mandates m ON m.id = s.mandate_id AND m.revoked_at IS NULL
+         WHERE s.id = $1",
+        )
+        .bind(summary.id)
+        .fetch_one(&state.db)
+        .await?;
     let items = sqlx::query_as(
         "SELECT description, specs_line, monthly_price_cents FROM subscription_items
          WHERE subscription_id = $1 ORDER BY description",
@@ -195,6 +201,8 @@ pub async fn subscription(
     Ok(Json(SubscriptionDetail {
         summary,
         started_at,
+        mandate_id,
+        mandate,
         items,
         invoices,
     }))
@@ -339,4 +347,103 @@ pub async fn pdf_response(
         ],
         body,
     ))
+}
+
+async fn owned_subscription(
+    state: &AppState,
+    user: &CurrentUser,
+    code: &str,
+) -> AppResult<(Uuid, String, bool, OffsetDateTime)> {
+    sqlx::query_as("SELECT id, status, cancelled_at IS NOT NULL, expires_at FROM subscriptions WHERE user_id = $1 AND code = $2")
+        .bind(user.id)
+        .bind(code)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or(AppError::NotFound)
+}
+
+pub async fn cancel_subscription(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(code): Path<String>,
+) -> AppResult<Json<SubscriptionDetail>> {
+    let (id, status, cancelled, _) = owned_subscription(&state, &user, &code).await?;
+    if cancelled || !matches!(status.as_str(), "active" | "pending" | "suspended") {
+        return Err(AppError::field(
+            "subscription",
+            "Dit abonnement is al opgezegd.",
+        ));
+    }
+    sqlx::query("UPDATE subscriptions SET cancelled_at = now() WHERE id = $1")
+        .bind(id)
+        .execute(&state.db)
+        .await?;
+    sqlx::query(
+        "UPDATE invoices v SET status = 'cancelled' WHERE v.status = 'open'
+           AND EXISTS (SELECT 1 FROM invoice_lines l JOIN subscriptions s ON s.id = l.subscription_id
+                       WHERE l.invoice_id = v.id AND s.id = $1 AND l.period_start >= s.expires_at::date)",
+    )
+    .bind(id)
+    .execute(&state.db)
+    .await?;
+    subscription(State(state), user, Path(code)).await
+}
+
+pub async fn resume_subscription(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(code): Path<String>,
+) -> AppResult<Json<SubscriptionDetail>> {
+    let (id, status, cancelled, expires_at) = owned_subscription(&state, &user, &code).await?;
+    if !cancelled
+        || !matches!(status.as_str(), "active" | "pending" | "suspended")
+        || expires_at < OffsetDateTime::now_utc()
+    {
+        return Err(AppError::field(
+            "subscription",
+            "Dit abonnement kun je niet meer hervatten.",
+        ));
+    }
+    sqlx::query("UPDATE subscriptions SET cancelled_at = NULL WHERE id = $1")
+        .bind(id)
+        .execute(&state.db)
+        .await?;
+    subscription(State(state), user, Path(code)).await
+}
+
+#[derive(Deserialize)]
+pub struct PaymentMethod {
+    mandate_id: Option<Uuid>,
+}
+
+pub async fn set_payment_method(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(code): Path<String>,
+    Json(input): Json<PaymentMethod>,
+) -> AppResult<Json<SubscriptionDetail>> {
+    let (id, _, _, _) = owned_subscription(&state, &user, &code).await?;
+    if let Some(mandate_id) = input.mandate_id {
+        let valid: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM payment_mandates WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL)",
+        )
+        .bind(mandate_id)
+        .bind(user.id)
+        .fetch_one(&state.db)
+        .await?;
+        if !valid {
+            return Err(AppError::field(
+                "mandate_id",
+                "Kies een opgeslagen betaalmethode.",
+            ));
+        }
+    }
+    sqlx::query(
+        "UPDATE subscriptions SET mandate_id = $2, payment_mode = CASE WHEN $2::uuid IS NULL THEN 'manual' ELSE 'automatic' END WHERE id = $1",
+    )
+    .bind(id)
+    .bind(input.mandate_id)
+    .execute(&state.db)
+    .await?;
+    subscription(State(state), user, Path(code)).await
 }
