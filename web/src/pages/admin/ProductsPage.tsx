@@ -28,13 +28,17 @@ const emptyForm = {
   memory_mb: '1024',
   disk_gb: '20',
   plan: '',
+  flavor_id: '',
 }
 
 function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [form, setForm] = useState(emptyForm)
   const { data: integrations = [] } = useIntegrations()
+  const integrationKind = integrations.find((integration) => integration.id === form.integration_id)?.kind
+  const cloud = form.kind === 'vps' && integrationKind === 'openstack'
   const hosting = form.kind === 'webhosting'
-  const { data: catalog, isFetching } = useCatalog(form.kind === 'gameserver' || hosting ? form.integration_id || null : null)
+  const { data: catalog, isFetching } = useCatalog(form.kind === 'gameserver' || cloud || hosting ? form.integration_id || null : null)
+  const flavor = catalog?.flavors?.find((option) => option.id === form.flavor_id)
   const create = useCreateProduct()
   const errors = create.error instanceof ApiError ? create.error.fieldErrors : {}
   const eggs = catalog?.nests?.find((nest) => String(nest.id) === form.nest_id)?.eggs ?? []
@@ -44,7 +48,7 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
       ...current,
       [key]: value,
       ...(key === 'nest_id' ? { egg_id: '' } : {}),
-      ...(key === 'integration_id' ? { nest_id: '', egg_id: '', location_id: '', plan: '' } : {}),
+      ...(key === 'integration_id' ? { nest_id: '', egg_id: '', location_id: '', flavor_id: '', plan: '' } : {}),
       ...(key === 'kind' ? { integration_id: '' } : {}),
     }))
   }
@@ -64,23 +68,25 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
         integration_id: form.integration_id || null,
         provisioning: hosting
           ? { plan: form.plan }
-          : form.kind === 'vps'
-            ? {
-                cores: Number(form.cores),
-                memory_mb: Number(form.memory_mb),
-                disk_gb: Number(form.disk_gb),
-              }
-            : {
-                location_id: Number(form.location_id),
-                nest_id: Number(form.nest_id),
-                egg_id: Number(form.egg_id),
-                memory: Number(form.memory),
-                disk: Number(form.disk),
-                cpu: Number(form.cpu),
-                databases: Number(form.databases),
-                backups: Number(form.backups),
-                allocations: 1,
-              },
+          : cloud
+            ? { flavor_id: form.flavor_id, cores: flavor?.cores ?? 0, memory_mb: flavor?.memory_mb ?? 0, disk_gb: flavor?.disk_gb ?? 0 }
+            : form.kind === 'vps'
+              ? {
+                  cores: Number(form.cores),
+                  memory_mb: Number(form.memory_mb),
+                  disk_gb: Number(form.disk_gb),
+                }
+              : {
+                  location_id: Number(form.location_id),
+                  nest_id: Number(form.nest_id),
+                  egg_id: Number(form.egg_id),
+                  memory: Number(form.memory),
+                  disk: Number(form.disk),
+                  cpu: Number(form.cpu),
+                  databases: Number(form.databases),
+                  backups: Number(form.backups),
+                  allocations: 1,
+                },
       },
       {
         onSuccess: () => {
@@ -121,7 +127,13 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
         <div className="grid gap-6 sm:grid-cols-[2fr_1fr]">
           <Field label={t('Naam')} error={errors.name}>
             {(id) => (
-              <Input id={id} placeholder={form.kind === 'vps' ? 'VPS Small' : hosting ? 'Webhosting Basis' : 'Minecraft 4 GB'} value={form.name} invalid={!!errors.name} onChange={(event) => update('name', event.target.value)} />
+              <Input
+                id={id}
+                placeholder={form.kind === 'vps' ? 'VPS Small' : hosting ? 'Webhosting Basis' : 'Minecraft 4 GB'}
+                value={form.name}
+                invalid={!!errors.name}
+                onChange={(event) => update('name', event.target.value)}
+              />
             )}
           </Field>
           <Field label={t('Prijs per maand')} error={errors.monthly_price_cents}>
@@ -131,9 +143,9 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
         <Field label={t('Koppeling')} error={errors.integration_id}>
           {(id) => (
             <Select id={id} value={form.integration_id} onChange={(event) => update('integration_id', event.target.value)}>
-              <option value="">{form.kind === 'vps' ? t('Kies een Proxmox-cluster...') : hosting ? t('Kies een hostingserver...') : t('Kies een Pterodactyl-panel...')}</option>
+              <option value="">{form.kind === 'vps' ? t('Kies een Proxmox- of OpenStack-koppeling...') : hosting ? t('Kies een hostingserver...') : t('Kies een Pterodactyl-panel...')}</option>
               {integrations
-                .filter((integration) => (form.kind === 'vps' ? ['proxmox'] : hosting ? ['directadmin', 'plesk'] : ['pterodactyl']).includes(integration.kind))
+                .filter((integration) => (form.kind === 'vps' ? ['proxmox', 'openstack'] : hosting ? ['directadmin', 'plesk'] : ['pterodactyl']).includes(integration.kind))
                 .map((integration) => (
                   <option key={integration.id} value={integration.id}>
                     {integration.name}
@@ -200,6 +212,19 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
               )}
             </Field>
           ) : null
+        ) : cloud ? (
+          <Field label={t('Flavor')} description={flavor ? `${flavor.cores} vCPU · ${flavor.memory_mb} MB · ${flavor.disk_gb} GB` : undefined}>
+            {(id) => (
+              <Select id={id} value={form.flavor_id} onChange={(event) => update('flavor_id', event.target.value)}>
+                <option value="">{isFetching ? t('Flavors ophalen...') : t('Kies...')}</option>
+                {catalog?.flavors?.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
         ) : form.kind === 'vps' ? (
           <div className="grid gap-6 sm:grid-cols-3">
             <Field label={t('Processors')}>{(id) => <Input id={id} inputMode="numeric" value={form.cores} onChange={(event) => update('cores', event.target.value)} />}</Field>
