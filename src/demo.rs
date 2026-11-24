@@ -337,10 +337,14 @@ pub async fn reset(pool: &PgPool) -> anyhow::Result<()> {
 
     sqlx::query(
         "TRUNCATE sessions, notifications, ticket_messages, tickets, invoice_lines, invoices,
-                  subscription_items, subscriptions, services, products, users RESTART IDENTITY CASCADE",
+                  subscription_items, subscriptions, services, products, users, integrations,
+                  domain_extensions RESTART IDENTITY CASCADE",
     )
     .execute(&mut *seed.transaction)
     .await?;
+    sqlx::query("DELETE FROM settings WHERE key <> 'company'")
+        .execute(&mut *seed.transaction)
+        .await?;
     sqlx::query("ALTER SEQUENCE invoices_id_seq RESTART WITH 100001")
         .execute(&mut *seed.transaction)
         .await?;

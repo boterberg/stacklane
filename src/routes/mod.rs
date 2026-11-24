@@ -29,6 +29,7 @@ mod vps_volumes;
 mod webhosting;
 pub mod whois_profiles;
 
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::routing::{any, delete, get, patch, post, put};
 use axum::{Json, Router};
@@ -294,8 +295,49 @@ pub fn router(state: AppState) -> Router {
     };
 
     router
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            demo_guard,
+        ))
         .layer(axum::middleware::from_fn(crate::i18n::middleware))
         .with_state(state)
+}
+
+fn demo_allows(method: &axum::http::Method, path: &str) -> bool {
+    let Some(admin) = path.strip_prefix("/api/admin/") else {
+        return true;
+    };
+    if admin.starts_with("integrations") {
+        return false;
+    }
+    if matches!(*method, axum::http::Method::GET | axum::http::Method::HEAD) {
+        return true;
+    }
+    let parts: Vec<&str> = admin.split('/').collect();
+    matches!(
+        parts.as_slice(),
+        ["tickets", _, "replies" | "status"]
+            | ["products"]
+            | ["products", _]
+            | ["services", _, _]
+            | ["invoices", _, "mark-paid" | "cancel"]
+    )
+}
+
+async fn demo_guard(
+    State(state): State<AppState>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    if state.config.demo_mode && !demo_allows(request.method(), request.uri().path()) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "message": crate::i18n::tr("In de demo kun je dit niet wijzigen.") })),
+        )
+            .into_response();
+    }
+    next.run(request).await
 }
 
 async fn api_not_found() -> (StatusCode, Json<serde_json::Value>) {
@@ -303,4 +345,34 @@ async fn api_not_found() -> (StatusCode, Json<serde_json::Value>) {
         StatusCode::NOT_FOUND,
         Json(json!({ "message": crate::i18n::tr("Niet gevonden.") })),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::http::Method;
+
+    use super::demo_allows;
+
+    #[test]
+    fn the_demo_keeps_admins_away_from_configuration() {
+        assert!(!demo_allows(&Method::POST, "/api/admin/integrations"));
+        assert!(!demo_allows(
+            &Method::GET,
+            "/api/admin/integrations/1/catalog"
+        ));
+        assert!(!demo_allows(&Method::PUT, "/api/admin/payment-settings"));
+        assert!(!demo_allows(&Method::PUT, "/api/admin/settings"));
+        assert!(!demo_allows(&Method::POST, "/api/admin/domain-extensions"));
+        assert!(!demo_allows(&Method::POST, "/api/admin/system/update"));
+        assert!(demo_allows(&Method::GET, "/api/admin/settings"));
+        assert!(demo_allows(
+            &Method::POST,
+            "/api/admin/tickets/1001/replies"
+        ));
+        assert!(demo_allows(
+            &Method::POST,
+            "/api/admin/invoices/100001/mark-paid"
+        ));
+        assert!(demo_allows(&Method::POST, "/api/auth/login"));
+    }
 }

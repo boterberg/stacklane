@@ -378,6 +378,7 @@ fn english(message: &str) -> Option<&'static str> {
         "Er ging iets mis bij het platform. Probeer het later opnieuw of neem contact op met support." => {
             "Something went wrong at the platform. Try again later or contact support."
         }
+        "In de demo kun je dit niet wijzigen." => "You cannot change this in the demo.",
         _ => return None,
     })
 }
