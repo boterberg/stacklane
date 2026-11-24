@@ -226,6 +226,19 @@ fn english(message: &str) -> Option<&'static str> {
             "Enter the hypervisor group and at least one operating system."
         }
         "Kies een pakket van VirtFusion." => "Choose a VirtFusion package.",
+        "Vul een voornaam in." => "Enter a first name.",
+        "Vul een achternaam in." => "Enter a last name.",
+        "Vul een straat in." => "Enter a street.",
+        "Vul een huisnummer in." => "Enter a house number.",
+        "Vul een postcode in." => "Enter a postcode.",
+        "Vul een plaats in." => "Enter a city.",
+        "Vul een telefoonnummer in met landcode, zoals +31 612345678." => {
+            "Enter a phone number with country code, such as +31 612345678."
+        }
+        "De naam van de houder wijzig je met een verhuizing naar een nieuw profiel." => {
+            "To change the holder's name, move the domain to a new profile."
+        }
+        "Dit profiel hoort nog bij een domein." => "This profile still belongs to a domain.",
         "Kies een flavor." => "Choose a flavor.",
         "Kies TCP, UDP of ICMP." => "Choose TCP, UDP or ICMP.",
         "Vul een poort in, zoals 22, 80,443 of 8000:8100." => {
