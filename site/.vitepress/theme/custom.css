@@ -1,0 +1,47 @@
+:root {
+  --vp-font-family-base: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --vp-c-brand-1: #4f46e5;
+  --vp-c-brand-2: #4338ca;
+  --vp-c-brand-3: #4f46e5;
+  --vp-c-brand-soft: rgba(79, 70, 229, 0.12);
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #18181b 30%, #4f46e5);
+  --vp-button-brand-bg: #27272a;
+  --vp-button-brand-hover-bg: #18181b;
+  --vp-button-brand-active-bg: #09090b;
+  --vp-nav-logo-height: 22px;
+}
+
+.dark {
+  --vp-c-bg: #18181b;
+  --vp-c-bg-alt: #1f1f23;
+  --vp-c-bg-elv: #27272a;
+  --vp-c-bg-soft: #27272a;
+  --vp-c-divider: rgba(255, 255, 255, 0.1);
+  --vp-c-gutter: #09090b;
+  --vp-c-brand-1: #a5b4fc;
+  --vp-c-brand-2: #818cf8;
+  --vp-c-brand-3: #6366f1;
+  --vp-c-brand-soft: rgba(99, 102, 241, 0.16);
+  --vp-home-hero-name-background: linear-gradient(120deg, #ffffff 30%, #a5b4fc);
+  --vp-button-brand-bg: #ffffff;
+  --vp-button-brand-text: #27272a;
+  --vp-button-brand-hover-bg: #f4f4f5;
+  --vp-button-brand-hover-text: #18181b;
+  --vp-button-brand-active-bg: #e4e4e7;
+  --vp-button-brand-active-text: #18181b;
+}
+
+.VPHero .name,
+.VPHero .text {
+  letter-spacing: -0.03em;
+}
+
+.VPFeature .icon {
+  background-color: var(--vp-c-brand-soft);
+}
+
+.vp-doc table {
+  display: table;
+  width: 100%;
+}
