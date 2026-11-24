@@ -281,7 +281,9 @@ fn english(message: &str) -> Option<&'static str> {
             "This server cannot use a Stacklane firewall."
         }
         "Kies een van je eigen servers." => "Choose one of your own servers.",
-        "Kies een grootte tussen 10 en 2000 GB." => "Choose a size between 10 and 2000 GB.",
+        "Kies een grootte van minimaal 10 GB en maximaal 1 TB." => {
+            "Choose a size of at least 10 GB and at most 1 TB."
+        }
         "Kies een server." => "Choose a server.",
         "Kies een van je actieve servers." => "Choose one of your active servers.",
         "Dit volume kan niet bij deze server. Kies een server op hetzelfde platform." => {

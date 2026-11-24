@@ -162,7 +162,7 @@ pub struct NewOrder {
 }
 
 pub const MAX_VOLUMES: i64 = 10;
-pub const VOLUME_SIZES: std::ops::RangeInclusive<u32> = 10..=2000;
+pub const VOLUME_SIZES: std::ops::RangeInclusive<u32> = 10..=1000;
 
 #[derive(Serialize)]
 pub struct OrderPlaced {
@@ -198,7 +198,12 @@ async fn volume_order(
 ) -> AppResult<(Uuid, u32)> {
     let size_gb = size_gb
         .filter(|size| VOLUME_SIZES.contains(size))
-        .ok_or_else(|| AppError::field("size_gb", "Kies een grootte tussen 10 en 2000 GB."))?;
+        .ok_or_else(|| {
+            AppError::field(
+                "size_gb",
+                "Kies een grootte van minimaal 10 GB en maximaal 1 TB.",
+            )
+        })?;
     let server_id = server_id.ok_or_else(|| AppError::field("server_id", "Kies een server."))?;
     let same_integration: Option<bool> = sqlx::query_scalar(
         "SELECT integration_id IS NOT DISTINCT FROM $3 FROM services

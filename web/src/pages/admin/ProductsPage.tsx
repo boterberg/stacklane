@@ -260,7 +260,7 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
             )}
           </Field>
         ) : volume ? (
-          <p className="text-sm text-zinc-500 dark:text-white/60">{t('Klanten kiezen zelf de grootte, tussen 10 en 2000 GB. Ze betalen de prijs per GB keer de grootte.')}</p>
+          <p className="text-sm text-zinc-500 dark:text-white/60">{t('Klanten kiezen zelf de grootte, tussen 10 en 1000 GB. Ze betalen de prijs per GB keer de grootte.')}</p>
         ) : form.kind === 'vps' ? (
           <div className="grid gap-6 sm:grid-cols-3">
             <Field label={t('Processors')}>{(id) => <Input id={id} inputMode="numeric" value={form.cores} onChange={(event) => update('cores', event.target.value)} />}</Field>

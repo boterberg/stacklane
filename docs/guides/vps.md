@@ -61,7 +61,7 @@ Lukt het bijwerken van een server niet, dan slaat Stacklane de firewall toch op 
 
 ### Volumes
 
-Een volume is extra schijfruimte voor een server. Maak onder **Beheer → Producten** een product van de soort **Volume** op een Proxmox- of OpenStack-koppeling, met een prijs per GB per maand. De klant bestelt onder **VPS → Volumes** een volume van 10 tot 2000 GB voor een van zijn servers en betaalt de prijs per GB keer de grootte. Een klant heeft hoogstens tien volumes.
+Een volume is extra schijfruimte voor een server. Maak onder **Beheer → Producten** een product van de soort **Volume** op een Proxmox- of OpenStack-koppeling, met een prijs per GB per maand. De klant bestelt onder **VPS → Volumes** een volume van 10 GB tot 1 TB voor een van zijn servers en betaalt de prijs per GB keer de grootte. Een klant heeft hoogstens tien volumes.
 
 Na betaling maakt Stacklane het volume aan en koppelt het aan de server. De klant kan het loskoppelen en aan een andere server op dezelfde koppeling hangen.
 
