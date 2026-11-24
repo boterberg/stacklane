@@ -353,6 +353,7 @@ async fn recheck_vat_numbers(state: &AppState) -> AppResult<()> {
 pub async fn run_once(state: &AppState) -> AppResult<Run> {
     let billing: Billing = settings::get(&state.db, "billing").await?;
     recheck_vat_numbers(state).await?;
+    crate::routes::vps_isos::remove_unused(state).await?;
     Ok(Run {
         invoices: issue_renewals(state, &billing).await?,
         suspended: suspend_overdue(state, &billing).await?,

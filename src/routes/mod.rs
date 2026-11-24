@@ -22,6 +22,7 @@ mod system;
 mod two_factor;
 mod vps;
 pub mod vps_firewalls;
+pub mod vps_isos;
 mod vps_volumes;
 mod webhosting;
 pub mod whois_profiles;
@@ -51,6 +52,14 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/vps/servers", get(vps::index))
         .route("/vps/snapshots", get(vps::all_snapshots))
+        .route("/vps/isos", get(vps_isos::index).post(vps_isos::create))
+        .route("/vps/isos/{id}", delete(vps_isos::destroy))
+        .route(
+            "/vps/servers/{id}/iso",
+            get(vps_isos::server)
+                .post(vps_isos::mount)
+                .delete(vps_isos::unmount),
+        )
         .route("/vps/volumes", get(vps_volumes::index))
         .route("/vps/volumes/options", get(vps_volumes::options))
         .route("/vps/volumes/{id}/attach", post(vps_volumes::attach))

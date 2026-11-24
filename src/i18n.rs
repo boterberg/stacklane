@@ -304,6 +304,21 @@ fn english(message: &str) -> Option<&'static str> {
         "Kies een koppeling met Proxmox VE of OpenStack." => {
             "Choose a Proxmox VE or OpenStack integration."
         }
+        "Dit platform kan geen ISO's gebruiken." => "This platform cannot use ISOs.",
+        "Geef de ISO een naam van hoogstens 60 tekens." => {
+            "Give the ISO a name of at most 60 characters."
+        }
+        "Kies BIOS of UEFI." => "Choose BIOS or UEFI.",
+        "Je hebt al 2 ISO's. Verwijder er eerst een." => {
+            "You already have 2 ISOs. Delete one first."
+        }
+        "Je hebt minimaal één actieve VPS nodig voordat je ISO's kunt importeren." => {
+            "You need at least one active VPS before you can import ISOs."
+        }
+        "Koppel de ISO eerst los van de server." => "Detach the ISO from the server first.",
+        "Wacht tot de ISO klaar is met importeren." => "Wait until the ISO has finished importing.",
+        "Koppel eerst de huidige ISO los." => "Detach the current ISO first.",
+        "Kies een ISO die klaar is." => "Choose an ISO that is ready.",
         "Kies het land van je bedrijf." => "Choose the country of your business.",
         "Vul een btw-nummer uit de EU in, zoals NL123456789B01." => {
             "Enter an EU VAT number, such as NL123456789B01."
