@@ -207,6 +207,25 @@ async fn place_order(
             "Vul de domeinnaam van je website in, zoals jouwbedrijf.nl.",
         ));
     }
+    if product.kind == "webhosting" {
+        let taken: bool = sqlx::query_scalar(
+            "SELECT EXISTS (
+                 SELECT 1 FROM services
+                 WHERE lower(name) = $1 AND status <> 'terminated'
+                   AND ((kind = 'webhosting' AND integration_id = $2) OR (kind = 'domain' AND user_id <> $3)))",
+        )
+        .bind(name)
+        .bind(product.integration_id)
+        .bind(user.id)
+        .fetch_one(&state.db)
+        .await?;
+        if taken {
+            return Err(AppError::field(
+                "name",
+                "Deze domeinnaam is al in gebruik bij een ander pakket.",
+            ));
+        }
+    }
     if name.is_empty() || name.chars().count() > 60 {
         return Err(AppError::field(
             "name",

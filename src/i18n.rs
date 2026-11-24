@@ -257,6 +257,9 @@ fn english(message: &str) -> Option<&'static str> {
             "Something went wrong at the platform. Try again later or contact support."
         }
         "In de demo kun je dit niet wijzigen." => "You cannot change this in the demo.",
+        "Deze domeinnaam is al in gebruik bij een ander pakket." => {
+            "This domain name is already used by another package."
+        }
         _ => return None,
     })
 }

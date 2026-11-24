@@ -897,3 +897,61 @@ async fn terminating_a_service_ends_its_billing(db: PgPool) {
         .unwrap();
     assert_eq!(flagged, 1);
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_domain_on_one_hosting_package_cannot_be_ordered_again(db: PgPool) {
+    use crate::testing::{NewService, fake_api, proxmox_integration, service};
+    let client = Client::new(db);
+    let (base, _) = fake_api(steady_node).await;
+    let integration = proxmox_integration(&client.state, &base).await;
+    let product = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO products (id, kind, slug, name, monthly_price_cents, integration_id)
+         VALUES ($1, 'webhosting', 'web-test', 'Web', 500, $2)",
+    )
+    .bind(product)
+    .bind(integration)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    let (first, _) = client.register("site-owner@example.test").await;
+    service(
+        &client.state,
+        NewService {
+            user: first,
+            subscription: None,
+            kind: "webhosting",
+            status: "active",
+            integration: Some(integration),
+            external_id: None,
+            details: json!({}),
+        },
+    )
+    .await;
+    sqlx::query("UPDATE services SET name = 'example-shop.nl' WHERE user_id = $1")
+        .bind(first)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    let (_, second) = client.register("site-taker@example.test").await;
+    let order = client
+        .send(
+            Method::POST,
+            "/orders",
+            Some(&second),
+            Some(json!({ "product_id": product, "billing_interval": "monthly", "name": "www.Example-Shop.nl" })),
+        )
+        .await;
+    assert_eq!(
+        order.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        order.body
+    );
+    assert!(
+        order.body.to_string().contains("al in gebruik"),
+        "{}",
+        order.body
+    );
+}
