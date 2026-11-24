@@ -382,6 +382,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Deze gebruiker heeft rechten die jij niet hebt. Vraag de eigenaar om dit aan te passen." => {
             "This user has rights you do not have. Ask the owner to change this."
         }
+        "Deze domeinnaam is al in gebruik bij een ander pakket." => {
+            "This domain name is already used by another package."
+        }
         _ => return None,
     })
 }
