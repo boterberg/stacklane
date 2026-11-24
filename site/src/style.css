@@ -1,0 +1,16 @@
+@import '@fontsource-variable/inter';
+@import 'tailwindcss';
+
+@source '../vite.config.js';
+@source inline('size-4 size-5 size-6 h-[22px] text-brand text-zinc-900 dark:text-white');
+
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --color-brand: #4f46e5;
+}
+
+html {
+  scroll-behavior: smooth;
+}
