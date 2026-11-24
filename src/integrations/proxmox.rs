@@ -315,6 +315,32 @@ impl Proxmox {
         })
     }
 
+    pub async fn suspend(&self, vmid: u32) -> anyhow::Result<()> {
+        self.run(
+            Method::POST,
+            &format!("{}/config", self.vm_path(vmid)),
+            &[("onboot", "0".to_owned())],
+        )
+        .await?;
+        if self.status(vmid).await?.state == "running" {
+            self.power(vmid, "stop").await?;
+        }
+        Ok(())
+    }
+
+    pub async fn unsuspend(&self, vmid: u32) -> anyhow::Result<()> {
+        self.run(
+            Method::POST,
+            &format!("{}/config", self.vm_path(vmid)),
+            &[("onboot", "1".to_owned())],
+        )
+        .await?;
+        if self.status(vmid).await?.state != "running" {
+            self.power(vmid, "start").await?;
+        }
+        Ok(())
+    }
+
     pub async fn power(&self, vmid: u32, action: &str) -> anyhow::Result<()> {
         if !matches!(action, "start" | "stop" | "shutdown" | "reboot") {
             bail!("onbekende actie {action}");
@@ -489,6 +515,36 @@ pub fn product_details(config: &ProductConfig) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn fake_node(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+        match (method, path) {
+            ("GET", path) if path.ends_with("/status/current") => {
+                (200, json!({ "data": { "status": "running" } }))
+            }
+            _ => (200, json!({ "data": null })),
+        }
+    }
+
+    async fn client() -> (Proxmox, crate::testing::Calls) {
+        let (base, calls) = crate::testing::fake_api(fake_node).await;
+        let credentials = Credentials {
+            token_id: "t".into(),
+            token_secret: "s".into(),
+        };
+        (Proxmox::new(&base, credentials, settings()).unwrap(), calls)
+    }
+
+    #[tokio::test]
+    async fn suspending_keeps_the_vm_off_after_a_reboot() {
+        let (client, calls) = client().await;
+        client.suspend(101).await.unwrap();
+        let calls = calls.lock().unwrap().clone();
+        assert_eq!(
+            calls[0],
+            "POST /api2/json/nodes/pve/qemu/101/config onboot=0"
+        );
+        assert!(calls.contains(&"POST /api2/json/nodes/pve/qemu/101/status/stop".to_owned()));
+    }
 
     fn settings() -> Settings {
         serde_json::from_value(json!({

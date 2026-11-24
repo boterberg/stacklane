@@ -88,7 +88,7 @@ impl Driver {
     pub async fn suspend(&self, external_id: &str) -> anyhow::Result<()> {
         match self {
             Self::Pterodactyl(client) => client.suspend(external_id).await,
-            Self::Proxmox(client) => client.power(vmid(external_id)?, "stop").await,
+            Self::Proxmox(client) => client.suspend(vmid(external_id)?).await,
             Self::DirectAdmin(client) => client.suspend(external_id).await,
             Self::Plesk(client) => client.suspend(webhosting::plesk_parts(external_id).1).await,
         }
@@ -97,7 +97,7 @@ impl Driver {
     pub async fn unsuspend(&self, external_id: &str) -> anyhow::Result<()> {
         match self {
             Self::Pterodactyl(client) => client.unsuspend(external_id).await,
-            Self::Proxmox(client) => client.power(vmid(external_id)?, "start").await,
+            Self::Proxmox(client) => client.unsuspend(vmid(external_id)?).await,
             Self::DirectAdmin(client) => client.unsuspend(external_id).await,
             Self::Plesk(client) => {
                 client
