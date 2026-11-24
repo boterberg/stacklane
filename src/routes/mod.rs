@@ -1,5 +1,6 @@
 mod admin_provisioning;
 mod auth;
+mod billing;
 mod dashboard;
 mod gameservers;
 mod health;
@@ -27,6 +28,10 @@ pub fn router(state: AppState) -> Router {
         .route("/me", get(me::show))
         .route("/me/settings", patch(me::update_settings))
         .route("/dashboard", get(dashboard::show))
+        .route("/billing/subscriptions", get(billing::subscriptions))
+        .route("/billing/subscriptions/{code}", get(billing::subscription))
+        .route("/billing/invoices", get(billing::invoices))
+        .route("/billing/invoices/{id}", get(billing::invoice))
         .route("/notifications", get(notifications::index))
         .route("/support/departments", get(support::departments))
         .route(

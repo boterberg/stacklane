@@ -2,6 +2,7 @@ mod auth;
 mod cli;
 mod config;
 mod crypto;
+mod dates;
 mod demo;
 mod error;
 mod html;
