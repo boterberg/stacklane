@@ -32,6 +32,43 @@ async fn mark_failed(state: &AppState, service_id: Uuid, error: &anyhow::Error) 
     .await;
 }
 
+pub async fn recover_interrupted(state: &AppState) -> anyhow::Result<()> {
+    let services = sqlx::query(
+        "UPDATE services SET status = 'failed',
+                last_error = 'Stacklane werd herstart tijdens het leveren. Probeer het opnieuw.', updated_at = now()
+         WHERE status = 'provisioning'",
+    )
+    .execute(&state.db)
+    .await?
+    .rows_affected();
+    let isos = sqlx::query(
+        "UPDATE vps_isos SET status = 'failed', last_error = 'Stacklane werd herstart tijdens het importeren.'
+         WHERE status = 'importing'",
+    )
+    .execute(&state.db)
+    .await?
+    .rows_affected();
+    if services + isos > 0 {
+        tracing::warn!(
+            services,
+            isos,
+            "marked work interrupted by a restart as failed"
+        );
+    }
+    Ok(())
+}
+
+async fn claim(state: &AppState, service_id: Uuid) -> anyhow::Result<bool> {
+    Ok(sqlx::query_scalar::<_, Uuid>(
+        "UPDATE services SET status = 'provisioning', last_error = NULL, updated_at = now()
+         WHERE id = $1 AND status IN ('pending', 'failed') RETURNING id",
+    )
+    .bind(service_id)
+    .fetch_optional(&state.db)
+    .await?
+    .is_some())
+}
+
 async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()> {
     let context: ProvisionContext = sqlx::query_as(
         "SELECT s.name, s.kind, s.integration_id, COALESCE(p.provisioning, '{}'::jsonb) AS provisioning, s.details,
@@ -47,11 +84,6 @@ async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()>
     let integration_id = context
         .integration_id
         .ok_or_else(|| anyhow::anyhow!("het product is niet aan een koppeling gekoppeld"))?;
-
-    sqlx::query("UPDATE services SET status = 'provisioning', last_error = NULL, updated_at = now() WHERE id = $1")
-        .bind(service_id)
-        .execute(&state.db)
-        .await?;
 
     let driver = integrations::driver(state, integration_id)
         .await
@@ -617,6 +649,14 @@ pub fn renew_domain_in_background(state: AppState, service_id: Uuid) {
 
 pub fn provision_in_background(state: AppState, service_id: Uuid) {
     tokio::spawn(async move {
+        match claim(&state, service_id).await {
+            Ok(true) => {}
+            Ok(false) => return,
+            Err(error) => {
+                tracing::warn!(%service_id, error = %format!("{error:#}"), "claiming a service failed");
+                return;
+            }
+        }
         if let Err(error) = run_provision(&state, service_id).await {
             mark_failed(&state, service_id, &error).await;
         }

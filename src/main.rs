@@ -161,6 +161,7 @@ async fn serve() -> anyhow::Result<()> {
             demo::reset(&state.db).await?;
         }
     }
+    services::recover_interrupted(&state).await?;
     state.updates.spawn_checks();
     renewals::spawn(state.clone());
     let app = routes::router(state.clone()).layer(TraceLayer::new_for_http());

@@ -396,12 +396,6 @@ pub async fn unmount(
 }
 
 pub async fn remove_unused(state: &AppState) -> AppResult<usize> {
-    sqlx::query(
-        "UPDATE vps_isos SET status = 'failed', last_error = 'Het importeren is niet afgemaakt.'
-         WHERE status = 'importing' AND created_at < now() - interval '3 hours'",
-    )
-    .execute(&state.db)
-    .await?;
     let stale: Vec<Uuid> = sqlx::query_scalar(
         "SELECT id FROM vps_isos
          WHERE mounted_on IS NULL AND status <> 'importing' AND last_used_at < now() - make_interval(days => $1)",
