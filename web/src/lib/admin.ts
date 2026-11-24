@@ -56,7 +56,7 @@ export function useIntegrations() {
 export function useCreateIntegration() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: { kind: string; name: string; base_url: string; credentials: Record<string, string> }) =>
+    mutationFn: (input: { kind: string; name: string; base_url: string; credentials: Record<string, string>; settings?: Record<string, unknown> }) =>
       api<{ id: string; message: string }>('/admin/integrations', { method: 'POST', body: input }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] }),
   })
