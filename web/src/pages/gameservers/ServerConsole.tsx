@@ -5,6 +5,7 @@ import { Terminal } from '@xterm/xterm'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { consoleToken } from '../../lib/gameservers'
+import { t } from '../../lib/i18n'
 
 type ConnectionState = 'connecting' | 'connected' | 'closed'
 
@@ -120,7 +121,7 @@ export function ServerConsole({ serverId }: { serverId: string }) {
             }
           }}
           disabled={state !== 'connected'}
-          placeholder={state === 'connected' ? 'Typ een commando, bijvoorbeeld list' : state === 'connecting' ? 'Verbinden...' : 'Verbinding verbroken, opnieuw verbinden...'}
+          placeholder={state === 'connected' ? t('Typ een commando, bijvoorbeeld list') : state === 'connecting' ? t('Verbinden...') : t('Verbinding verbroken, opnieuw verbinden...')}
           className="flex-1 bg-transparent font-mono text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
         />
         <span className={state === 'connected' ? 'size-2 rounded-full bg-green-500' : 'size-2 rounded-full bg-zinc-500'} title={state} />

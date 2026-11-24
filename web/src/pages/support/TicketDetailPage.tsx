@@ -11,6 +11,7 @@ import { cn } from '../../lib/cn'
 import { formatDate, formatRelative } from '../../lib/format'
 import { ticketStatusColors, ticketStatuses, ticketStatusLabels, type TicketStatus } from '../../lib/labels'
 import { useCloseTicket, useReplyToTicket, useTicket, useUpdateTicketStatus, type TicketDetail, type TicketMessage, type TicketScope } from '../../lib/support'
+import { t } from '../../lib/i18n'
 
 function Message({ message }: { message: TicketMessage }) {
   return (
@@ -18,7 +19,7 @@ function Message({ message }: { message: TicketMessage }) {
       <header className="flex items-center justify-between gap-4 border-b border-zinc-200 px-6 py-3 dark:border-white/10">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-zinc-800 dark:text-white">{message.author_name}</span>
-          {message.is_staff && <Badge color="blue">Support</Badge>}
+          {message.is_staff && <Badge color="blue">{t('Support')}</Badge>}
         </div>
         <time dateTime={message.created_at} title={formatDate(message.created_at)} className="text-sm text-zinc-500 dark:text-white/60">
           {formatRelative(message.created_at)}
@@ -42,13 +43,13 @@ function ReplyForm({ ticket, scope }: { ticket: TicketDetail; scope: TicketScope
   return (
     <form onSubmit={submit} className="space-y-3">
       <h2 className="text-sm font-medium text-zinc-800 dark:text-white">
-        {scope === 'staff' ? 'Reageren als support' : ticket.status === 'closed' ? 'Ticket heropenen met een reactie' : 'Reageren'}
+        {scope === 'staff' ? t('Reageren als support') : ticket.status === 'closed' ? t('Ticket heropenen met een reactie') : t('Reageren')}
       </h2>
       <RichTextEditor value={body} onChange={setBody} invalid={!!error} minHeight="min-h-40" />
       {error && <p className="text-sm font-medium text-red-500 dark:text-red-400">{error}</p>}
       <div className="flex justify-end">
         <Button type="submit" variant="primary" disabled={reply.isPending}>
-          Versturen
+          {t('Versturen')}
         </Button>
       </div>
     </form>
@@ -59,7 +60,7 @@ function StatusSelect({ ticket }: { ticket: TicketDetail }) {
   const update = useUpdateTicketStatus(ticket.number)
   return (
     <select
-      aria-label="Status"
+      aria-label={t('Status')}
       value={ticket.status}
       disabled={update.isPending}
       onChange={(event) => update.mutate(event.target.value as TicketStatus)}
@@ -84,11 +85,11 @@ export function TicketDetailPage({ scope = 'customer' }: { scope?: TicketScope }
   if (error || !ticket) {
     return (
       <EmptyState
-        title="Ticket niet gevonden"
-        description="Dit ticket bestaat niet of hoort niet bij je account."
+        title={t('Ticket niet gevonden')}
+        description={t('Dit ticket bestaat niet of hoort niet bij je account.')}
         action={
           <ButtonLink to={backTo} size="sm">
-            Naar tickets
+            {t('Naar tickets')}
           </ButtonLink>
         }
       />
@@ -120,7 +121,7 @@ export function TicketDetailPage({ scope = 'customer' }: { scope?: TicketScope }
             </span>
             <span className="flex items-center gap-2">
               <CalendarIcon className="size-4 text-zinc-400 dark:text-white/40" aria-hidden />
-              Geopend op {formatDate(ticket.created_at)}
+              {t('Geopend op {date}', { date: formatDate(ticket.created_at) })}
             </span>
           </div>
         </div>
@@ -129,7 +130,7 @@ export function TicketDetailPage({ scope = 'customer' }: { scope?: TicketScope }
         ) : (
           ticket.status !== 'closed' && (
             <Button size="sm" icon={LockClosedIcon} disabled={close.isPending} onClick={() => close.mutate(undefined)}>
-              Ticket sluiten
+              {t('Ticket sluiten')}
             </Button>
           )
         )}

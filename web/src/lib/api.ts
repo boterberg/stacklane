@@ -1,3 +1,5 @@
+import { getLocale, t } from './i18n'
+
 export type FieldErrors = Record<string, string>
 
 export class ApiError extends Error {
@@ -20,7 +22,7 @@ export async function api<T>(path: string, { method = 'GET', body }: RequestOpti
   const response = await fetch(`/api${path}`, {
     method,
     credentials: 'include',
-    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+    headers: body === undefined ? { 'accept-language': getLocale() } : { 'content-type': 'application/json', 'accept-language': getLocale() },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
 
@@ -30,7 +32,7 @@ export async function api<T>(path: string, { method = 'GET', body }: RequestOpti
 
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
-    throw new ApiError(response.status, payload.message ?? 'Er ging iets mis.', payload.errors ?? {})
+    throw new ApiError(response.status, payload.message ?? t('Er ging iets mis.'), payload.errors ?? {})
   }
   return payload as T
 }

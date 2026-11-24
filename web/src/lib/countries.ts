@@ -1,22 +1,8 @@
-export const countries: Array<{ code: string; name: string }> = [
-  { code: 'NL', name: 'Nederland' },
-  { code: 'BE', name: 'België' },
-  { code: 'DE', name: 'Duitsland' },
-  { code: 'FR', name: 'Frankrijk' },
-  { code: 'LU', name: 'Luxemburg' },
-  { code: 'GB', name: 'Verenigd Koninkrijk' },
-  { code: 'IE', name: 'Ierland' },
-  { code: 'AT', name: 'Oostenrijk' },
-  { code: 'CH', name: 'Zwitserland' },
-  { code: 'DK', name: 'Denemarken' },
-  { code: 'SE', name: 'Zweden' },
-  { code: 'NO', name: 'Noorwegen' },
-  { code: 'FI', name: 'Finland' },
-  { code: 'ES', name: 'Spanje' },
-  { code: 'PT', name: 'Portugal' },
-  { code: 'IT', name: 'Italië' },
-  { code: 'PL', name: 'Polen' },
-  { code: 'CZ', name: 'Tsjechië' },
-  { code: 'US', name: 'Verenigde Staten' },
-  { code: 'CA', name: 'Canada' },
-]
+import { intlLocale } from './i18n'
+
+const codes = ['NL', 'BE', 'DE', 'FR', 'LU', 'GB', 'IE', 'AT', 'CH', 'DK', 'SE', 'NO', 'FI', 'ES', 'PT', 'IT', 'PL', 'CZ', 'US', 'CA']
+
+export function countries(): Array<{ code: string; name: string }> {
+  const names = new Intl.DisplayNames([intlLocale()], { type: 'region' })
+  return codes.map((code) => ({ code, name: names.of(code) ?? code }))
+}

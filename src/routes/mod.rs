@@ -6,6 +6,7 @@ mod health;
 pub mod me;
 mod notifications;
 mod support;
+mod system;
 
 use axum::http::StatusCode;
 use axum::routing::{any, delete, get, patch, post};
@@ -92,6 +93,11 @@ pub fn router(state: AppState) -> Router {
             post(admin_provisioning::service_action),
         )
         .route("/admin/customers", get(admin_provisioning::customers))
+        .route(
+            "/admin/system/update",
+            get(system::show).post(system::start),
+        )
+        .route("/admin/system/update/check", post(system::check))
         .route("/demo/login", post(demo::login))
         .route("/{*rest}", any(api_not_found));
 
@@ -106,12 +112,14 @@ pub fn router(state: AppState) -> Router {
         None => router,
     };
 
-    router.with_state(state)
+    router
+        .layer(axum::middleware::from_fn(crate::i18n::middleware))
+        .with_state(state)
 }
 
 async fn api_not_found() -> (StatusCode, Json<serde_json::Value>) {
     (
         StatusCode::NOT_FOUND,
-        Json(json!({ "message": "Niet gevonden." })),
+        Json(json!({ "message": crate::i18n::tr("Niet gevonden.") })),
     )
 }

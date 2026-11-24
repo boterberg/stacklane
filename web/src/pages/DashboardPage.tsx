@@ -1,3 +1,4 @@
+import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router'
 
@@ -6,7 +7,12 @@ import { ButtonLink } from '../components/ui/Button'
 import { Card, CardText } from '../components/ui/Card'
 import { PageHeader } from '../components/ui/Heading'
 import { LinkCard } from '../components/ui/LinkCard'
+import { UpdatePanel } from '../components/admin/UpdatePanel'
 import { api } from '../lib/api'
+import { useMe } from '../lib/auth'
+import { t } from '../lib/i18n'
+import { useMeta } from '../lib/meta'
+import { needsAttention, useUpdateStatus } from '../lib/system'
 import { formatDate, formatRelative } from '../lib/format'
 import { Badge } from '../components/ui/Badge'
 import { ticketStatusColors, ticketStatusLabels, type TicketStatus } from '../lib/labels'
@@ -18,17 +24,33 @@ type Dashboard = {
 
 export function DashboardPage() {
   const { data } = useQuery({ queryKey: ['dashboard'], queryFn: () => api<Dashboard>('/dashboard') })
+  const { data: profile } = useMe()
+  const { data: update } = useUpdateStatus(profile?.role === 'admin')
+  const { data: meta } = useMeta()
 
   return (
     <>
-      <PageHeader title="Dashboard" />
+      <PageHeader title={t('Dashboard')} />
+      {update && needsAttention(update) && (
+        <Card
+          className="mb-6"
+          title={
+            <span className="flex items-center gap-2">
+              <ExclamationTriangleIcon className="size-5 text-amber-600 dark:text-amber-400" aria-hidden />
+              {t('Nieuwe versie van Stacklane')}
+            </span>
+          }
+        >
+          <UpdatePanel overview={update} demo={!!meta?.demo} />
+        </Card>
+      )}
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="space-y-6 xl:col-span-2">
           <Card
-            title="Actieve tickets"
+            title={t('Actieve tickets')}
             action={
               <ButtonLink to="/support/tickets" size="sm">
-                Alle tickets
+                {t('Alle tickets')}
               </ButtonLink>
             }
           >
@@ -49,10 +71,10 @@ export function DashboardPage() {
                 ))}
               </ul>
             ) : (
-              <CardText>Je hebt geen actieve tickets.</CardText>
+              <CardText>{t('Je hebt geen actieve tickets.')}</CardText>
             )}
           </Card>
-          <Card title="Verloopt binnenkort" description="Abonnementen en domeinen die niet automatisch worden verlengd.">
+          <Card title={t('Verloopt binnenkort')} description={t('Abonnementen en domeinen die niet automatisch worden verlengd.')}>
             {data && data.expiring_soon.length > 0 ? (
               <ul className="-my-3 divide-y divide-zinc-200 dark:divide-white/10">
                 {data.expiring_soon.map((service) => (
@@ -67,13 +89,13 @@ export function DashboardPage() {
                 ))}
               </ul>
             ) : (
-              <CardText>Er verloopt binnenkort niets.</CardText>
+              <CardText>{t('Er verloopt binnenkort niets.')}</CardText>
             )}
           </Card>
         </div>
         <div className="space-y-6">
-          <LinkCard href={links.helpCenter} title="Helpcentrum" description="Bekijk ons uitgebreide helpcentrum voor stapsgewijze handleidingen en documentatie." />
-          <LinkCard href={links.statusPage} title="Statuspagina" description="Bekijk actuele storingen en gepland onderhoud." />
+          <LinkCard href={links.helpCenter} title={t('Helpcentrum')} description={t('Bekijk ons uitgebreide helpcentrum voor stapsgewijze handleidingen en documentatie.')} />
+          <LinkCard href={links.statusPage} title={t('Statuspagina')} description={t('Bekijk actuele storingen en gepland onderhoud.')} />
         </div>
       </div>
     </>

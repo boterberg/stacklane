@@ -5,6 +5,7 @@ mod crypto;
 mod demo;
 mod error;
 mod html;
+mod i18n;
 mod imports;
 mod integrations;
 mod mail;
@@ -12,6 +13,7 @@ mod pagination;
 mod routes;
 mod services;
 mod state;
+mod updates;
 
 use anyhow::Context;
 use sqlx::PgPool;
@@ -38,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
     match command {
         "serve" => serve().await,
         "setup" => cli::setup::run().await,
-        "update" => cli::update::run().await,
+        "update" => cli::update::run(&args[1..]).await,
         "status" => cli::status::run().await,
         "import" => cli::import::run(&args[1..]).await,
         "admin" if args.get(1).map(String::as_str) == Some("create") => {
@@ -106,6 +108,7 @@ async fn serve() -> anyhow::Result<()> {
             demo::reset(&state.db).await?;
         }
     }
+    state.updates.spawn_checks();
     let app = routes::router(state.clone()).layer(TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind(&state.config.bind_addr).await?;

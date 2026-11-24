@@ -15,6 +15,7 @@ import { GameServersPage } from '../pages/gameservers/GameServersPage'
 import { IntegrationsPage } from '../pages/admin/IntegrationsPage'
 import { ProductsPage } from '../pages/admin/ProductsPage'
 import { ServicesPage } from '../pages/admin/ServicesPage'
+import { SystemPage } from '../pages/admin/SystemPage'
 
 const sections: Array<[string, string]> = [
   ['/gameservers/backups', 'Back-ups'],
@@ -49,6 +50,7 @@ export const router = createBrowserRouter([
       { path: '/admin/services', element: <ServicesPage /> },
       { path: '/admin/products', element: <ProductsPage /> },
       { path: '/admin/integrations', element: <IntegrationsPage /> },
+      { path: '/admin/system', element: <SystemPage /> },
       { path: '/admin/tickets', element: <TicketsPage scope="staff" /> },
       { path: '/admin/tickets/:number', element: <TicketDetailPage scope="staff" /> },
       ...sections.map(([path, title]) => ({ path, element: <SectionPage title={title} /> })),

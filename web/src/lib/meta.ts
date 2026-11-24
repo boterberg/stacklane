@@ -1,8 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from './api'
-import { meQueryKey, type Profile } from './auth'
-import { applyTheme } from './theme'
+import { applyPreferences, meQueryKey, syncPreferences, type Profile } from './auth'
 
 export type Meta = {
   version: string
@@ -19,10 +18,10 @@ export function useMeta() {
 export function useDemoLogin() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (role: DemoRole) => api<Profile>('/demo/login', { method: 'POST', body: { role } }),
+    mutationFn: async (role: DemoRole) => syncPreferences(await api<Profile>('/demo/login', { method: 'POST', body: { role } })),
     onSuccess: (profile) => {
       queryClient.clear()
-      applyTheme(profile.theme)
+      applyPreferences(profile)
       queryClient.setQueryData(meQueryKey, profile)
     },
   })

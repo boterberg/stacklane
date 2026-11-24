@@ -4,6 +4,7 @@ import { CheckIcon } from '@heroicons/react/20/solid'
 import type { ReactNode } from 'react'
 
 import { cn } from '../../lib/cn'
+import { t } from '../../lib/i18n'
 
 export type ListView = 'grid' | 'table'
 
@@ -49,7 +50,7 @@ type MultiSelectProps<T extends string> = {
 }
 
 export function MultiSelectFilter<T extends string>({ values, options: choices, labels, onChange, noun, placeholder }: MultiSelectProps<T>) {
-  const summary = values.length === 0 ? placeholder : values.length === 1 ? labels[values[0]] : `${values.length} ${noun[1]} geselecteerd`
+  const summary = values.length === 0 ? placeholder : values.length === 1 ? labels[values[0]] : t('{count} {noun} geselecteerd', { count: values.length, noun: noun[1] })
   return (
     <Listbox value={values} onChange={onChange} multiple>
       <div className="relative">
@@ -61,7 +62,7 @@ export function MultiSelectFilter<T extends string>({ values, options: choices, 
           <button
             type="button"
             onClick={() => onChange([])}
-            aria-label="Filter wissen"
+            aria-label={t('Filter wissen')}
             className="absolute top-1/2 right-[30px] -translate-y-1/2 rounded p-0.5 text-zinc-400 hover:text-zinc-800 dark:text-white/60 dark:hover:text-white"
           >
             <XMarkIcon className="size-3.5" />
@@ -86,14 +87,14 @@ export function PerPageSelect({ value, onChange }: { value: number; onChange: (v
   return (
     <Listbox value={value} onChange={onChange}>
       <ListboxButton className={controlButton}>
-        {value} per pagina
+        {t('{count} per pagina', { count: value })}
         <ChevronDownIcon className="size-4 text-zinc-400" aria-hidden />
       </ListboxButton>
       <ListboxOptions anchor={{ to: 'bottom end', gap: 4 }} className={options}>
         {[5, 10, 25, 50].map((size) => (
           <ListboxOption key={size} value={size} className={option}>
             <CheckIcon className="invisible size-4 group-data-selected:visible" aria-hidden />
-            {size} per pagina
+            {t('{count} per pagina', { count: size })}
           </ListboxOption>
         ))}
       </ListboxOptions>
@@ -118,8 +119,8 @@ export function ViewToggle({ value, onChange }: { value: ListView; onChange: (va
   )
   return (
     <div className="flex rounded-lg bg-zinc-800/5 p-[3px] dark:bg-white/10">
-      {button('grid', 'Kaartweergave', Squares2X2Icon)}
-      {button('table', 'Lijstweergave', ListBulletIcon)}
+      {button('grid', t('Kaartweergave'), Squares2X2Icon)}
+      {button('table', t('Lijstweergave'), ListBulletIcon)}
     </div>
   )
 }

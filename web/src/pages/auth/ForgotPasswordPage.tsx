@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button'
 import { Field, Input } from '../../components/ui/Field'
 import { api, ApiError } from '../../lib/api'
 import { AuthFooter, AuthHeading, TextLink } from './AuthLayout'
+import { t } from '../../lib/i18n'
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
@@ -18,23 +19,23 @@ export function ForgotPasswordPage() {
 
   return (
     <>
-      <AuthHeading>Wachtwoord vergeten</AuthHeading>
+      <AuthHeading>{t('Wachtwoord vergeten')}</AuthHeading>
       {request.isSuccess ? (
         <p className="text-center text-sm text-zinc-500 dark:text-white/70">
-          Als er een account bestaat met dit e-mailadres, ontvang je binnen enkele minuten een link om je wachtwoord te herstellen.
+          {t('Als er een account bestaat met dit e-mailadres, ontvang je binnen enkele minuten een link om je wachtwoord te herstellen.')}
         </p>
       ) : (
         <form onSubmit={submit} className="space-y-6" noValidate>
-          <Field label="E-mailadres" error={errors.email}>
+          <Field label={t('E-mailadres')} error={errors.email}>
             {(id) => <Input id={id} type="email" autoComplete="email" invalid={!!errors.email} value={email} onChange={(event) => setEmail(event.target.value)} />}
           </Field>
           <Button type="submit" variant="primary" className="w-full" disabled={request.isPending}>
-            Reset aanvragen
+            {t('Reset aanvragen')}
           </Button>
         </form>
       )}
       <AuthFooter>
-        Weet je je wachtwoord nog? <TextLink to="/login">Inloggen</TextLink>
+        {t('Weet je je wachtwoord nog?')} <TextLink to="/login">{t('Inloggen')}</TextLink>
       </AuthFooter>
     </>
   )

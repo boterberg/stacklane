@@ -5,6 +5,7 @@ import { NavLink as RouterNavLink, useLocation } from 'react-router'
 import { isGroup, navigationFor, type NavGroup, type NavLink } from '../../app/navigation'
 import { cn } from '../../lib/cn'
 import { itemActive, itemBase, itemIdle } from './navStyles'
+import { t } from '../../lib/i18n'
 
 function isActivePath(pathname: string, to: string) {
   return to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`)
@@ -16,7 +17,7 @@ function LeafItem({ item, onNavigate }: { item: NavLink; onNavigate?: () => void
     return (
       <a href={item.to} target="_blank" rel="noreferrer" className={cn(itemBase, itemIdle)}>
         <Icon className="size-4 shrink-0" aria-hidden />
-        <span className="flex-1 truncate">{item.label}</span>
+        <span className="flex-1 truncate">{t(item.label)}</span>
         <ArrowTopRightOnSquareIcon className="size-4 shrink-0" aria-hidden />
       </a>
     )
@@ -24,7 +25,7 @@ function LeafItem({ item, onNavigate }: { item: NavLink; onNavigate?: () => void
   return (
     <RouterNavLink to={item.to} end={item.to === '/'} onClick={onNavigate} className={({ isActive }) => cn(itemBase, isActive ? itemActive : itemIdle)}>
       <Icon className="size-4 shrink-0" aria-hidden />
-      <span className="flex-1 truncate">{item.label}</span>
+      <span className="flex-1 truncate">{t(item.label)}</span>
       {item.opensSection && <ChevronRightIcon className="size-3 shrink-0" strokeWidth={2} aria-hidden />}
     </RouterNavLink>
   )
@@ -41,7 +42,7 @@ function GroupItem({ group, onNavigate }: { group: NavGroup; onNavigate?: () => 
     <div>
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className={cn(itemBase, itemIdle)}>
         <Icon className="size-4 shrink-0" aria-hidden />
-        <span className="flex-1 truncate text-left">{group.label}</span>
+        <span className="flex-1 truncate text-left">{t(group.label)}</span>
         <Chevron className="size-3 shrink-0" strokeWidth={2} aria-hidden />
       </button>
       {open && (

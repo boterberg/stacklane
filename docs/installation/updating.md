@@ -13,6 +13,26 @@ Dat is alles. Het commando:
 
 De server voert de databasemigraties zelf uit bij het starten. Draai je al de nieuwste versie, dan stopt het commando na stap 1.
 
+## Vanuit het panel
+
+Stacklane kijkt elke zes uur in de pakketbron of er een nieuwe versie is. Is die er, dan zien beheerders linksonder in het menu een oranje driehoek met de nieuwe versie, en op het dashboard een knop **Nu bijwerken**.
+
+De knop doet precies hetzelfde als `sudo stacklane update`, met back-up en al. De panelservice zelf heeft geen rootrechten. Hij zet alleen een verzoek klaar in `/var/lib/stacklane/update`, waarna de systemd-unit `stacklane-update.path` het commando als root start. Het pakket zet die unit aan bij de installatie.
+
+Tijdens het herstarten is het panel een halve minuut niet bereikbaar. De voortgang staat in het panel, en volledig in het logboek:
+
+```sh
+journalctl -u stacklane-update -n 100
+```
+
+Wil je niet dat beheerders vanuit het panel kunnen bijwerken, zet de unit dan uit:
+
+```sh
+sudo systemctl disable --now stacklane-update.path
+```
+
+De melding blijft dan staan, met het commando om zelf bij te werken.
+
 ## Als er iets misgaat
 
 Start de nieuwe versie niet, dan zegt het commando dat en noemt het de plek van de back-up. Kijk eerst in het logboek:

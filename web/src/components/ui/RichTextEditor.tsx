@@ -19,6 +19,7 @@ import StarterKit from '@tiptap/starter-kit'
 import { useEffect, useState, type ComponentType, type SVGProps } from 'react'
 
 import { cn } from '../../lib/cn'
+import { t } from '../../lib/i18n'
 
 type RichTextEditorProps = {
   id?: string
@@ -69,14 +70,14 @@ function LinkButton({ editor }: { editor: Editor }) {
   const active = editor.isActive('link')
 
   if (active) {
-    return <ToolbarButton label="Link verwijderen" icon={LinkIcon} active onClick={() => editor.chain().focus().unsetLink().run()} />
+    return <ToolbarButton label={t('Link verwijderen')} icon={LinkIcon} active onClick={() => editor.chain().focus().unsetLink().run()} />
   }
 
   return (
     <Popover className="relative">
       <PopoverButton
-        title="Link"
-        aria-label="Link"
+        title={t('Link')}
+        aria-label={t('Link')}
         onMouseDown={(event) => event.preventDefault()}
         className="flex size-8 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-800/5 hover:text-zinc-800 dark:text-white/60 dark:hover:bg-white/10 dark:hover:text-white"
       >
@@ -104,7 +105,7 @@ function LinkButton({ editor }: { editor: Editor }) {
               className="h-8 min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-2 text-sm dark:border-white/10 dark:bg-white/10 dark:text-white"
             />
             <button type="submit" className="h-8 rounded-md bg-zinc-800 px-3 text-sm font-medium text-white dark:bg-white dark:text-zinc-800">
-              Toevoegen
+              {t('Toevoegen')}
             </button>
           </form>
         )}
@@ -133,22 +134,22 @@ function Toolbar({ editor }: { editor: Editor }) {
 
   return (
     <div className="flex flex-wrap items-center gap-0.5 border-b border-zinc-200 px-2 py-1.5 dark:border-white/10">
-      <ToolbarButton label="Kop" icon={H2Icon} active={state.heading} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} />
+      <ToolbarButton label={t('Kop')} icon={H2Icon} active={state.heading} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} />
       <Divider />
-      <ToolbarButton label="Vet" icon={BoldIcon} active={state.bold} onClick={() => editor.chain().focus().toggleBold().run()} />
-      <ToolbarButton label="Cursief" icon={ItalicIcon} active={state.italic} onClick={() => editor.chain().focus().toggleItalic().run()} />
-      <ToolbarButton label="Doorhalen" icon={StrikethroughIcon} active={state.strike} onClick={() => editor.chain().focus().toggleStrike().run()} />
-      <ToolbarButton label="Onderstrepen" icon={UnderlineIcon} active={state.underline} onClick={() => editor.chain().focus().toggleUnderline().run()} />
+      <ToolbarButton label={t('Vet')} icon={BoldIcon} active={state.bold} onClick={() => editor.chain().focus().toggleBold().run()} />
+      <ToolbarButton label={t('Cursief')} icon={ItalicIcon} active={state.italic} onClick={() => editor.chain().focus().toggleItalic().run()} />
+      <ToolbarButton label={t('Doorhalen')} icon={StrikethroughIcon} active={state.strike} onClick={() => editor.chain().focus().toggleStrike().run()} />
+      <ToolbarButton label={t('Onderstrepen')} icon={UnderlineIcon} active={state.underline} onClick={() => editor.chain().focus().toggleUnderline().run()} />
       <Divider />
-      <ToolbarButton label="Opsomming" icon={ListBulletIcon} active={state.bulletList} onClick={() => editor.chain().focus().toggleBulletList().run()} />
-      <ToolbarButton label="Genummerde lijst" icon={NumberedListIcon} active={state.orderedList} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
-      <ToolbarButton label="Citaat" icon={ChatBubbleBottomCenterTextIcon} active={state.blockquote} onClick={() => editor.chain().focus().toggleBlockquote().run()} />
+      <ToolbarButton label={t('Opsomming')} icon={ListBulletIcon} active={state.bulletList} onClick={() => editor.chain().focus().toggleBulletList().run()} />
+      <ToolbarButton label={t('Genummerde lijst')} icon={NumberedListIcon} active={state.orderedList} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
+      <ToolbarButton label={t('Citaat')} icon={ChatBubbleBottomCenterTextIcon} active={state.blockquote} onClick={() => editor.chain().focus().toggleBlockquote().run()} />
       <Divider />
       <LinkButton editor={editor} />
-      <ToolbarButton label="Code" icon={CodeBracketIcon} active={state.code} onClick={() => editor.chain().focus().toggleCode().run()} />
+      <ToolbarButton label={t('Code')} icon={CodeBracketIcon} active={state.code} onClick={() => editor.chain().focus().toggleCode().run()} />
       <div className="ml-auto flex">
-        <ToolbarButton label="Ongedaan maken" icon={ArrowUturnLeftIcon} disabled={!state.canUndo} onClick={() => editor.chain().focus().undo().run()} />
-        <ToolbarButton label="Opnieuw" icon={ArrowUturnRightIcon} disabled={!state.canRedo} onClick={() => editor.chain().focus().redo().run()} />
+        <ToolbarButton label={t('Ongedaan maken')} icon={ArrowUturnLeftIcon} disabled={!state.canUndo} onClick={() => editor.chain().focus().undo().run()} />
+        <ToolbarButton label={t('Opnieuw')} icon={ArrowUturnRightIcon} disabled={!state.canRedo} onClick={() => editor.chain().focus().redo().run()} />
       </div>
     </div>
   )

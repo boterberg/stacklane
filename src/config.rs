@@ -17,6 +17,7 @@ pub struct Config {
     pub demo_mode: bool,
     pub secrets: Option<SecretBox>,
     pub public_url: String,
+    pub update_dir: PathBuf,
 }
 
 impl Config {
@@ -33,6 +34,9 @@ impl Config {
                 .unwrap_or_else(|_| "http://localhost:5173".into())
                 .trim_end_matches('/')
                 .to_owned(),
+            update_dir: std::env::var_os("UPDATE_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("/var/lib/stacklane/update")),
             secrets: match std::env::var("SECRET_KEY") {
                 Ok(key) if !key.trim().is_empty() => Some(SecretBox::from_hex(&key)?),
                 _ => None,

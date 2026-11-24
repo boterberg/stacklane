@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { flatNavigationFor, type NavLink } from '../../app/navigation'
+import { t } from '../../lib/i18n'
 
 type SearchPaletteProps = {
   open: boolean
@@ -16,7 +17,7 @@ export function SearchPalette({ open, onClose, isAdmin }: SearchPaletteProps) {
   const [query, setQuery] = useState('')
   const navigate = useNavigate()
   const normalized = query.trim().toLowerCase()
-  const results = normalized === '' ? flatNavigation : flatNavigation.filter((item) => item.label.toLowerCase().includes(normalized))
+  const results = normalized === '' ? flatNavigation : flatNavigation.filter((item) => t(item.label).toLowerCase().includes(normalized))
 
   function close() {
     onClose()
@@ -44,10 +45,10 @@ export function SearchPalette({ open, onClose, isAdmin }: SearchPaletteProps) {
               <ComboboxInput
                 autoFocus
                 className="h-full w-full bg-transparent pr-12 pl-11 text-base text-zinc-800 placeholder:text-zinc-400 focus:outline-none sm:text-sm dark:text-white"
-                placeholder="Zoeken..."
+                placeholder={t('Zoeken...')}
                 onChange={(event) => setQuery(event.target.value)}
               />
-              <button type="button" onClick={close} className="absolute right-3 rounded-md p-1 text-zinc-400 hover:text-zinc-800 dark:hover:text-white" aria-label="Sluiten">
+              <button type="button" onClick={close} className="absolute right-3 rounded-md p-1 text-zinc-400 hover:text-zinc-800 dark:hover:text-white" aria-label={t('Sluiten')}>
                 <XMarkIcon className="size-4" />
               </button>
             </div>
@@ -62,13 +63,13 @@ export function SearchPalette({ open, onClose, isAdmin }: SearchPaletteProps) {
                       className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-800 data-focus:bg-zinc-100 dark:text-white dark:data-focus:bg-zinc-600"
                     >
                       <Icon className="size-4 text-zinc-400 dark:text-white/60" aria-hidden />
-                      {item.label}
+                      {t(item.label)}
                     </ComboboxOption>
                   )
                 })}
               </ComboboxOptions>
             ) : (
-              <p className="px-4 py-3.5 text-center text-sm text-zinc-500 dark:text-zinc-400">Geen resultaten gevonden</p>
+              <p className="px-4 py-3.5 text-center text-sm text-zinc-500 dark:text-zinc-400">{t('Geen resultaten gevonden')}</p>
             )}
           </Combobox>
         </DialogPanel>

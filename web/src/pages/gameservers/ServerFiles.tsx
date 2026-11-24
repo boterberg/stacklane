@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { formatBytes, formatRelative } from '../../lib/format'
 import { saveFile, useFileContent, useFiles } from '../../lib/gameservers'
+import { t } from '../../lib/i18n'
 
 const MAX_EDITABLE = 2 * 1024 * 1024
 
@@ -25,9 +26,9 @@ function EditorForm({ serverId, file, initial, onClose }: { serverId: string; fi
     try {
       await saveFile(serverId, file, content)
       await queryClient.invalidateQueries({ queryKey: ['gameserver', serverId, 'file', file] })
-      setMessage('Opgeslagen')
+      setMessage(t('Opgeslagen'))
     } catch (failure) {
-      setMessage(failure instanceof Error ? failure.message : 'Opslaan mislukt.')
+      setMessage(failure instanceof Error ? failure.message : t('Opslaan mislukt.'))
     } finally {
       setSaving(false)
     }
@@ -38,12 +39,12 @@ function EditorForm({ serverId, file, initial, onClose }: { serverId: string; fi
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <button type="button" onClick={onClose} className="flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-800 dark:text-white/70 dark:hover:text-white">
           <ArrowLeftIcon className="size-4" />
-          Terug naar de map
+          {t('Terug naar de map')}
         </button>
         <div className="flex items-center gap-3">
           {message && <span className="text-sm text-zinc-500 dark:text-white/70">{message}</span>}
           <Button size="sm" variant="primary" onClick={save} disabled={saving}>
-            Opslaan
+            {t('Opslaan')}
           </Button>
         </div>
       </div>
@@ -60,7 +61,7 @@ function EditorForm({ serverId, file, initial, onClose }: { serverId: string; fi
 
 function Editor({ serverId, file, onClose }: { serverId: string; file: string; onClose: () => void }) {
   const { data, error } = useFileContent(serverId, file)
-  if (error) return <EmptyState title="Bestand niet te openen" description={error.message} />
+  if (error) return <EmptyState title={t('Bestand niet te openen')} description={error.message} />
   if (!data) return null
   return <EditorForm key={file} serverId={serverId} file={file} initial={data.content} onClose={onClose} />
 }
@@ -79,7 +80,7 @@ export function ServerFiles({ serverId }: { serverId: string }) {
 
   return (
     <div>
-      <nav className="mb-4 flex flex-wrap items-center gap-1 font-mono text-sm" aria-label="Pad">
+      <nav className="mb-4 flex flex-wrap items-center gap-1 font-mono text-sm" aria-label={t('Pad')}>
         <button type="button" onClick={() => setDirectory('/')} className="rounded px-1.5 py-0.5 text-zinc-500 hover:bg-zinc-800/5 hover:text-zinc-800 dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white">
           /
         </button>
@@ -98,17 +99,17 @@ export function ServerFiles({ serverId }: { serverId: string }) {
       </nav>
 
       {error ? (
-        <EmptyState title="Bestanden niet beschikbaar" description={error.message} />
+        <EmptyState title={t('Bestanden niet beschikbaar')} description={error.message} />
       ) : !isPending && entries.length === 0 ? (
-        <EmptyState title="Lege map" description="Hier staan nog geen bestanden." />
+        <EmptyState title={t('Lege map')} description={t('Hier staan nog geen bestanden.')} />
       ) : (
         <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-white/10">
           <table className="w-full text-left text-sm">
             <thead className="bg-zinc-50 dark:bg-white/5">
               <tr>
-                <th className="px-4 py-2.5 font-medium text-zinc-800 dark:text-white">Naam</th>
-                <th className="hidden px-4 py-2.5 font-medium text-zinc-800 sm:table-cell dark:text-white">Grootte</th>
-                <th className="hidden px-4 py-2.5 font-medium text-zinc-800 md:table-cell dark:text-white">Gewijzigd</th>
+                <th className="px-4 py-2.5 font-medium text-zinc-800 dark:text-white">{t('Naam')}</th>
+                <th className="hidden px-4 py-2.5 font-medium text-zinc-800 sm:table-cell dark:text-white">{t('Grootte')}</th>
+                <th className="hidden px-4 py-2.5 font-medium text-zinc-800 md:table-cell dark:text-white">{t('Gewijzigd')}</th>
               </tr>
             </thead>
             <tbody>

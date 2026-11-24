@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api, ApiError } from './api'
-import { applyTheme, type Theme } from './theme'
+import { getLocale, isLocale, setLocale } from './i18n'
+import { applyTheme, getTheme, type Theme } from './theme'
 
 export type Profile = {
   id: string
@@ -19,10 +20,20 @@ export type Profile = {
 
 export const meQueryKey = ['me'] as const
 
+export function applyPreferences(profile: Profile) {
+  applyTheme(profile.theme)
+  if (isLocale(profile.locale)) setLocale(profile.locale)
+}
+
+export async function syncPreferences(profile: Profile) {
+  if (profile.locale === getLocale() && profile.theme === getTheme()) return profile
+  return api<Profile>('/me/settings', { method: 'PATCH', body: { locale: getLocale(), theme: getTheme() } })
+}
+
 async function fetchMe(): Promise<Profile | null> {
   try {
     const profile = await api<Profile>('/me')
-    applyTheme(profile.theme)
+    applyPreferences(profile)
     return profile
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
@@ -48,9 +59,9 @@ export function initials(profile: Profile) {
 export function useAuthMutation<TInput>(path: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: TInput) => api<Profile>(path, { method: 'POST', body: input }),
+    mutationFn: async (input: TInput) => syncPreferences(await api<Profile>(path, { method: 'POST', body: input })),
     onSuccess: (profile) => {
-      applyTheme(profile.theme)
+      applyPreferences(profile)
       queryClient.setQueryData(meQueryKey, profile)
     },
   })
@@ -64,5 +75,13 @@ export function useLogout() {
       queryClient.clear()
       queryClient.setQueryData(meQueryKey, null)
     },
+  })
+}
+
+export function usePreferences() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { locale?: string; theme?: Theme }) => api<Profile>('/me/settings', { method: 'PATCH', body: input }),
+    onSuccess: (profile) => queryClient.setQueryData(meQueryKey, profile),
   })
 }

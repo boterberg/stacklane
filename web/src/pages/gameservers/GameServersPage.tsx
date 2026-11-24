@@ -7,15 +7,16 @@ import { RowCard, RowCardList } from '../../components/ui/ResourceList'
 import { formatMegabytes } from '../../lib/format'
 import { useGameServers } from '../../lib/gameservers'
 import { serviceStatusColors, serviceStatusLabels } from '../../lib/labels'
+import { t } from '../../lib/i18n'
 
 export function GameServersPage() {
   const { data: servers, isPending } = useGameServers()
 
   return (
     <>
-      <PageHeader title="Servers" />
+      <PageHeader title={t('Servers')} />
       {!isPending && (servers ?? []).length === 0 ? (
-        <EmptyState title="Geen servers" description="Je hebt nog geen gameservers." />
+        <EmptyState title={t('Geen servers')} description={t('Je hebt nog geen gameservers.')} />
       ) : (
         <RowCardList>
           {(servers ?? []).map((server) => (
@@ -27,7 +28,7 @@ export function GameServersPage() {
               meta={[
                 ...(server.details.address ? [{ icon: GlobeAltIcon, label: server.details.address }] : []),
                 ...(server.details.egg ? [{ icon: PuzzlePieceIcon, label: server.details.egg }] : []),
-                ...(server.details.memory ? [{ icon: CpuChipIcon, label: `${formatMegabytes(server.details.memory)} geheugen` }] : []),
+                ...(server.details.memory ? [{ icon: CpuChipIcon, label: t('{amount} geheugen', { amount: formatMegabytes(server.details.memory) }) }] : []),
                 ...(server.product_name ? [{ icon: ServerIcon, label: server.product_name }] : []),
               ]}
             />

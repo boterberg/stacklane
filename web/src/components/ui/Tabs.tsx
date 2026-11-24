@@ -1,4 +1,5 @@
 import { cn } from '../../lib/cn'
+import { t } from '../../lib/i18n'
 
 type TabsProps<T extends string> = {
   tabs: Array<{ id: T; label: string }>
@@ -24,7 +25,7 @@ export function Tabs<T extends string>({ tabs, active, onChange }: TabsProps<T>)
                 : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:text-white/70 dark:hover:text-white',
             )}
           >
-            {tab.label}
+            {t(tab.label)}
           </button>
         ))}
       </nav>

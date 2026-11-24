@@ -1,6 +1,7 @@
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import type { ReactNode } from 'react'
+import { t } from '../../lib/i18n'
 
 type SlideOverProps = {
   open: boolean
@@ -25,7 +26,7 @@ export function SlideOver({ open, onClose, title, description, footer, children 
               <DialogTitle className="text-base font-medium text-zinc-800 dark:text-white">{title}</DialogTitle>
               {description && <p className="mt-2 text-sm text-zinc-500 dark:text-white/70">{description}</p>}
             </div>
-            <button type="button" onClick={onClose} className="rounded-md p-1 text-zinc-400 hover:text-zinc-800 dark:hover:text-white" aria-label="Sluiten">
+            <button type="button" onClick={onClose} className="rounded-md p-1 text-zinc-400 hover:text-zinc-800 dark:hover:text-white" aria-label={t('Sluiten')}>
               <XMarkIcon className="size-5" />
             </button>
           </div>

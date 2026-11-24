@@ -21,6 +21,7 @@ RUST_LOG=stacklane=info,tower_http=info
 | `SECRET_KEY` | wordt aangemaakt | Sleutel waarmee Stacklane de API-sleutels van je koppelingen versleutelt. Het pakket maakt hem bij de installatie. Raak je hem kwijt, dan moet je die sleutels opnieuw invoeren. |
 | `SMTP_URL` | leeg | Mailserver voor bijvoorbeeld wachtwoordherstel, zoals `smtps://gebruiker:wachtwoord@smtp.jouwbedrijf.nl:465`. Zonder deze instelling verstuurt Stacklane geen e-mail. |
 | `MAIL_FROM` | leeg | Afzender, zoals `Jouw Hosting <noreply@jouwbedrijf.nl>`. |
+| `UPDATE_CHECK_URL` | pakketbron van stacklane.io | Waar Stacklane kijkt of er een nieuwe versie is. Leeg laten zet de controle uit. |
 | `DEMO_MODE` | uit | Inloggen in één klik als klant of beheerder, en `stacklane demo-reset` mag de database leegmaken. Zet dit nooit aan op een server met echte klanten. |
 
 Na een wijziging:

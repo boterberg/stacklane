@@ -4,6 +4,8 @@ import { Link, useNavigate } from 'react-router'
 
 import { displayName, initials, useLogout, type Profile } from '../../lib/auth'
 import { cn } from '../../lib/cn'
+import { t } from '../../lib/i18n'
+import { PreferenceRows } from '../ui/Preferences'
 
 const menuItem = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-zinc-800 data-focus:bg-zinc-50 dark:text-white dark:data-focus:bg-zinc-600'
 
@@ -33,25 +35,27 @@ export function UserMenu({ profile, compact = false, anchor = 'top start' }: { p
       </MenuButton>
       <MenuItems
         anchor={{ to: anchor, gap: 8 }}
-        className="z-50 w-(--button-width) min-w-48 rounded-lg border border-zinc-200 bg-white p-1 shadow-xs focus:outline-none dark:border-zinc-600 dark:bg-zinc-700"
+        className="z-50 w-(--button-width) min-w-60 rounded-lg border border-zinc-200 bg-white p-1 shadow-xs focus:outline-none dark:border-zinc-600 dark:bg-zinc-700"
       >
         <MenuItem>
           <Link to="/account/profile" className={menuItem}>
             <UserIcon className="size-4 text-zinc-400 dark:text-white/60" aria-hidden />
-            Account
+            {t('Account')}
           </Link>
         </MenuItem>
         <MenuItem>
           <Link to="/account/security" className={menuItem}>
             <ShieldCheckIcon className="size-4 text-zinc-400 dark:text-white/60" aria-hidden />
-            Beveiliging
+            {t('Beveiliging')}
           </Link>
         </MenuItem>
+        <div className="-mx-1 my-1 h-px bg-zinc-200 dark:bg-zinc-600" />
+        <PreferenceRows persist />
         <div className="-mx-1 my-1 h-px bg-zinc-200 dark:bg-zinc-600" />
         <MenuItem>
           <button type="button" className={menuItem} onClick={() => logout.mutate(undefined, { onSettled: () => navigate('/login') })}>
             <ArrowRightStartOnRectangleIcon className="size-4 text-zinc-400 dark:text-white/60" aria-hidden />
-            Uitloggen
+            {t('Uitloggen')}
           </button>
         </MenuItem>
       </MenuItems>

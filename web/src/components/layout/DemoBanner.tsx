@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router'
 
 import type { Profile } from '../../lib/auth'
 import { useDemoLogin, useMeta } from '../../lib/meta'
-
-const timeFormatter = new Intl.DateTimeFormat('nl-NL', { hour: '2-digit', minute: '2-digit' })
+import { intlLocale, t } from '../../lib/i18n'
 
 export function DemoBanner({ profile }: { profile: Profile }) {
   const { data: meta } = useMeta()
@@ -14,13 +13,13 @@ export function DemoBanner({ profile }: { profile: Profile }) {
   if (!meta?.demo) return null
 
   const other = profile.role === 'admin' ? 'customer' : 'admin'
-  const resetAt = meta.next_reset_at ? timeFormatter.format(new Date(meta.next_reset_at)) : null
+  const resetAt = meta.next_reset_at ? new Intl.DateTimeFormat(intlLocale(), { hour: '2-digit', minute: '2-digit' }).format(new Date(meta.next_reset_at)) : null
 
   return (
     <div className="-mx-6 -mt-6 mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 bg-zinc-50 px-6 py-2.5 text-sm sm:-mx-8 sm:-mt-8 sm:mb-8 sm:px-8 lg:rounded-t-xl dark:border-white/10 dark:bg-white/5">
       <p className="text-zinc-500 dark:text-white/70">
-        <span className="font-medium text-zinc-800 dark:text-white">Demo</span> · ingelogd als {profile.role === 'admin' ? 'beheerder' : 'klant'}
-        {resetAt && <> · alles wordt om {resetAt} teruggezet</>}
+        <span className="font-medium text-zinc-800 dark:text-white">Demo</span> · {profile.role === 'admin' ? t('ingelogd als beheerder') : t('ingelogd als klant')}
+        {resetAt && <> · {t('alles wordt om {time} teruggezet', { time: resetAt })}</>}
       </p>
       <button
         type="button"
@@ -29,7 +28,7 @@ export function DemoBanner({ profile }: { profile: Profile }) {
         className="flex items-center gap-2 font-medium text-zinc-800 hover:underline dark:text-white"
       >
         <ArrowPathIcon className="size-4" aria-hidden />
-        Wissel naar {other === 'admin' ? 'beheerder' : 'klant'}
+        {other === 'admin' ? t('Wissel naar beheerder') : t('Wissel naar klant')}
       </button>
     </div>
   )

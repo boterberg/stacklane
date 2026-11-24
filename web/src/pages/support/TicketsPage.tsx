@@ -13,6 +13,7 @@ import { defaultTicketStatuses, ticketStatusColors, ticketStatuses, ticketStatus
 import { ticketPath, useTickets, type TicketScope, type TicketSummary } from '../../lib/support'
 import { useStoredState } from '../../lib/useStoredState'
 import { CreateTicketPanel } from './CreateTicketPanel'
+import { t } from '../../lib/i18n'
 
 function StatusBadge({ status }: { status: TicketStatus }) {
   return <Badge color={ticketStatusColors[status]}>{ticketStatusLabels[status]}</Badge>
@@ -40,32 +41,32 @@ export function TicketsPage({ scope = 'customer' }: { scope?: TicketScope }) {
   return (
     <>
       <PageHeader
-        title={staff ? 'Alle tickets' : 'Tickets'}
+        title={staff ? t('Alle tickets') : t('Tickets')}
         actions={
           staff ? undefined : (
             <Button size="sm" icon={PlusIcon} onClick={() => setCreating(true)}>
-              Ticket maken
+              {t('Ticket maken')}
             </Button>
           )
         }
       />
       <ListToolbar>
-        <SearchField value={query} onChange={resetPage(setQuery)} placeholder="Zoek tickets..." />
+        <SearchField value={query} onChange={resetPage(setQuery)} placeholder={t('Zoek tickets...')} />
         <ToolbarSpacer />
         <MultiSelectFilter
           values={statuses}
           options={ticketStatuses}
           labels={ticketStatusLabels}
           onChange={resetPage(setStatuses)}
-          noun={['status', 'statussen']}
-          placeholder="Filter op status..."
+          noun={[t('status'), t('statussen')]}
+          placeholder={t('Filter op status...')}
         />
         {tickets.length > 0 && <PerPageSelect value={perPage} onChange={resetPage(setPerPage)} />}
         <ViewToggle value={view} onChange={resetPage(setView)} />
       </ListToolbar>
 
       {!isPending && tickets.length === 0 ? (
-        <EmptyState title="Geen tickets" description="Er zijn geen tickets gevonden." />
+        <EmptyState title={t('Geen tickets')} description={t('Er zijn geen tickets gevonden.')} />
       ) : view === 'grid' ? (
         <RowCardList>
           {tickets.map((ticket) => (
@@ -78,8 +79,8 @@ export function TicketsPage({ scope = 'customer' }: { scope?: TicketScope }) {
                 { icon: HashtagIcon, label: ticket.number },
                 ...(staff ? [{ icon: UserIcon, label: ticket.customer_name }] : []),
                 { icon: InboxIcon, label: ticket.department },
-                { icon: ChatBubbleLeftRightIcon, label: ticket.message_count === 1 ? '1 bericht' : `${ticket.message_count} berichten` },
-                { icon: CalendarIcon, label: `Laatste reactie ${formatRelative(ticket.last_reply_at)}` },
+                { icon: ChatBubbleLeftRightIcon, label: ticket.message_count === 1 ? t('1 bericht') : t('{count} berichten', { count: ticket.message_count }) },
+                { icon: CalendarIcon, label: t('Laatste reactie {when}', { when: formatRelative(ticket.last_reply_at) }) },
               ]}
             />
           ))}
@@ -89,19 +90,19 @@ export function TicketsPage({ scope = 'customer' }: { scope?: TicketScope }) {
           rows={tickets}
           rowKey={(ticket) => ticket.id}
           columns={[
-            { header: 'Nummer', cell: (ticket) => `#${ticket.number}`, className: 'w-24' },
+            { header: t('Nummer'), cell: (ticket) => `#${ticket.number}`, className: 'w-24' },
             {
-              header: 'Onderwerp',
+              header: t('Onderwerp'),
               cell: (ticket) => (
                 <Link to={ticketPath(scope, ticket.number)} className="font-medium text-zinc-800 underline decoration-zinc-800/20 underline-offset-4 hover:decoration-current dark:text-white dark:decoration-white/20">
                   {ticket.subject}
                 </Link>
               ),
             },
-            ...(staff ? [{ header: 'Klant', cell: (ticket: TicketSummary) => ticket.customer_name }] : []),
-            { header: 'Afdeling', cell: (ticket) => ticket.department },
-            { header: 'Status', cell: (ticket) => <StatusBadge status={ticket.status} /> },
-            { header: 'Laatste reactie', cell: (ticket) => formatRelative(ticket.last_reply_at) },
+            ...(staff ? [{ header: t('Klant'), cell: (ticket: TicketSummary) => ticket.customer_name }] : []),
+            { header: t('Afdeling'), cell: (ticket) => ticket.department },
+            { header: t('Status'), cell: (ticket) => <StatusBadge status={ticket.status} /> },
+            { header: t('Laatste reactie'), cell: (ticket) => formatRelative(ticket.last_reply_at) },
           ]}
         />
       )}

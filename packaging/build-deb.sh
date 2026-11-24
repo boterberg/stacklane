@@ -38,7 +38,8 @@ printf '%s\n' "$VERSION" > "$root/usr/share/stacklane/VERSION"
 chmod 0644 "$root/usr/share/stacklane/VERSION"
 
 install -m 0644 packaging/systemd/stacklane.service packaging/systemd/stacklane-demo-reset.service \
-  packaging/systemd/stacklane-demo-reset.timer "$root/lib/systemd/system/"
+  packaging/systemd/stacklane-demo-reset.timer packaging/systemd/stacklane-update.path \
+  packaging/systemd/stacklane-update.service "$root/lib/systemd/system/"
 install -m 0640 packaging/etc/stacklane.env "$root/etc/stacklane/stacklane.env"
 install -m 0644 packaging/Caddyfile.example README.md "$root/usr/share/doc/stacklane/"
 install -m 0644 LICENSE "$root/usr/share/doc/stacklane/copyright"

@@ -1,0 +1,10 @@
+[Unit]
+Description=Update Stacklane on request from the panel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/stacklane/stacklane.env
+ExecStart=/usr/bin/stacklane update --from-panel
+TimeoutStartSec=30min

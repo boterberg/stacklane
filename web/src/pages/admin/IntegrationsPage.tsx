@@ -9,6 +9,7 @@ import { PageHeader } from '../../components/ui/Heading'
 import { ApiError } from '../../lib/api'
 import { formatRelative } from '../../lib/format'
 import { useCreateIntegration, useDeleteIntegration, useIntegrations, useTestIntegration } from '../../lib/admin'
+import { t } from '../../lib/i18n'
 
 const kindLabels: Record<string, string> = {
   pterodactyl: 'Pterodactyl',
@@ -46,48 +47,48 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
     <SlideOver
       open={open}
       onClose={close}
-      title="Koppeling toevoegen"
-      description="Stacklane maakt de diensten van je klanten aan op dit platform. De sleutels worden versleuteld opgeslagen."
+      title={t('Koppeling toevoegen')}
+      description={t('Stacklane maakt de diensten van je klanten aan op dit platform. De sleutels worden versleuteld opgeslagen.')}
       footer={
         <>
           <Button variant="ghost" onClick={close}>
-            Annuleren
+            {t('Annuleren')}
           </Button>
           <Button variant="primary" type="submit" form="create-integration" disabled={create.isPending}>
-            {create.isPending ? 'Verbinding testen...' : 'Toevoegen'}
+            {create.isPending ? t('Verbinding testen...') : t('Toevoegen')}
           </Button>
         </>
       }
     >
       <form id="create-integration" onSubmit={submit} className="space-y-6" noValidate>
-        <Field label="Platform" error={errors.kind}>
+        <Field label={t('Platform')} error={errors.kind}>
           {(id) => (
             <Select id={id} value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value })}>
-              <option value="pterodactyl">Pterodactyl (gameservers)</option>
+              <option value="pterodactyl">{t('Pterodactyl (gameservers)')}</option>
               <option value="proxmox" disabled>
-                Proxmox VE, komt eraan
+                {t('{name}, komt eraan', { name: 'Proxmox VE' })}
               </option>
               <option value="openstack" disabled>
-                OpenStack, komt eraan
+                {t('{name}, komt eraan', { name: 'OpenStack' })}
               </option>
               <option value="virtfusion" disabled>
-                VirtFusion, komt eraan
+                {t('{name}, komt eraan', { name: 'VirtFusion' })}
               </option>
             </Select>
           )}
         </Field>
-        <Field label="Naam" description="Alleen voor jezelf, bijvoorbeeld Gamenode Amsterdam." error={errors.name}>
+        <Field label={t('Naam')} description={t('Alleen voor jezelf, bijvoorbeeld Gamenode Amsterdam.')} error={errors.name}>
           {(id) => <Input id={id} value={form.name} invalid={!!errors.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />}
         </Field>
-        <Field label="Adres van het panel" error={errors.base_url}>
+        <Field label={t('Adres van het panel')} error={errors.base_url}>
           {(id) => (
-            <Input id={id} placeholder="https://panel.jouwbedrijf.nl" value={form.base_url} invalid={!!errors.base_url} onChange={(event) => setForm({ ...form, base_url: event.target.value })} />
+            <Input id={id} placeholder={t('https://panel.jouwbedrijf.nl')} value={form.base_url} invalid={!!errors.base_url} onChange={(event) => setForm({ ...form, base_url: event.target.value })} />
           )}
         </Field>
-        <Field label="Application API-sleutel" description="Admin → Application API in Pterodactyl, met lees- en schrijfrechten." error={errors.credentials}>
+        <Field label={t('Application API-sleutel')} description={t('Admin → Application API in Pterodactyl, met lees- en schrijfrechten.')} error={errors.credentials}>
           {(id) => <Input id={id} type="password" autoComplete="off" placeholder="ptla_..." value={form.application_key} onChange={(event) => setForm({ ...form, application_key: event.target.value })} />}
         </Field>
-        <Field label="Client API-sleutel" description="Account → API-sleutels van een beheerder. Hiermee bedient Stacklane console, bestanden en back-ups.">
+        <Field label={t('Client API-sleutel')} description={t('Account → API-sleutels van een beheerder. Hiermee bedient Stacklane console, bestanden en back-ups.')}>
           {(id) => <Input id={id} type="password" autoComplete="off" placeholder="ptlc_..." value={form.client_key} onChange={(event) => setForm({ ...form, client_key: event.target.value })} />}
         </Field>
       </form>
@@ -104,16 +105,16 @@ export function IntegrationsPage() {
   return (
     <>
       <PageHeader
-        title="Koppelingen"
-        description="De platformen waarop Stacklane diensten aanmaakt."
+        title={t('Koppelingen')}
+        description={t('De platformen waarop Stacklane diensten aanmaakt.')}
         actions={
           <Button size="sm" icon={PlusIcon} onClick={() => setCreating(true)}>
-            Koppeling toevoegen
+            {t('Koppeling toevoegen')}
           </Button>
         }
       />
       {!isPending && (integrations ?? []).length === 0 ? (
-        <EmptyState title="Nog geen koppelingen" description="Voeg je Pterodactyl-panel toe om gameservers te kunnen leveren." />
+        <EmptyState title={t('Nog geen koppelingen')} description={t('Voeg je Pterodactyl-panel toe om gameservers te kunnen leveren.')} />
       ) : (
         <ul className="space-y-3">
           {(integrations ?? []).map((integration) => (
@@ -133,15 +134,15 @@ export function IntegrationsPage() {
                     <>
                       <CheckCircleIcon className="size-4 text-green-500" />
                       {integration.base_url}
-                      {integration.last_checked_at && <> · getest {formatRelative(integration.last_checked_at)}</>}
+                      {integration.last_checked_at && <> · {t('getest {when}', { when: formatRelative(integration.last_checked_at) })}</>}
                     </>
                   )}
                 </p>
               </div>
               <Button size="sm" disabled={test.isPending} onClick={() => test.mutate(integration.id)}>
-                Testen
+                {t('Testen')}
               </Button>
-              <Button size="sm" variant="ghost" icon={TrashIcon} disabled={remove.isPending} onClick={() => remove.mutate(integration.id)} aria-label="Verwijderen" />
+              <Button size="sm" variant="ghost" icon={TrashIcon} disabled={remove.isPending} onClick={() => remove.mutate(integration.id)} aria-label={t('Verwijderen')} />
             </li>
           ))}
         </ul>

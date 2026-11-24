@@ -12,6 +12,7 @@ import { powerStateColors, powerStateLabels, serviceStatusColors, serviceStatusL
 import { ServerBackups } from './ServerBackups'
 import { ServerConsole } from './ServerConsole'
 import { ServerFiles } from './ServerFiles'
+import { t } from '../../lib/i18n'
 
 type Tab = 'console' | 'files' | 'backups'
 
@@ -26,7 +27,7 @@ function Address({ value }: { value: string }) {
         setTimeout(() => setCopied(false), 1500)
       }}
       className="flex items-center gap-2 rounded-md font-mono text-sm text-zinc-500 hover:text-zinc-800 dark:text-white/70 dark:hover:text-white"
-      title="Kopiëren"
+      title={t('Kopiëren')}
     >
       {value}
       {copied ? <CheckIcon className="size-4" /> : <ClipboardDocumentIcon className="size-4" />}
@@ -58,15 +59,15 @@ function Resources({ server }: { server: GameServerDetail }) {
   const cpuLimit = server.details.cpu ?? 100
   return (
     <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <Meter label="Processor" value={live ? `${Math.round(live.cpu_absolute)}%` : 'n.v.t.'} detail={`van ${cpuLimit}%`} percent={live ? (live.cpu_absolute / cpuLimit) * 100 : 0} />
+      <Meter label={t('Processor')} value={live ? `${Math.round(live.cpu_absolute)}%` : t('n.v.t.')} detail={t('van {limit}', { limit: `${cpuLimit}%` })} percent={live ? (live.cpu_absolute / cpuLimit) * 100 : 0} />
       <Meter
-        label="Geheugen"
-        value={live ? formatMegabytes(Math.round(memoryUsed)) : 'n.v.t.'}
-        detail={memoryLimit ? `van ${formatMegabytes(memoryLimit)}` : undefined}
+        label={t('Geheugen')}
+        value={live ? formatMegabytes(Math.round(memoryUsed)) : t('n.v.t.')}
+        detail={memoryLimit ? t('van {limit}', { limit: formatMegabytes(memoryLimit) }) : undefined}
         percent={memoryLimit ? (memoryUsed / memoryLimit) * 100 : 0}
       />
-      <Meter label="Opslag" value={live ? formatBytes(live.disk_bytes) : 'n.v.t.'} detail={server.details.disk ? `van ${formatMegabytes(server.details.disk)}` : undefined} />
-      <Meter label="Online" value={live && live.uptime > 0 ? formatDuration(live.uptime) : 'n.v.t.'} />
+      <Meter label={t('Opslag')} value={live ? formatBytes(live.disk_bytes) : t('n.v.t.')} detail={server.details.disk ? t('van {limit}', { limit: formatMegabytes(server.details.disk) }) : undefined} />
+      <Meter label={t('Online')} value={live && live.uptime > 0 ? formatDuration(live.uptime) : t('n.v.t.')} />
     </div>
   )
 }
@@ -81,11 +82,11 @@ export function GameServerPage() {
   if (error || !server) {
     return (
       <EmptyState
-        title="Server niet gevonden"
-        description="Deze server bestaat niet of hoort niet bij je account."
+        title={t('Server niet gevonden')}
+        description={t('Deze server bestaat niet of hoort niet bij je account.')}
         action={
           <ButtonLink to="/gameservers/servers" size="sm">
-            Naar je servers
+            {t('Naar je servers')}
           </ButtonLink>
         }
       />
@@ -104,7 +105,7 @@ export function GameServerPage() {
             {server.status !== 'active' ? (
               <Badge color={serviceStatusColors[server.status]}>{serviceStatusLabels[server.status]}</Badge>
             ) : server.install_state ? (
-              <Badge color="sky">Wordt geïnstalleerd</Badge>
+              <Badge color="sky">{t('Wordt geïnstalleerd')}</Badge>
             ) : (
               <Badge color={powerStateColors[state]}>{powerStateLabels[state]}</Badge>
             )}
@@ -118,25 +119,25 @@ export function GameServerPage() {
         {ready && (
           <div className="flex gap-2">
             <Button size="sm" icon={PlayIcon} disabled={power.isPending || state !== 'offline'} onClick={() => power.mutate('start')}>
-              Starten
+              {t('Starten')}
             </Button>
             <Button size="sm" icon={ArrowPathIcon} disabled={power.isPending || state === 'offline'} onClick={() => power.mutate('restart')}>
-              Herstarten
+              {t('Herstarten')}
             </Button>
             <Button size="sm" icon={StopIcon} disabled={power.isPending || state === 'offline'} onClick={() => power.mutate(state === 'stopping' ? 'kill' : 'stop')}>
-              {state === 'stopping' ? 'Forceren' : 'Stoppen'}
+              {state === 'stopping' ? t('Forceren') : t('Stoppen')}
             </Button>
           </div>
         )}
       </div>
 
       {server.status === 'failed' && (
-        <EmptyState title="Aanmaken mislukt" description="Er ging iets mis bij het aanmaken van je server. Ons supportteam is op de hoogte." />
+        <EmptyState title={t('Aanmaken mislukt')} description={t('Er ging iets mis bij het aanmaken van je server. Ons supportteam is op de hoogte.')} />
       )}
       {(server.status === 'pending' || server.status === 'provisioning') && (
-        <EmptyState title="Je server wordt aangemaakt" description="Dit duurt meestal minder dan een minuut. De pagina ververst vanzelf." />
+        <EmptyState title={t('Je server wordt aangemaakt')} description={t('Dit duurt meestal minder dan een minuut. De pagina ververst vanzelf.')} />
       )}
-      {server.status === 'suspended' && <EmptyState title="Server opgeschort" description="Neem contact op met support om je server weer te activeren." />}
+      {server.status === 'suspended' && <EmptyState title={t('Server opgeschort')} description={t('Neem contact op met support om je server weer te activeren.')} />}
 
       {server.status === 'active' && (
         <>

@@ -5,6 +5,8 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
 
+use crate::i18n::tr;
+
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("unauthenticated")]
@@ -34,29 +36,29 @@ impl IntoResponse for AppError {
         match self {
             Self::Unauthenticated => (
                 StatusCode::UNAUTHORIZED,
-                Json(json!({ "message": "Je bent niet ingelogd." })),
+                Json(json!({ "message": tr("Je bent niet ingelogd.") })),
             )
                 .into_response(),
             Self::Forbidden => (
                 StatusCode::FORBIDDEN,
-                Json(json!({ "message": "Je hebt geen toegang tot dit onderdeel." })),
+                Json(json!({ "message": tr("Je hebt geen toegang tot dit onderdeel.") })),
             )
                 .into_response(),
             Self::NotFound => (
                 StatusCode::NOT_FOUND,
-                Json(json!({ "message": "Niet gevonden." })),
+                Json(json!({ "message": tr("Niet gevonden.") })),
             )
                 .into_response(),
             Self::Validation(errors) => (
                 StatusCode::UNPROCESSABLE_ENTITY,
-                Json(json!({ "message": "Controleer de ingevulde gegevens.", "errors": errors })),
+                Json(json!({ "message": tr("Controleer de ingevulde gegevens."), "errors": errors.into_iter().map(|(field, message)| (field, tr(&message))).collect::<BTreeMap<_, _>>() })),
             )
                 .into_response(),
             Self::Database(error) => {
                 tracing::error!(?error, "database error");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "message": "Er ging iets mis." })),
+                    Json(json!({ "message": tr("Er ging iets mis.") })),
                 )
                     .into_response()
             }
@@ -64,7 +66,7 @@ impl IntoResponse for AppError {
                 tracing::error!(?error, "internal error");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "message": "Er ging iets mis." })),
+                    Json(json!({ "message": tr("Er ging iets mis.") })),
                 )
                     .into_response()
             }

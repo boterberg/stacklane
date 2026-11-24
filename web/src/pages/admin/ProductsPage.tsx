@@ -9,6 +9,7 @@ import { PageHeader } from '../../components/ui/Heading'
 import { ApiError } from '../../lib/api'
 import { formatEuro, formatMegabytes } from '../../lib/format'
 import { useCatalog, useCreateProduct, useIntegrations, useProducts } from '../../lib/admin'
+import { t } from '../../lib/i18n'
 
 const emptyForm = {
   name: '',
@@ -74,32 +75,32 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
     <SlideOver
       open={open}
       onClose={close}
-      title="Product aanmaken"
-      description="Een gameserverpakket dat je aan klanten kunt leveren."
+      title={t('Product aanmaken')}
+      description={t('Een gameserverpakket dat je aan klanten kunt leveren.')}
       footer={
         <>
           <Button variant="ghost" onClick={close}>
-            Annuleren
+            {t('Annuleren')}
           </Button>
           <Button variant="primary" type="submit" form="create-product" disabled={create.isPending}>
-            Aanmaken
+            {t('Aanmaken')}
           </Button>
         </>
       }
     >
       <form id="create-product" onSubmit={submit} className="space-y-6" noValidate>
         <div className="grid gap-6 sm:grid-cols-[2fr_1fr]">
-          <Field label="Naam" error={errors.name}>
+          <Field label={t('Naam')} error={errors.name}>
             {(id) => <Input id={id} placeholder="Minecraft 4 GB" value={form.name} invalid={!!errors.name} onChange={(event) => update('name', event.target.value)} />}
           </Field>
-          <Field label="Prijs per maand" error={errors.monthly_price_cents}>
+          <Field label={t('Prijs per maand')} error={errors.monthly_price_cents}>
             {(id) => <Input id={id} inputMode="decimal" placeholder="12,50" value={form.price} onChange={(event) => update('price', event.target.value)} />}
           </Field>
         </div>
-        <Field label="Koppeling" error={errors.integration_id}>
+        <Field label={t('Koppeling')} error={errors.integration_id}>
           {(id) => (
             <Select id={id} value={form.integration_id} onChange={(event) => update('integration_id', event.target.value)}>
-              <option value="">Kies een Pterodactyl-panel...</option>
+              <option value="">{t('Kies een Pterodactyl-panel...')}</option>
               {integrations
                 .filter((integration) => integration.kind === 'pterodactyl')
                 .map((integration) => (
@@ -112,12 +113,12 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
         </Field>
         {form.integration_id && (
           <>
-            {isFetching && <p className="text-sm text-zinc-500">Locaties en eggs ophalen...</p>}
+            {isFetching && <p className="text-sm text-zinc-500">{t('Locaties en eggs ophalen...')}</p>}
             <div className="grid gap-6 sm:grid-cols-3">
-              <Field label="Locatie">
+              <Field label={t('Locatie')}>
                 {(id) => (
                   <Select id={id} value={form.location_id} onChange={(event) => update('location_id', event.target.value)}>
-                    <option value="">Kies...</option>
+                    <option value="">{t('Kies...')}</option>
                     {catalog?.locations.map((location) => (
                       <option key={location.id} value={location.id}>
                         {location.name}
@@ -129,7 +130,7 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
               <Field label="Nest">
                 {(id) => (
                   <Select id={id} value={form.nest_id} onChange={(event) => update('nest_id', event.target.value)}>
-                    <option value="">Kies...</option>
+                    <option value="">{t('Kies...')}</option>
                     {catalog?.nests.map((nest) => (
                       <option key={nest.id} value={nest.id}>
                         {nest.name}
@@ -141,7 +142,7 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
               <Field label="Egg">
                 {(id) => (
                   <Select id={id} value={form.egg_id} disabled={!form.nest_id} onChange={(event) => update('egg_id', event.target.value)}>
-                    <option value="">Kies...</option>
+                    <option value="">{t('Kies...')}</option>
                     {eggs.map((egg) => (
                       <option key={egg.id} value={egg.id}>
                         {egg.name}
@@ -154,13 +155,13 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
           </>
         )}
         <div className="grid gap-6 sm:grid-cols-3">
-          <Field label="Geheugen (MB)">{(id) => <Input id={id} inputMode="numeric" value={form.memory} onChange={(event) => update('memory', event.target.value)} />}</Field>
-          <Field label="Opslag (MB)">{(id) => <Input id={id} inputMode="numeric" value={form.disk} onChange={(event) => update('disk', event.target.value)} />}</Field>
-          <Field label="Processor (%)">{(id) => <Input id={id} inputMode="numeric" value={form.cpu} onChange={(event) => update('cpu', event.target.value)} />}</Field>
+          <Field label={t('Geheugen (MB)')}>{(id) => <Input id={id} inputMode="numeric" value={form.memory} onChange={(event) => update('memory', event.target.value)} />}</Field>
+          <Field label={t('Opslag (MB)')}>{(id) => <Input id={id} inputMode="numeric" value={form.disk} onChange={(event) => update('disk', event.target.value)} />}</Field>
+          <Field label={t('Processor (%)')}>{(id) => <Input id={id} inputMode="numeric" value={form.cpu} onChange={(event) => update('cpu', event.target.value)} />}</Field>
         </div>
         <div className="grid gap-6 sm:grid-cols-3">
           <Field label="Databases">{(id) => <Input id={id} inputMode="numeric" value={form.databases} onChange={(event) => update('databases', event.target.value)} />}</Field>
-          <Field label="Back-ups">{(id) => <Input id={id} inputMode="numeric" value={form.backups} onChange={(event) => update('backups', event.target.value)} />}</Field>
+          <Field label={t('Back-ups')}>{(id) => <Input id={id} inputMode="numeric" value={form.backups} onChange={(event) => update('backups', event.target.value)} />}</Field>
         </div>
         {errors.provisioning && <p className="text-sm font-medium text-red-500 dark:text-red-400">{errors.provisioning}</p>}
       </form>
@@ -175,16 +176,16 @@ export function ProductsPage() {
   return (
     <>
       <PageHeader
-        title="Producten"
-        description="De pakketten die je levert. Elk product hoort bij een koppeling."
+        title={t('Producten')}
+        description={t('De pakketten die je levert. Elk product hoort bij een koppeling.')}
         actions={
           <Button size="sm" icon={PlusIcon} onClick={() => setCreating(true)}>
-            Product aanmaken
+            {t('Product aanmaken')}
           </Button>
         }
       />
       {!isPending && (products ?? []).length === 0 ? (
-        <EmptyState title="Nog geen producten" description="Maak eerst een koppeling aan en daarna een product." />
+        <EmptyState title={t('Nog geen producten')} description={t('Maak eerst een koppeling aan en daarna een product.')} />
       ) : (
         <ul className="space-y-3">
           {(products ?? []).map((product) => (
@@ -193,7 +194,7 @@ export function ProductsPage() {
               <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-zinc-500 dark:text-white/70">
                 <span className="flex items-center gap-2">
                   <CurrencyEuroIcon className="size-4 text-zinc-400 dark:text-white/40" />
-                  {formatEuro(product.monthly_price_cents)} per maand
+                  {t('{price} per maand', { price: formatEuro(product.monthly_price_cents) })}
                 </span>
                 {product.provisioning.memory && (
                   <span className="flex items-center gap-2">
@@ -213,7 +214,7 @@ export function ProductsPage() {
                     {product.integration_name}
                   </span>
                 )}
-                <span>{product.service_count === 1 ? '1 dienst' : `${product.service_count} diensten`}</span>
+                <span>{product.service_count === 1 ? t('1 dienst') : t('{count} diensten', { count: product.service_count })}</span>
               </div>
             </li>
           ))}

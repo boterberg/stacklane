@@ -3,6 +3,7 @@ import type { ComponentType, ReactNode, SVGProps } from 'react'
 import { Link } from 'react-router'
 
 import type { PageMeta } from '../../lib/pagination'
+import { t } from '../../lib/i18n'
 
 export type MetaItem = {
   icon: ComponentType<SVGProps<SVGSVGElement>>
@@ -86,17 +87,17 @@ export function PaginationFooter({ meta, onPage }: { meta: PageMeta; onPage: (pa
   return (
     <div className="mt-6 flex items-center justify-between border-t border-zinc-800/10 pt-3 dark:border-white/10">
       <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-        Toont {meta.from} tot {meta.to} van {meta.total} resultaten
+        {t('Toont {from} tot {to} van {total} resultaten', { from: meta.from, to: meta.to, total: meta.total })}
       </p>
       {lastPage > 1 && (
         <div className="flex items-center gap-1">
-          <button type="button" className={pageButton} disabled={meta.page <= 1} onClick={() => onPage(meta.page - 1)} aria-label="Vorige pagina">
+          <button type="button" className={pageButton} disabled={meta.page <= 1} onClick={() => onPage(meta.page - 1)} aria-label={t('Vorige pagina')}>
             <ChevronLeftIcon className="size-4" />
           </button>
           <span className="px-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
             {meta.page} / {lastPage}
           </span>
-          <button type="button" className={pageButton} disabled={meta.page >= lastPage} onClick={() => onPage(meta.page + 1)} aria-label="Volgende pagina">
+          <button type="button" className={pageButton} disabled={meta.page >= lastPage} onClick={() => onPage(meta.page + 1)} aria-label={t('Volgende pagina')}>
             <ChevronRightIcon className="size-4" />
           </button>
         </div>

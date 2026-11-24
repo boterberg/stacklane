@@ -9,6 +9,8 @@ use uuid::Uuid;
 
 use crate::auth::{self, CurrentUser};
 use crate::error::{AppError, AppResult};
+use crate::i18n::Locale;
+
 use crate::mail::Email;
 use crate::routes::me::{Profile, load_profile};
 use crate::state::AppState;
@@ -194,12 +196,12 @@ pub async fn forgot_password(
     if !looks_like_email(&email) {
         return Err(AppError::field("email", "Vul een geldig e-mailadres in."));
     }
-    let user: Option<(Uuid, String)> =
-        sqlx::query_as("SELECT id, first_name FROM users WHERE email = $1")
+    let user: Option<(Uuid, String, String)> =
+        sqlx::query_as("SELECT id, first_name, locale FROM users WHERE email = $1")
             .bind(&email)
             .fetch_optional(&state.db)
             .await?;
-    if let Some((user_id, first_name)) = user {
+    if let Some((user_id, first_name, locale)) = user {
         let token = hex::encode(rand::random::<[u8; 32]>());
         sqlx::query("DELETE FROM password_resets WHERE user_id = $1 AND used_at IS NULL")
             .bind(user_id)
@@ -212,20 +214,34 @@ pub async fn forgot_password(
         .bind(user_id)
         .execute(&state.db)
         .await?;
-        let greeting = if first_name.is_empty() {
-            "Hallo".to_owned()
-        } else {
-            format!("Hallo {first_name}")
-        };
         let link = format!("{}/reset-password?token={token}", state.config.public_url);
-        let body = format!(
-            "{greeting},\n\nJe hebt gevraagd om een nieuw wachtwoord voor je account. Via deze link stel je het in:\n\n{link}\n\nDe link werkt een uur. Heb je dit niet zelf gevraagd, dan kun je deze e-mail negeren.\n"
-        );
+        let english = Locale::parse(&locale) == Locale::En;
+        let greeting = match (english, first_name.is_empty()) {
+            (true, true) => "Hello".to_owned(),
+            (true, false) => format!("Hello {first_name}"),
+            (false, true) => "Hallo".to_owned(),
+            (false, false) => format!("Hallo {first_name}"),
+        };
+        let (subject, body) = if english {
+            (
+                "Reset your password",
+                format!(
+                    "{greeting},\n\nYou asked for a new password for your account. Use this link to set it:\n\n{link}\n\nThe link works for one hour. If you did not ask for this, you can ignore this email.\n"
+                ),
+            )
+        } else {
+            (
+                "Je wachtwoord opnieuw instellen",
+                format!(
+                    "{greeting},\n\nJe hebt gevraagd om een nieuw wachtwoord voor je account. Via deze link stel je het in:\n\n{link}\n\nDe link werkt een uur. Heb je dit niet zelf gevraagd, dan kun je deze e-mail negeren.\n"
+                ),
+            )
+        };
         if let Err(error) = state
             .mailer
             .send(Email {
                 to: &email,
-                subject: "Je wachtwoord opnieuw instellen",
+                subject,
                 body,
             })
             .await

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from './api'
+import { t } from './i18n'
 
 export type ServiceStatus = 'pending' | 'provisioning' | 'active' | 'suspended' | 'terminated' | 'failed'
 
@@ -99,7 +100,7 @@ export async function saveFile(id: string, file: string, content: string) {
   })
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}))
-    throw new Error(Object.values(payload.errors ?? {})[0] as string ?? payload.message ?? 'Opslaan mislukt.')
+    throw new Error(Object.values(payload.errors ?? {})[0] as string ?? payload.message ?? t('Opslaan mislukt.'))
   }
 }
 

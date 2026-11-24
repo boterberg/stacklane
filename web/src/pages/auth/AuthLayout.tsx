@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link, Navigate, Outlet } from 'react-router'
 
 import { Logo } from '../../components/ui/Logo'
+import { LanguageSwitch, ThemeSwitch } from '../../components/ui/Preferences'
 import { useMe } from '../../lib/auth'
 
 export function AuthLayout() {
@@ -16,6 +17,14 @@ export function AuthLayout() {
       </Link>
       <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-8 shadow-xs dark:border-white/10 dark:bg-zinc-800 dark:shadow-none">
         <Outlet />
+      </div>
+      <div className="mt-6 flex items-center gap-3">
+        <div className="w-28">
+          <ThemeSwitch />
+        </div>
+        <div className="w-24">
+          <LanguageSwitch />
+        </div>
       </div>
     </div>
   )
