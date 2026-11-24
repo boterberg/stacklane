@@ -21,6 +21,7 @@ export type Catalog = {
   locations?: Array<{ id: number; name: string }>
   nests?: Array<{ id: number; name: string; eggs: Array<{ id: number; name: string }> }>
   flavors?: Flavor[]
+  packages?: Array<{ id: number; name: string; cores: number; memory_mb: number; disk_gb: number }>
   plans?: Array<{ id: string; name: string }>
 }
 

@@ -46,6 +46,9 @@ const emptyForm = {
   region: '',
   network_id: '',
   os_images: '',
+  api_token: '',
+  hypervisor_group_id: '1',
+  vf_images: '',
 }
 
 function parseImages(text: string) {
@@ -84,6 +87,15 @@ function payload(form: typeof emptyForm): IntegrationInput {
   }
   if (form.kind === 'plesk') {
     return { kind: form.kind, name: form.name, base_url: form.base_url, credentials: { api_key: form.wh_secret.trim() }, settings: { ip: form.wh_ip.trim() } }
+  }
+  if (form.kind === 'virtfusion') {
+    return {
+      kind: form.kind,
+      name: form.name,
+      base_url: form.base_url,
+      credentials: { api_token: form.api_token.trim() },
+      settings: { hypervisor_group_id: Number(form.hypervisor_group_id) || 0, images: parseImages(form.vf_images) },
+    }
   }
   if (form.kind === 'openstack') {
     return {
@@ -174,9 +186,7 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
               <option value="directadmin">{t('DirectAdmin (webhosting)')}</option>
               <option value="plesk">{t('Plesk (webhosting)')}</option>
               <option value="openstack">{t('OpenStack (VPS)')}</option>
-              <option value="virtfusion" disabled>
-                {t('{name}, komt eraan', { name: 'VirtFusion' })}
-              </option>
+              <option value="virtfusion">{t('VirtFusion (VPS)')}</option>
             </Select>
           )}
         </Field>
@@ -232,7 +242,29 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
             </Field>
           </>
         )}
-        {form.kind === 'openstack' ? null : form.kind === 'directadmin' || form.kind === 'plesk' ? (
+        {form.kind === 'virtfusion' && (
+          <>
+            <Field label={t('API-token')} description={t('Configuration → API in VirtFusion.')} error={errors.credentials}>
+              {(id) => <Input id={id} type="password" autoComplete="off" value={form.api_token} onChange={(event) => setForm({ ...form, api_token: event.target.value })} />}
+            </Field>
+            <Field label={t('Hypervisorgroep')} description={t('Het nummer van de groep waarop nieuwe servers komen.')} error={errors.settings}>
+              {(id) => <Input id={id} inputMode="numeric" value={form.hypervisor_group_id} onChange={(event) => setForm({ ...form, hypervisor_group_id: event.target.value })} />}
+            </Field>
+            <Field label={t('Besturingssystemen')} description={t('Per regel het nummer van een template en de naam die klanten zien.')}>
+              {(id) => (
+                <textarea
+                  id={id}
+                  rows={4}
+                  value={form.vf_images}
+                  placeholder="8 Debian 12"
+                  onChange={(event) => setForm({ ...form, vf_images: event.target.value })}
+                  className="block w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-sm text-zinc-700 shadow-xs dark:border-white/10 dark:bg-white/10 dark:text-zinc-300"
+                />
+              )}
+            </Field>
+          </>
+        )}
+        {form.kind === 'openstack' || form.kind === 'virtfusion' ? null : form.kind === 'directadmin' || form.kind === 'plesk' ? (
           <>
             {form.kind === 'directadmin' && (
               <Field label={t('Gebruikersnaam')} description={t('Een beheerder of reseller in DirectAdmin.')} error={errors.credentials}>
