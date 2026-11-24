@@ -1,12 +1,14 @@
+mod admin_provisioning;
 mod auth;
 mod dashboard;
+mod gameservers;
 mod health;
 pub mod me;
 mod notifications;
 mod support;
 
 use axum::http::StatusCode;
-use axum::routing::{any, get, patch, post};
+use axum::routing::{any, delete, get, patch, post};
 use axum::{Json, Router};
 use serde_json::json;
 use tower_http::services::{ServeDir, ServeFile};
@@ -43,6 +45,52 @@ pub fn router(state: AppState) -> Router {
             patch(support::staff_update_status),
         )
         .route("/meta", get(demo::meta))
+        .route("/gameservers", get(gameservers::index))
+        .route("/gameservers/{id}", get(gameservers::show))
+        .route("/gameservers/{id}/power", post(gameservers::power))
+        .route("/gameservers/{id}/websocket", get(gameservers::websocket))
+        .route("/gameservers/{id}/files", get(gameservers::files))
+        .route(
+            "/gameservers/{id}/files/content",
+            get(gameservers::read_file).put(gameservers::write_file),
+        )
+        .route(
+            "/gameservers/{id}/backups",
+            get(gameservers::backups).post(gameservers::create_backup),
+        )
+        .route(
+            "/gameservers/{id}/backups/{backup}/download",
+            get(gameservers::download_backup),
+        )
+        .route(
+            "/admin/integrations",
+            get(admin_provisioning::integrations).post(admin_provisioning::create_integration),
+        )
+        .route(
+            "/admin/integrations/{id}",
+            delete(admin_provisioning::delete_integration),
+        )
+        .route(
+            "/admin/integrations/{id}/test",
+            post(admin_provisioning::test_integration),
+        )
+        .route(
+            "/admin/integrations/{id}/catalog",
+            get(admin_provisioning::catalog),
+        )
+        .route(
+            "/admin/products",
+            get(admin_provisioning::products).post(admin_provisioning::create_product),
+        )
+        .route(
+            "/admin/services",
+            get(admin_provisioning::services_index).post(admin_provisioning::create_service),
+        )
+        .route(
+            "/admin/services/{id}/{action}",
+            post(admin_provisioning::service_action),
+        )
+        .route("/admin/customers", get(admin_provisioning::customers))
         .route("/demo/login", post(demo::login))
         .route("/{*rest}", any(api_not_found));
 

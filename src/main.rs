@@ -1,11 +1,14 @@
 mod auth;
 mod cli;
 mod config;
+mod crypto;
 mod demo;
 mod error;
 mod html;
+mod integrations;
 mod pagination;
 mod routes;
+mod services;
 mod state;
 
 use std::sync::Arc;

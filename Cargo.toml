@@ -10,10 +10,12 @@ anyhow = "1.0.105"
 argon2 = "0.6.0"
 axum = { version = "0.8.9", features = ["macros"] }
 axum-extra = { version = "0.12.6", features = ["cookie", "typed-header"] }
+chacha20poly1305 = "0.11.0"
 dotenvy = "0.15.7"
 hex = "0.4.3"
 libc = "0.2.191"
 rand = "0.10.4"
+reqwest = { version = "0.13.5", default-features = false, features = ["json", "rustls", "query"] }
 rpassword = "7.5.5"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
