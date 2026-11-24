@@ -14,7 +14,7 @@ impl PageQuery {
             .as_deref()
             .and_then(|page| page.parse().ok())
             .unwrap_or(1i64)
-            .max(1)
+            .clamp(1, 100_000)
     }
 
     pub fn per_page(&self) -> i64 {
@@ -63,5 +63,19 @@ impl<T> Paginated<T> {
                 to,
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PageQuery;
+
+    #[test]
+    fn a_huge_page_number_stays_a_valid_offset() {
+        let query = PageQuery {
+            page: Some(i64::MAX.to_string()),
+            per_page: Some("50".into()),
+        };
+        assert!(query.offset() > 0);
     }
 }
