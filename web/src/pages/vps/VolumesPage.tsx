@@ -14,6 +14,7 @@ import { DataTable, RowCard, RowCardList } from '../../components/ui/ResourceLis
 import { ApiError } from '../../lib/api'
 import { formatEuro } from '../../lib/format'
 import { t } from '../../lib/i18n'
+import { useVpsAccess } from '../../lib/vpsAccess'
 import { intervalLabels, serviceStatusColors, serviceStatusLabels } from '../../lib/labels'
 import { useOrderVolume, useVolumeAction, useVolumeOptions, useVolumes, type Volume } from '../../lib/volumes'
 
@@ -165,6 +166,7 @@ function AttachVolume({ volume, onClose }: { volume: Volume | null; onClose: () 
 
 export function VolumesPage() {
   const { data, isPending } = useVolumes()
+  const isOwner = useVpsAccess().data?.is_owner !== false
   const action = useVolumeAction()
   const [query, setQuery] = useState('')
   const [view, setView] = useState<ListView>('grid')
@@ -210,9 +212,11 @@ export function VolumesPage() {
           )
         }
         actions={
-          <Button size="sm" icon={PlusIcon} onClick={() => setOrdering(true)}>
-            {t('Volume bestellen')}
-          </Button>
+          isOwner && (
+            <Button size="sm" icon={PlusIcon} onClick={() => setOrdering(true)}>
+              {t('Volume bestellen')}
+            </Button>
+          )
         }
       />
       <ListToolbar>

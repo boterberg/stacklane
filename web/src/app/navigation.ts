@@ -23,6 +23,7 @@ import {
   ReceiptPercentIcon,
   ServerStackIcon,
   ShieldCheckIcon,
+  UsersIcon,
   WindowIcon,
   WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline'
@@ -39,6 +40,7 @@ export type NavLink = {
   external?: boolean
   opensSection?: boolean
   exact?: boolean
+  permission?: string
 }
 
 export type NavGroup = {
@@ -117,17 +119,23 @@ export const vpsSection: NavSection = {
   title: 'VPS',
   back: '/',
   groups: [
-    { label: 'Compute', children: [{ label: 'Servers', to: '/vps/servers', icon: ServerStackIcon }] },
+    { label: 'Compute', children: [{ label: 'Servers', to: '/vps/servers', icon: ServerStackIcon, permission: 'servers.view' }] },
     {
       label: 'Opslag',
       children: [
-        { label: 'Volumes', to: '/vps/volumes', icon: CircleStackIcon },
-        { label: 'Snapshots', to: '/vps/snapshots', icon: CameraIcon },
-        { label: "ISO's", to: '/vps/isos', icon: PlayCircleIcon },
+        { label: 'Volumes', to: '/vps/volumes', icon: CircleStackIcon, permission: 'volumes.view' },
+        { label: 'Snapshots', to: '/vps/snapshots', icon: CameraIcon, permission: 'snapshots.view' },
+        { label: "ISO's", to: '/vps/isos', icon: PlayCircleIcon, permission: 'isos.view' },
       ],
     },
-    { label: 'Netwerk', children: [{ label: 'Firewalls', to: '/vps/firewalls', icon: ShieldCheckIcon }] },
-    { label: 'Toegang', children: [{ label: 'SSH-sleutels', to: '/vps/ssh-keys', icon: KeyIcon }] },
+    { label: 'Netwerk', children: [{ label: 'Firewalls', to: '/vps/firewalls', icon: ShieldCheckIcon, permission: 'firewalls.view' }] },
+    {
+      label: 'Toegang',
+      children: [
+        { label: 'SSH-sleutels', to: '/vps/ssh-keys', icon: KeyIcon, permission: 'ssh_keys.view' },
+        { label: 'Gebruikers', to: '/vps/users', icon: UsersIcon },
+      ],
+    },
   ],
 }
 

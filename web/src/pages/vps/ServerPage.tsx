@@ -34,6 +34,7 @@ import {
 import { isManaged } from '../../lib/firewall'
 import { RuleForm, RuleList } from './FirewallRules'
 import { ServerIso } from './ServerIso'
+import { useCan, useVpsAccess } from '../../lib/vpsAccess'
 
 type Tab = 'overview' | 'snapshots' | 'firewall' | 'iso'
 
@@ -52,6 +53,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 function Overview({ server, live, features }: { server: VpsServer; live: LiveStatus | null; features: Features | null }) {
   const password = useRootPassword(server.id)
+  const isOwner = useVpsAccess().data?.is_owner !== false
   return (
     <div className="grid max-w-5xl gap-6 lg:grid-cols-2">
       <Card title={t('Server')}>
@@ -66,6 +68,8 @@ function Overview({ server, live, features }: { server: VpsServer; live: LiveSta
             <span className="block">ssh root@{server.details.ipv4}</span>
             {features?.panel ? (
               <span className="mt-1 block">{t('Het rootwachtwoord en de console vind je in het panel van VirtFusion.')}</span>
+            ) : !isOwner ? (
+              <span className="mt-1 block">{t('Alleen de eigenaar van de server kan het rootwachtwoord zien.')}</span>
             ) : password.data ? (
               <code className="mt-2 block font-mono text-zinc-800 dark:text-white">{password.data.password ?? t('Niet beschikbaar')}</code>
             ) : (
@@ -208,6 +212,7 @@ function PanelButton({ id }: { id: string }) {
 
 function PowerButtons({ server, live }: { server: VpsServer; live: LiveStatus | null }) {
   const power = usePower(server.id)
+  const can = useCan()
   const [stopping, setStopping] = useState(false)
   if (server.status !== 'active' || !live) return null
   const running = live.state === 'running'
@@ -215,20 +220,28 @@ function PowerButtons({ server, live }: { server: VpsServer; live: LiveStatus | 
     <div className="flex flex-wrap gap-2">
       {running ? (
         <>
-          <Button size="sm" icon={ArrowPathIcon} disabled={power.isPending} onClick={() => power.mutate('reboot')}>
-            {t('Herstarten')}
-          </Button>
-          <Button size="sm" icon={PowerIcon} disabled={power.isPending} onClick={() => power.mutate('shutdown')}>
-            {t('Afsluiten')}
-          </Button>
-          <Button size="sm" icon={StopIcon} disabled={power.isPending} onClick={() => setStopping(true)}>
-            {t('Uitzetten')}
-          </Button>
+          {can('servers.start') && can('servers.stop') && (
+            <Button size="sm" icon={ArrowPathIcon} disabled={power.isPending} onClick={() => power.mutate('reboot')}>
+              {t('Herstarten')}
+            </Button>
+          )}
+          {can('servers.stop') && (
+            <>
+              <Button size="sm" icon={PowerIcon} disabled={power.isPending} onClick={() => power.mutate('shutdown')}>
+                {t('Afsluiten')}
+              </Button>
+              <Button size="sm" icon={StopIcon} disabled={power.isPending} onClick={() => setStopping(true)}>
+                {t('Uitzetten')}
+              </Button>
+            </>
+          )}
         </>
       ) : (
-        <Button size="sm" variant="primary" icon={PlayIcon} disabled={power.isPending} onClick={() => power.mutate('start')}>
-          {t('Starten')}
-        </Button>
+        can('servers.start') && (
+          <Button size="sm" variant="primary" icon={PlayIcon} disabled={power.isPending} onClick={() => power.mutate('start')}>
+            {t('Starten')}
+          </Button>
+        )
       )}
       <ConfirmDialog
         open={stopping}
@@ -249,6 +262,8 @@ export function VpsServerPage() {
   const { id = '' } = useParams()
   const { data: server, isPending, error } = useVpsServer(id)
   const [tab, setTab] = useState<Tab>('overview')
+  const can = useCan()
+  const { data: access } = useVpsAccess()
 
   if (isPending) return null
   if (error || !server) {
@@ -290,7 +305,7 @@ export function VpsServerPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {server.features?.panel && <PanelButton id={server.id} />}
+          {server.features?.panel && access?.is_owner !== false && <PanelButton id={server.id} />}
           <PowerButtons server={server} live={server.live} />
         </div>
       </div>
@@ -311,9 +326,9 @@ export function VpsServerPage() {
           <Tabs
             tabs={[
               { id: 'overview' as const, label: 'Overzicht' },
-              ...(server.features?.snapshots === false ? [] : [{ id: 'snapshots' as const, label: 'Snapshots' }]),
-              ...(server.features?.firewall === false ? [] : [{ id: 'firewall' as const, label: 'Firewall' }]),
-              ...(server.features?.volumes === false ? [] : [{ id: 'iso' as const, label: 'ISO' }]),
+              ...(server.features?.snapshots === false || !can('snapshots.view') ? [] : [{ id: 'snapshots' as const, label: 'Snapshots' }]),
+              ...(server.features?.firewall === false || !can('firewalls.view') ? [] : [{ id: 'firewall' as const, label: 'Firewall' }]),
+              ...(server.features?.volumes === false || !can('isos.view') ? [] : [{ id: 'iso' as const, label: 'ISO' }]),
             ]}
             active={tab}
             onChange={setTab}
