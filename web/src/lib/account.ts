@@ -87,6 +87,8 @@ export type AccountDetails = {
   coc_number: string | null
   tax_id: string | null
   tax_id_verified?: boolean
+  current_password?: string
+  code?: string
   country: string
   address_line1: string | null
   address_line2: string | null
@@ -106,6 +108,18 @@ export function useSaveAccount() {
       queryClient.setQueryData(['account', 'details'], account)
       queryClient.invalidateQueries({ queryKey: ['me'] })
     },
+  })
+}
+
+export function useResendVerification() {
+  return useMutation({ mutationFn: () => api<void>('/account/email/resend', { method: 'POST' }) })
+}
+
+export function useCancelEmailChange() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api<void>('/account/email/pending', { method: 'DELETE' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me'] }),
   })
 }
 

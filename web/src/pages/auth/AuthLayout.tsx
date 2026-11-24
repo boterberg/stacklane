@@ -5,10 +5,10 @@ import { Logo } from '../../components/ui/Logo'
 import { LanguageSwitch, ThemeSwitch } from '../../components/ui/Preferences'
 import { useMe } from '../../lib/auth'
 
-export function AuthLayout() {
+export function AuthLayout({ guestsOnly = true }: { guestsOnly?: boolean }) {
   const { data: profile, isPending } = useMe()
   if (isPending) return null
-  if (profile) return <Navigate to="/" replace />
+  if (profile && guestsOnly) return <Navigate to="/" replace />
 
   return (
     <div className="flex min-h-full flex-col items-center justify-center px-6 py-12">

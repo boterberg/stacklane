@@ -9,6 +9,7 @@ mod auth;
 pub mod billing;
 mod dashboard;
 mod domains;
+mod email_verification;
 mod gameservers;
 mod health;
 pub mod me;
@@ -44,6 +45,9 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/logout", post(auth::logout))
         .route("/auth/forgot-password", post(auth::forgot_password))
         .route("/auth/reset-password", post(auth::reset_password))
+        .route("/auth/verify-email", post(email_verification::verify))
+        .route("/account/email/resend", post(email_verification::resend))
+        .route("/account/email/pending", delete(email_verification::cancel))
         .route("/me", get(me::show))
         .route("/account", get(account::show).put(account::update))
         .route("/account/delete", post(account::destroy))

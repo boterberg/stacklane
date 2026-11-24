@@ -16,6 +16,8 @@ export type Profile = {
   theme: Theme
   locale: string
   timezone: string
+  email_verified: boolean
+  pending_email: string | null
 }
 
 export const meQueryKey = ['me'] as const

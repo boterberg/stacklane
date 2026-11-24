@@ -127,6 +127,7 @@ pub async fn register(
     .bind(input.company_name.filter(|_| input.is_business))
     .execute(&state.db)
     .await?;
+    super::email_verification::send(&state, user_id, &email).await?;
 
     let (token, max_age) =
         auth::create_session(&state, user_id, false, user_agent(&headers)).await?;
@@ -288,11 +289,15 @@ pub async fn reset_password(
             "Deze link is verlopen of al gebruikt. Vraag een nieuwe aan.",
         )
     })?;
-    sqlx::query("UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1")
-        .bind(user_id)
-        .bind(auth::hash_password(&input.password)?)
-        .execute(&mut *transaction)
-        .await?;
+    sqlx::query(
+        "UPDATE users SET password_hash = $2, email_verified_at = COALESCE(email_verified_at, now()),
+                updated_at = now()
+         WHERE id = $1",
+    )
+    .bind(user_id)
+    .bind(auth::hash_password(&input.password)?)
+    .execute(&mut *transaction)
+    .await?;
     sqlx::query("DELETE FROM sessions WHERE user_id = $1")
         .bind(user_id)
         .execute(&mut *transaction)

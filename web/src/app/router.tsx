@@ -6,6 +6,7 @@ import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage'
 import { LoginPage } from '../pages/auth/LoginPage'
 import { RegisterPage } from '../pages/auth/RegisterPage'
 import { ResetPasswordPage } from '../pages/auth/ResetPasswordPage'
+import { VerifyEmailPage } from '../pages/auth/VerifyEmailPage'
 import { InvoiceDetailPage } from '../pages/billing/InvoiceDetailPage'
 import { InvoicesPage } from '../pages/billing/InvoicesPage'
 import { SubscriptionDetailPage } from '../pages/billing/SubscriptionDetailPage'
@@ -57,6 +58,10 @@ export const router = createBrowserRouter([
       { path: '/forgot-password', element: <ForgotPasswordPage /> },
       { path: '/reset-password', element: <ResetPasswordPage /> },
     ],
+  },
+  {
+    element: <AuthLayout guestsOnly={false} />,
+    children: [{ path: '/verify-email', element: <VerifyEmailPage /> }],
   },
   {
     element: <AppShell />,
