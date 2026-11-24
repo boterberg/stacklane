@@ -19,6 +19,7 @@ import { GameServersPage } from '../pages/gameservers/GameServersPage'
 import { IntegrationsPage } from '../pages/admin/IntegrationsPage'
 import { AdminInvoicePage } from '../pages/admin/InvoicePage'
 import { AdminInvoicesPage } from '../pages/admin/InvoicesPage'
+import { SettingsPage } from '../pages/admin/SettingsPage'
 import { ProductsPage } from '../pages/admin/ProductsPage'
 import { ServicesPage } from '../pages/admin/ServicesPage'
 import { SystemPage } from '../pages/admin/SystemPage'
@@ -59,6 +60,7 @@ export const router = createBrowserRouter([
       { path: '/admin/products', element: <ProductsPage /> },
       { path: '/admin/integrations', element: <IntegrationsPage /> },
       { path: '/admin/system', element: <SystemPage /> },
+      { path: '/admin/settings', element: <SettingsPage /> },
       { path: '/admin/invoices', element: <AdminInvoicesPage /> },
       { path: '/admin/invoices/:id', element: <AdminInvoicePage /> },
       { path: '/admin/tickets', element: <TicketsPage scope="staff" /> },

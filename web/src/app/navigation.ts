@@ -18,6 +18,7 @@ import {
   LinkIcon,
   WrenchScrewdriverIcon,
   Cog6ToothIcon,
+  AdjustmentsHorizontalIcon,
   DocumentDuplicateIcon,
 } from '@heroicons/react/24/outline'
 import type { ComponentType, SVGProps } from 'react'
@@ -93,6 +94,7 @@ export const adminNavigation: NavGroup = {
     { label: 'Diensten', to: '/admin/services', icon: ServerStackIcon },
     { label: 'Producten', to: '/admin/products', icon: CubeIcon },
     { label: 'Koppelingen', to: '/admin/integrations', icon: LinkIcon },
+    { label: 'Instellingen', to: '/admin/settings', icon: AdjustmentsHorizontalIcon },
     { label: 'Systeem', to: '/admin/system', icon: Cog6ToothIcon },
   ],
 }
