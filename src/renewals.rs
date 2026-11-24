@@ -347,11 +347,17 @@ pub struct Run {
 async fn recheck_vat_numbers(state: &AppState) -> AppResult<()> {
     let pending: Vec<(uuid::Uuid, String, String)> = sqlx::query_as(
         "SELECT id, tax_id, country::text FROM users
-         WHERE is_business AND tax_id IS NOT NULL AND tax_id_verified_at IS NULL",
+         WHERE is_business AND tax_id IS NOT NULL AND tax_id_verified_at IS NULL
+           AND (tax_id_checked_at IS NULL OR tax_id_checked_at < now() - interval '1 day')
+         ORDER BY tax_id_checked_at NULLS FIRST LIMIT 20",
     )
     .fetch_all(&state.db)
     .await?;
     for (user_id, tax_id, country) in pending {
+        sqlx::query("UPDATE users SET tax_id_checked_at = now() WHERE id = $1")
+            .bind(user_id)
+            .execute(&state.db)
+            .await?;
         let Some((code, number)) = crate::vat::split_vat_number(&tax_id, &country) else {
             continue;
         };
@@ -424,17 +430,38 @@ pub async fn run_once(state: &AppState) -> AppResult<Run> {
     run
 }
 
+fn counted(step: &str, result: AppResult<usize>) -> usize {
+    result.unwrap_or_else(|error| {
+        tracing::error!(step, error = %error, "a billing step failed");
+        0
+    })
+}
+
+async fn remove_expired(state: &AppState) -> AppResult<usize> {
+    let mut removed = 0;
+    for table in ["sessions", "password_resets", "email_verifications"] {
+        removed += sqlx::query(sqlx::AssertSqlSafe(format!(
+            "DELETE FROM {table} WHERE expires_at < now() - interval '1 day'"
+        )))
+        .execute(&state.db)
+        .await?
+        .rows_affected() as usize;
+    }
+    Ok(removed)
+}
+
 async fn run_locked(state: &AppState) -> AppResult<Run> {
     let billing: Billing = settings::get(&state.db, "billing").await?;
-    recheck_vat_numbers(state).await?;
-    crate::routes::vps_isos::remove_unused(state).await?;
     let run = Run {
-        invoices: issue_renewals(state, &billing).await?,
-        suspended: suspend_overdue(state, &billing).await?,
-        ended: end_cancelled(state).await?,
-        expired: expire_orders(state).await?,
+        invoices: counted("renewals", issue_renewals(state, &billing).await),
+        suspended: counted("suspend", suspend_overdue(state, &billing).await),
+        ended: counted("end", end_cancelled(state).await),
+        expired: counted("expire", expire_orders(state).await),
     };
-    reconcile_suspensions(state).await?;
+    counted("reconcile", reconcile_suspensions(state).await.map(|()| 0));
+    counted("isos", crate::routes::vps_isos::remove_unused(state).await);
+    counted("cleanup", remove_expired(state).await);
+    counted("vat", recheck_vat_numbers(state).await.map(|()| 0));
     Ok(run)
 }
 
