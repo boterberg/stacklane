@@ -45,7 +45,7 @@ impl Mailer {
             Self::Smtp { transport, from } => {
                 let message = Message::builder()
                     .from(from.as_ref().clone())
-                    .to(email.to.parse()?)
+                    .to(Mailbox::new(None, email.to.parse::<lettre::Address>()?))
                     .subject(email.subject)
                     .header(ContentType::TEXT_PLAIN)
                     .body(email.body)?;

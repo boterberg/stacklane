@@ -60,8 +60,28 @@ fn split_name(name: &str) -> (String, String) {
 }
 
 pub(super) fn looks_like_email(email: &str) -> bool {
-    let mut parts = email.split('@');
-    matches!((parts.next(), parts.next(), parts.next()), (Some(local), Some(domain), None) if !local.is_empty() && domain.contains('.'))
+    let Some((local, domain)) = email.split_once('@') else {
+        return false;
+    };
+    let local_ok = !local.is_empty()
+        && local.len() <= 64
+        && !local.starts_with('.')
+        && !local.ends_with('.')
+        && !local.contains("..")
+        && local
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "!#$%&'*+/=?^_`{|}~.-".contains(c));
+    let labels: Vec<&str> = domain.split('.').collect();
+    let domain_ok = labels.len() >= 2
+        && domain.len() <= 253
+        && labels.iter().all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        });
+    email.len() <= 254 && local_ok && domain_ok
 }
 
 pub async fn register(
@@ -337,4 +357,34 @@ pub async fn reset_password(
     }
     transaction.commit().await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod email_tests {
+    use super::looks_like_email;
+
+    #[test]
+    fn accepts_only_plain_addresses() {
+        for good in [
+            "jan@example.nl",
+            "j.de-vries+shop@mail.example.co.uk",
+            "a_b@x-y.io",
+        ] {
+            assert!(looks_like_email(good), "{good}");
+        }
+        for bad in [
+            "Jan <other@example.nl>",
+            "jan@example.nl, other@example.nl",
+            "jan@localhost",
+            "jan@@example.nl",
+            ".jan@example.nl",
+            "jan..x@example.nl",
+            "jan@-example.nl",
+            "jan @example.nl",
+            "jan@exa mple.nl",
+            "\"jan\"@example.nl",
+        ] {
+            assert!(!looks_like_email(bad), "{bad}");
+        }
+    }
 }
