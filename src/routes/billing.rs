@@ -1,5 +1,7 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
+use axum::http::header;
+use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use sqlx::AssertSqlSafe;
 use time::{Date, OffsetDateTime};
@@ -7,7 +9,10 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::error::{AppError, AppResult};
+use crate::i18n::Locale;
+use crate::invoice_pdf::render_invoice;
 use crate::pagination::{PageQuery, Paginated};
+use crate::settings::{self, Company};
 use crate::state::AppState;
 
 const SUBSCRIPTION_STATUSES: [&str; 5] = ["pending", "active", "suspended", "cancelled", "expired"];
@@ -44,13 +49,13 @@ pub struct SubscriptionItem {
 
 #[derive(Serialize, sqlx::FromRow)]
 pub struct InvoiceSummary {
-    id: i64,
-    status: String,
+    pub(crate) id: i64,
+    pub(crate) status: String,
     #[serde(with = "crate::dates::day")]
-    issued_at: Date,
+    pub(crate) issued_at: Date,
     #[serde(with = "crate::dates::day")]
-    due_at: Date,
-    total_cents: i32,
+    pub(crate) due_at: Date,
+    pub(crate) total_cents: i32,
 }
 
 #[derive(Serialize)]
@@ -65,25 +70,25 @@ pub struct SubscriptionDetail {
 
 #[derive(Serialize, sqlx::FromRow)]
 pub struct InvoiceLine {
-    description: String,
+    pub(crate) description: String,
     #[serde(with = "crate::dates::day::option")]
-    period_start: Option<Date>,
+    pub(crate) period_start: Option<Date>,
     #[serde(with = "crate::dates::day::option")]
-    period_end: Option<Date>,
-    amount_cents: i32,
-    subscription_code: Option<String>,
+    pub(crate) period_end: Option<Date>,
+    pub(crate) amount_cents: i32,
+    pub(crate) subscription_code: Option<String>,
 }
 
 #[derive(Serialize)]
 pub struct InvoiceDetail {
     #[serde(flatten)]
-    summary: InvoiceSummary,
-    tax_cents: i32,
-    tax_rate_basis_points: i32,
+    pub(crate) summary: InvoiceSummary,
+    pub(crate) tax_cents: i32,
+    pub(crate) tax_rate_basis_points: i32,
     #[serde(with = "time::serde::rfc3339::option")]
-    paid_at: Option<OffsetDateTime>,
-    customer: serde_json::Value,
-    lines: Vec<InvoiceLine>,
+    pub(crate) paid_at: Option<OffsetDateTime>,
+    pub(crate) customer: serde_json::Value,
+    pub(crate) lines: Vec<InvoiceLine>,
 }
 
 const SUBSCRIPTION_SELECT: &str = "SELECT s.id, s.code,
@@ -297,4 +302,41 @@ pub async fn invoice(
     Path(id): Path<i64>,
 ) -> AppResult<Json<InvoiceDetail>> {
     Ok(Json(load_invoice(&state, Some(user.id), id).await?))
+}
+
+pub async fn invoice_pdf(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<i64>,
+) -> AppResult<impl IntoResponse> {
+    let invoice = load_invoice(&state, Some(user.id), id).await?;
+    let locale: String = sqlx::query_scalar("SELECT locale FROM users WHERE id = $1")
+        .bind(user.id)
+        .fetch_one(&state.db)
+        .await?;
+    pdf_response(&state, &invoice, Locale::parse(&locale)).await
+}
+
+pub async fn pdf_response(
+    state: &AppState,
+    invoice: &InvoiceDetail,
+    locale: Locale,
+) -> AppResult<impl IntoResponse + use<>> {
+    let company: Company = settings::get(&state.db, "company").await?;
+    let body = render_invoice(invoice, &company, locale);
+    let name = match locale {
+        Locale::Nl => format!("factuur-{}.pdf", invoice.summary.id),
+        Locale::En => format!("invoice-{}.pdf", invoice.summary.id),
+    };
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/pdf".to_owned()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{name}\""),
+            ),
+            (header::CACHE_CONTROL, "private, no-store".to_owned()),
+        ],
+        body,
+    ))
 }
