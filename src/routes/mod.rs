@@ -1,3 +1,4 @@
+mod admin_billing;
 mod admin_provisioning;
 mod admin_settings;
 mod auth;
@@ -122,6 +123,14 @@ pub fn router(state: AppState) -> Router {
             post(admin_provisioning::service_action),
         )
         .route("/admin/customers", get(admin_provisioning::customers))
+        .route("/admin/invoices", get(admin_billing::index))
+        .route("/admin/invoices/{id}", get(admin_billing::show))
+        .route("/admin/invoices/{id}/pdf", get(admin_billing::pdf))
+        .route(
+            "/admin/invoices/{id}/mark-paid",
+            post(admin_billing::mark_paid),
+        )
+        .route("/admin/invoices/{id}/cancel", post(admin_billing::cancel))
         .route(
             "/admin/settings",
             get(admin_settings::show).put(admin_settings::update),
