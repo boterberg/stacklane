@@ -45,6 +45,16 @@ pub const REAUTH: Rule = Rule {
     max: 10,
     window: Duration::from_secs(15 * 60),
 };
+pub const TICKET: Rule = Rule {
+    name: "ticket",
+    max: 10,
+    window: Duration::from_secs(60 * 60),
+};
+pub const TICKET_REPLY: Rule = Rule {
+    name: "ticket-reply",
+    max: 60,
+    window: Duration::from_secs(60 * 60),
+};
 pub const INVITE: Rule = Rule {
     name: "invite",
     max: 20,
@@ -93,6 +103,8 @@ fn window_of(name: &str) -> Duration {
         RECOVERY,
         VERIFY,
         REAUTH,
+        TICKET,
+        TICKET_REPLY,
         INVITE,
         DOMAIN_SEARCH,
     ]

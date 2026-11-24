@@ -255,6 +255,9 @@ pub async fn create(
     user: CurrentUser,
     Json(input): Json<CreateTicket>,
 ) -> AppResult<(StatusCode, Json<TicketDetail>)> {
+    state
+        .limits
+        .check(&crate::limits::TICKET, &user.id.to_string())?;
     let subject = input.subject.trim().to_owned();
     let mut errors = BTreeMap::new();
     if input.department_id.is_none() {
@@ -335,6 +338,9 @@ pub async fn reply(
     Path(number): Path<i64>,
     Json(input): Json<CreateReply>,
 ) -> AppResult<Json<TicketDetail>> {
+    state
+        .limits
+        .check(&crate::limits::TICKET_REPLY, &user.id.to_string())?;
     let scope = Scope::Customer(user.id);
     let ticket = load_summary(&state, scope, number).await?;
     add_message(
