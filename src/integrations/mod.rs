@@ -1,4 +1,5 @@
 pub mod directadmin;
+pub mod openstack;
 pub mod plesk;
 pub mod proxmox;
 pub mod pterodactyl;

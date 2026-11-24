@@ -283,11 +283,11 @@ impl Proxmox {
             .await?;
         Ok(Status {
             state: current["status"].as_str().unwrap_or("unknown").to_owned(),
-            cpu: current["cpu"].as_f64().unwrap_or(0.0),
+            cpu: current["cpu"].as_f64(),
             cpus: current["cpus"].as_u64().unwrap_or(0),
-            memory: current["mem"].as_u64().unwrap_or(0),
+            memory: current["mem"].as_u64(),
             max_memory: current["maxmem"].as_u64().unwrap_or(0),
-            uptime: current["uptime"].as_u64().unwrap_or(0),
+            uptime: current["uptime"].as_u64(),
         })
     }
 

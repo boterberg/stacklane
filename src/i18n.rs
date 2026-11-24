@@ -209,6 +209,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Kies een richting en of het verkeer mag." => {
             "Choose a direction and whether traffic is allowed."
         }
+        "Op dit platform kun je alleen verkeer toestaan." => {
+            "On this platform you can only allow traffic."
+        }
         "Kies TCP, UDP of ICMP." => "Choose TCP, UDP or ICMP.",
         "Vul een poort in, zoals 22, 80,443 of 8000:8100." => {
             "Enter a port, such as 22, 80,443 or 8000:8100."

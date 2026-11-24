@@ -662,6 +662,7 @@ export const en: Record<string, string> = {
   "{amount} geheugen": "{amount} memory",
   "{area} beheren": "Manage {area}",
   "{area} bekijken": "View {area}",
+  "{cores} vCPU": "{cores} vCPU",
   "{count} berichten": "{count} messages",
   "{count} diensten": "{count} services",
   "{count} per pagina": "{count} per page",

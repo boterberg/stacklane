@@ -25,7 +25,7 @@ export type VpsServer = {
   created_at: string
 }
 
-export type LiveStatus = { state: string; cpu: number; cpus: number; memory: number; max_memory: number; uptime: number }
+export type LiveStatus = { state: string; cpu: number | null; cpus: number; memory: number | null; max_memory: number; uptime: number | null }
 
 export type Snapshot = { name: string; description: string; created_at: number | null }
 

@@ -74,9 +74,13 @@ function Overview({ server, live }: { server: VpsServer; live: LiveStatus | null
         {live ? (
           <dl className="divide-y divide-zinc-200 dark:divide-white/10">
             <Row label={t('Status')}>{live.state === 'running' ? t('Draait') : t('Uit')}</Row>
-            <Row label={t('Processor')}>{t('{percent}% van {cores} vCPU', { percent: Math.round(live.cpu * 100), cores: live.cpus })}</Row>
-            <Row label={t('Geheugen')}>{t('{used} van {total}', { used: formatBytes(live.memory), total: formatBytes(live.max_memory) })}</Row>
-            <Row label={t('Uptime')}>{live.uptime > 0 ? formatDuration(live.uptime * 1000) : '-'}</Row>
+            <Row label={t('Processor')}>
+              {live.cpu === null ? t('{cores} vCPU', { cores: live.cpus }) : t('{percent}% van {cores} vCPU', { percent: Math.round(live.cpu * 100), cores: live.cpus })}
+            </Row>
+            <Row label={t('Geheugen')}>
+              {live.memory === null ? formatBytes(live.max_memory) : t('{used} van {total}', { used: formatBytes(live.memory), total: formatBytes(live.max_memory) })}
+            </Row>
+            {live.uptime !== null && <Row label={t('Uptime')}>{live.uptime > 0 ? formatDuration(live.uptime * 1000) : '-'}</Row>}
           </dl>
         ) : (
           <p className="text-sm text-zinc-500 dark:text-white/70">{t('De server geeft nu geen gegevens door.')}</p>
