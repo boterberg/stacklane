@@ -113,6 +113,7 @@ function PasswordDialog({
   danger,
   pending,
   error,
+  codeError,
   onClose,
   onConfirm,
 }: {
