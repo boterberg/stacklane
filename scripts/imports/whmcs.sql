@@ -1,3 +1,4 @@
+USE whmcs;
 CREATE TABLE tblcurrencies (id INT PRIMARY KEY, code VARCHAR(5), prefix VARCHAR(10), `default` TINYINT(1));
 CREATE TABLE tblclients (
   id INT PRIMARY KEY, firstname TEXT, lastname TEXT, companyname TEXT, email TEXT, address1 TEXT, address2 TEXT,

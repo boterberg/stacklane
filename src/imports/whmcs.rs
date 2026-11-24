@@ -481,9 +481,11 @@ async fn services(
         map.insert(id, subscription_id);
     }
     if long_cycles > 0 {
-        report.notes.push(format!(
-            "{long_cycles} diensten hebben een cyclus van twee of drie jaar; die staan in Stacklane als jaarlijks"
-        ));
+        report.notes.push(if long_cycles == 1 {
+            "1 dienst heeft een cyclus van twee of drie jaar; die staat in Stacklane als jaarlijks".to_owned()
+        } else {
+            format!("{long_cycles} diensten hebben een cyclus van twee of drie jaar; die staan in Stacklane als jaarlijks")
+        });
     }
     Ok(map)
 }

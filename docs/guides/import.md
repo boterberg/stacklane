@@ -49,6 +49,19 @@ Wat de import overslaat, staat aan het eind van de uitvoer: klanten zonder geldi
 
 De hele import is één transactie. Gaat er halverwege iets mis, dan verandert er niets.
 
-## Uit Paymenter, Blesta en HostBill
+## Uit Paymenter
 
-Deze imports komen in de volgende versies.
+Paymenter draait ook op MySQL of MariaDB, dus het werkt op dezelfde manier:
+
+```sh
+sudo stacklane import paymenter --database mysql://paymenter@db.jouwbedrijf.nl/paymenter --dry-run
+sudo stacklane import paymenter --database mysql://paymenter@db.jouwbedrijf.nl/paymenter
+```
+
+Klanten met hun adresgegevens, producten, diensten, facturen en tickets komen mee. Wachtwoorden blijven werken. De naam die een klant aan een dienst gaf, wordt de naam van de dienst. Conceptfacturen slaat de import over.
+
+Beheerders uit Paymenter worden geen klant. Maak hun account opnieuw aan met `sudo stacklane admin create`.
+
+## Uit Blesta en HostBill
+
+Deze imports komen in een volgende versie.

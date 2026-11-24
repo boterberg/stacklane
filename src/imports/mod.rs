@@ -1,3 +1,4 @@
+pub mod paymenter;
 pub mod pterodactyl;
 pub mod text;
 pub mod whmcs;

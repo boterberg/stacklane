@@ -114,18 +114,32 @@ fn source_url(args: &[String], env: &str) -> anyhow::Result<String> {
     Ok(url.to_string())
 }
 
-async fn whmcs(args: &[String]) -> anyhow::Result<()> {
+enum Source {
+    Whmcs,
+    Paymenter,
+}
+
+async fn from_database(args: &[String], source: Source) -> anyhow::Result<()> {
     let dry_run = args.iter().any(|arg| arg == "--dry-run");
-    let url = source_url(args, "WHMCS_DATABASE_URL")?;
-    let source = sqlx::mysql::MySqlPoolOptions::new()
+    let (name, env) = match source {
+        Source::Whmcs => ("WHMCS", "WHMCS_DATABASE_URL"),
+        Source::Paymenter => ("Paymenter", "PAYMENTER_DATABASE_URL"),
+    };
+    let url = source_url(args, env)?;
+    let database = sqlx::mysql::MySqlPoolOptions::new()
         .max_connections(4)
         .connect(&url)
         .await
-        .context("kan de WHMCS-database niet bereiken")?;
+        .with_context(|| format!("kan de {name}-database niet bereiken"))?;
     let config = Config::from_env()?;
     let pool = crate::connect(&config).await?;
-    step("Klanten, producten, diensten, facturen en tickets lezen uit WHMCS");
-    let report = imports::whmcs::run(&source, &pool, dry_run).await?;
+    step(&format!(
+        "Klanten, producten, diensten, facturen en tickets lezen uit {name}"
+    ));
+    let report = match source {
+        Source::Whmcs => imports::whmcs::run(&database, &pool, dry_run).await?,
+        Source::Paymenter => imports::paymenter::run(&database, &pool, dry_run).await?,
+    };
     print_report(&report, dry_run);
     Ok(())
 }
@@ -137,8 +151,9 @@ pub async fn run(args: &[String]) -> anyhow::Result<()> {
     banner("Importeren");
     match args.first().map(String::as_str) {
         Some("pterodactyl") => pterodactyl(&args[1..]).await,
-        Some("whmcs") => whmcs(&args[1..]).await,
-        Some(source @ ("paymenter" | "blesta" | "hostbill")) => {
+        Some("whmcs") => from_database(&args[1..], Source::Whmcs).await,
+        Some("paymenter") => from_database(&args[1..], Source::Paymenter).await,
+        Some(source @ ("blesta" | "hostbill")) => {
             anyhow::bail!("importeren uit {source} komt in een volgende versie")
         }
         _ => {
