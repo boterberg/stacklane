@@ -260,6 +260,19 @@ impl Pterodactyl {
     }
 
     async fn user_id(&self, owner: &Owner<'_>) -> anyhow::Result<i64> {
+        let external = format!("stacklane-{}", owner.stacklane_id);
+        if let Ok(found) = self
+            .application(
+                Method::GET,
+                &format!("/users/external/{external}"),
+                &[],
+                None,
+            )
+            .await
+            && let Some(id) = found["attributes"]["id"].as_i64()
+        {
+            return Ok(id);
+        }
         let existing = self
             .application(
                 Method::GET,
@@ -268,7 +281,7 @@ impl Pterodactyl {
                 None,
             )
             .await?;
-        if let Some(id) = existing["data"][0]["attributes"]["id"].as_i64() {
+        if let Some(id) = matching_user(&existing, owner.email, &external) {
             return Ok(id);
         }
         let created = self
@@ -598,9 +611,48 @@ impl Pterodactyl {
     }
 }
 
+fn matching_user(list: &Value, email: &str, external: &str) -> Option<i64> {
+    list["data"].as_array()?.iter().find_map(|user| {
+        let attributes = &user["attributes"];
+        let same_email = attributes["email"]
+            .as_str()
+            .is_some_and(|candidate| candidate.eq_ignore_ascii_case(email));
+        let free = attributes["external_id"]
+            .as_str()
+            .is_none_or(|candidate| candidate == external);
+        (same_email && free)
+            .then(|| attributes["id"].as_i64())
+            .flatten()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::username_for;
+
+    #[test]
+    fn only_claims_the_panel_user_with_the_exact_email() {
+        let list = serde_json::json!({ "data": [
+            { "attributes": { "id": 1, "email": "xjan@example.test", "external_id": null } },
+            { "attributes": { "id": 2, "email": "jan@example.test", "external_id": "stacklane-other" } },
+            { "attributes": { "id": 3, "email": "Jan@Example.test", "external_id": null } },
+        ] });
+        assert_eq!(
+            super::matching_user(&list, "jan@example.test", "stacklane-me"),
+            Some(3)
+        );
+        assert_eq!(
+            super::matching_user(&list, "piet@example.test", "stacklane-me"),
+            None
+        );
+        let claimed = serde_json::json!({ "data": [
+            { "attributes": { "id": 2, "email": "jan@example.test", "external_id": "stacklane-other" } },
+        ] });
+        assert_eq!(
+            super::matching_user(&claimed, "jan@example.test", "stacklane-me"),
+            None
+        );
+    }
 
     #[test]
     fn usernames_are_safe_and_unique_enough() {
