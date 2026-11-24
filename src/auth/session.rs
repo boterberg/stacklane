@@ -99,3 +99,26 @@ impl FromRequestParts<AppState> for CurrentUser {
         Ok(Self { id, token_hash })
     }
 }
+
+pub struct CurrentAdmin {
+    pub id: Uuid,
+}
+
+impl FromRequestParts<AppState> for CurrentAdmin {
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let user = CurrentUser::from_request_parts(parts, state).await?;
+        let is_admin: bool = sqlx::query_scalar("SELECT role = 'admin' FROM users WHERE id = $1")
+            .bind(user.id)
+            .fetch_one(&state.db)
+            .await?;
+        if !is_admin {
+            return Err(AppError::Forbidden);
+        }
+        Ok(Self { id: user.id })
+    }
+}

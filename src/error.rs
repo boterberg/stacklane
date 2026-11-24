@@ -9,6 +9,8 @@ use serde_json::json;
 pub enum AppError {
     #[error("unauthenticated")]
     Unauthenticated,
+    #[error("forbidden")]
+    Forbidden,
     #[error("not found")]
     NotFound,
     #[error("validation failed")]
@@ -33,6 +35,11 @@ impl IntoResponse for AppError {
             Self::Unauthenticated => (
                 StatusCode::UNAUTHORIZED,
                 Json(json!({ "message": "Je bent niet ingelogd." })),
+            )
+                .into_response(),
+            Self::Forbidden => (
+                StatusCode::FORBIDDEN,
+                Json(json!({ "message": "Je hebt geen toegang tot dit onderdeel." })),
             )
                 .into_response(),
             Self::NotFound => (

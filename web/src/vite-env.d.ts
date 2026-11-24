@@ -1,5 +1,3 @@
-/// <reference types="vite/client" />
-
 interface ImportMetaEnv {
   readonly VITE_HELP_CENTER_URL?: string
   readonly VITE_STATUS_PAGE_URL?: string

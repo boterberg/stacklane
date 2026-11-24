@@ -37,7 +37,8 @@ find "$root/usr/share/stacklane" -type f -exec chmod 0644 {} +
 printf '%s\n' "$VERSION" > "$root/usr/share/stacklane/VERSION"
 chmod 0644 "$root/usr/share/stacklane/VERSION"
 
-install -m 0644 packaging/systemd/stacklane.service "$root/lib/systemd/system/stacklane.service"
+install -m 0644 packaging/systemd/stacklane.service packaging/systemd/stacklane-demo-reset.service \
+  packaging/systemd/stacklane-demo-reset.timer "$root/lib/systemd/system/"
 install -m 0640 packaging/etc/stacklane.env "$root/etc/stacklane/stacklane.env"
 install -m 0644 packaging/Caddyfile.example README.md "$root/usr/share/doc/stacklane/"
 if [ -n "$KEYRING" ]; then

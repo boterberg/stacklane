@@ -20,10 +20,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 22
           package-manager-cache: false
@@ -39,13 +39,12 @@ jobs:
           npm ci --no-audit --no-fund
           npm audit --omit=dev --audit-level=high
           npm run build
-      - name: site
-        working-directory: site
+      - name: docs
+        working-directory: docs
         run: |
           npm ci --no-audit --no-fund
           npm run build
       - name: server
-        working-directory: server
         env:
           STACKLANE_VERSION: ${{ steps.version.outputs.version }}
         run: cargo build --release --locked
@@ -57,7 +56,7 @@ jobs:
             keyring="--keyring stacklane-release.gpg"
           fi
           sh packaging/build-deb.sh --version "${{ steps.version.outputs.version }}" \
-            --bin server/target/release/stacklane-server --web web/dist --site site/dist --out dist $keyring
+            --bin target/release/stacklane-server --web web/dist --site docs/dist --out dist $keyring
           cd dist && sha256sum *.deb > SHA256SUMS && cat SHA256SUMS
       - name: sign
         env:

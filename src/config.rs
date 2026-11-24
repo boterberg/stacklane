@@ -12,6 +12,7 @@ pub struct Config {
     pub bind_addr: String,
     pub cookie_secure: bool,
     pub static_dir: Option<PathBuf>,
+    pub demo_mode: bool,
 }
 
 impl Config {
@@ -23,6 +24,7 @@ impl Config {
                 .map(|value| value == "true")
                 .unwrap_or(true),
             static_dir: std::env::var_os("STATIC_DIR").map(PathBuf::from),
+            demo_mode: std::env::var("DEMO_MODE").is_ok_and(|value| value == "true"),
         })
     }
 }

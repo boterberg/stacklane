@@ -15,6 +15,7 @@ pub struct Profile {
     last_name: String,
     company_name: Option<String>,
     is_business: bool,
+    role: String,
     country: String,
     theme: String,
     locale: String,
@@ -30,7 +31,7 @@ pub struct SettingsRequest {
 
 pub async fn load_profile(state: &AppState, user_id: Uuid) -> AppResult<Profile> {
     sqlx::query_as(
-        "SELECT id, email::text AS email, first_name, last_name, company_name, is_business, country::text AS country, theme, locale, timezone
+        "SELECT id, email::text AS email, first_name, last_name, company_name, is_business, role, country::text AS country, theme, locale, timezone
          FROM users WHERE id = $1",
     )
     .bind(user_id)

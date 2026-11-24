@@ -10,6 +10,7 @@ export type Profile = {
   last_name: string
   company_name: string | null
   is_business: boolean
+  role: 'customer' | 'admin'
   country: string
   theme: Theme
   locale: string

@@ -8,7 +8,7 @@ use sqlx::AssertSqlSafe;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::auth::CurrentUser;
+use crate::auth::{CurrentAdmin, CurrentUser};
 use crate::error::{AppError, AppResult};
 use crate::html::{sanitize_rich_text, visible_text};
 use crate::pagination::{PageQuery, Paginated};
@@ -24,6 +24,21 @@ const STATUSES: [&str; 5] = [
 const MAX_SUBJECT_LENGTH: usize = 150;
 const MAX_BODY_LENGTH: usize = 50_000;
 
+#[derive(Clone, Copy)]
+enum Scope {
+    Customer(Uuid),
+    Staff,
+}
+
+impl Scope {
+    fn owner(self) -> Option<Uuid> {
+        match self {
+            Self::Customer(user_id) => Some(user_id),
+            Self::Staff => None,
+        }
+    }
+}
+
 #[derive(Serialize, sqlx::FromRow)]
 pub struct Department {
     id: Uuid,
@@ -37,6 +52,8 @@ pub struct TicketSummary {
     subject: String,
     status: String,
     department: String,
+    customer_name: String,
+    customer_email: String,
     message_count: i64,
     #[serde(with = "time::serde::rfc3339")]
     created_at: OffsetDateTime,
@@ -81,10 +98,19 @@ pub struct CreateReply {
     body_html: String,
 }
 
+#[derive(Deserialize)]
+pub struct UpdateStatus {
+    status: String,
+}
+
 const SUMMARY_SELECT: &str = "SELECT t.id, t.number, t.subject, t.status, d.name AS department,
+        COALESCE(NULLIF(trim(u.first_name || ' ' || u.last_name), ''), u.email::text) AS customer_name,
+        u.email::text AS customer_email,
         (SELECT count(*) FROM ticket_messages m WHERE m.ticket_id = t.id) AS message_count,
         t.created_at, t.last_reply_at
-    FROM tickets t JOIN departments d ON d.id = t.department_id";
+    FROM tickets t
+    JOIN departments d ON d.id = t.department_id
+    JOIN users u ON u.id = t.user_id";
 
 fn clean_body(body_html: &str) -> Result<String, AppError> {
     if body_html.len() > MAX_BODY_LENGTH {
@@ -113,23 +139,22 @@ fn requested_statuses(raw: Option<&str>) -> Vec<String> {
     }
 }
 
-async fn load_summary(state: &AppState, user_id: Uuid, number: i64) -> AppResult<TicketSummary> {
+async fn load_summary(state: &AppState, scope: Scope, number: i64) -> AppResult<TicketSummary> {
     sqlx::query_as(AssertSqlSafe(format!(
-        "{SUMMARY_SELECT} WHERE t.user_id = $1 AND t.number = $2"
+        "{SUMMARY_SELECT} WHERE ($1::uuid IS NULL OR t.user_id = $1) AND t.number = $2"
     )))
-    .bind(user_id)
+    .bind(scope.owner())
     .bind(number)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound)
 }
 
-async fn load_detail(state: &AppState, user_id: Uuid, number: i64) -> AppResult<TicketDetail> {
-    let ticket = load_summary(state, user_id, number).await?;
+async fn load_detail(state: &AppState, scope: Scope, number: i64) -> AppResult<TicketDetail> {
+    let ticket = load_summary(state, scope, number).await?;
     let messages = sqlx::query_as(
         "SELECT m.id, m.is_staff,
-                CASE WHEN m.is_staff THEN 'Support'
-                     ELSE COALESCE(NULLIF(trim(u.first_name || ' ' || u.last_name), ''), u.email::text, 'Klant') END AS author_name,
+                COALESCE(NULLIF(trim(u.first_name || ' ' || u.last_name), ''), u.email::text, 'Support') AS author_name,
                 m.body_html, m.created_at
          FROM ticket_messages m LEFT JOIN users u ON u.id = m.author_user_id
          WHERE m.ticket_id = $1 ORDER BY m.created_at",
@@ -138,6 +163,73 @@ async fn load_detail(state: &AppState, user_id: Uuid, number: i64) -> AppResult<
     .fetch_all(&state.db)
     .await?;
     Ok(TicketDetail { ticket, messages })
+}
+
+async fn list(
+    state: &AppState,
+    scope: Scope,
+    filter: &TicketFilter,
+) -> AppResult<Paginated<TicketSummary>> {
+    let statuses = requested_statuses(filter.status.as_deref());
+    let search = filter
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|q| !q.is_empty())
+        .map(|q| format!("%{q}%"));
+    let condition = "($1::uuid IS NULL OR t.user_id = $1) AND t.status = ANY($2)
+        AND ($3::text IS NULL OR t.subject ILIKE $3 OR u.email::text ILIKE $3
+             OR t.number::text = trim(both '%' from $3))";
+
+    let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
+        "SELECT count(*) FROM tickets t JOIN users u ON u.id = t.user_id WHERE {condition}"
+    )))
+    .bind(scope.owner())
+    .bind(&statuses)
+    .bind(&search)
+    .fetch_one(&state.db)
+    .await?;
+
+    let tickets = sqlx::query_as(AssertSqlSafe(format!(
+        "{SUMMARY_SELECT} WHERE {condition} ORDER BY t.last_reply_at DESC LIMIT $4 OFFSET $5"
+    )))
+    .bind(scope.owner())
+    .bind(&statuses)
+    .bind(&search)
+    .bind(filter.page.per_page())
+    .bind(filter.page.offset())
+    .fetch_all(&state.db)
+    .await?;
+
+    Ok(Paginated::new(tickets, total, &filter.page))
+}
+
+async fn add_message(
+    state: &AppState,
+    ticket_id: Uuid,
+    author: Uuid,
+    is_staff: bool,
+    body: String,
+) -> AppResult<()> {
+    let next_status = if is_staff { "answered" } else { "open" };
+    let mut transaction = state.db.begin().await?;
+    sqlx::query(
+        "INSERT INTO ticket_messages (id, ticket_id, author_user_id, is_staff, body_html) VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(ticket_id)
+    .bind(author)
+    .bind(is_staff)
+    .bind(body)
+    .execute(&mut *transaction)
+    .await?;
+    sqlx::query("UPDATE tickets SET status = $2, last_reply_at = now() WHERE id = $1")
+        .bind(ticket_id)
+        .bind(next_status)
+        .execute(&mut *transaction)
+        .await?;
+    transaction.commit().await?;
+    Ok(())
 }
 
 pub async fn departments(
@@ -155,37 +247,7 @@ pub async fn index(
     user: CurrentUser,
     Query(filter): Query<TicketFilter>,
 ) -> AppResult<Json<Paginated<TicketSummary>>> {
-    let statuses = requested_statuses(filter.status.as_deref());
-    let search = filter
-        .q
-        .as_deref()
-        .map(str::trim)
-        .filter(|q| !q.is_empty())
-        .map(|q| format!("%{q}%"));
-    let condition = "t.user_id = $1 AND t.status = ANY($2)
-        AND ($3::text IS NULL OR t.subject ILIKE $3 OR t.number::text = trim(both '%' from $3))";
-
-    let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
-        "SELECT count(*) FROM tickets t WHERE {condition}"
-    )))
-    .bind(user.id)
-    .bind(&statuses)
-    .bind(&search)
-    .fetch_one(&state.db)
-    .await?;
-
-    let tickets = sqlx::query_as(AssertSqlSafe(format!(
-        "{SUMMARY_SELECT} WHERE {condition} ORDER BY t.last_reply_at DESC LIMIT $4 OFFSET $5"
-    )))
-    .bind(user.id)
-    .bind(&statuses)
-    .bind(&search)
-    .bind(filter.page.per_page())
-    .bind(filter.page.offset())
-    .fetch_all(&state.db)
-    .await?;
-
-    Ok(Json(Paginated::new(tickets, total, &filter.page)))
+    Ok(Json(list(&state, Scope::Customer(user.id), &filter).await?))
 }
 
 pub async fn create(
@@ -253,7 +315,7 @@ pub async fn create(
 
     Ok((
         StatusCode::CREATED,
-        Json(load_detail(&state, user.id, number).await?),
+        Json(load_detail(&state, Scope::Customer(user.id), number).await?),
     ))
 }
 
@@ -262,7 +324,9 @@ pub async fn show(
     user: CurrentUser,
     Path(number): Path<i64>,
 ) -> AppResult<Json<TicketDetail>> {
-    Ok(Json(load_detail(&state, user.id, number).await?))
+    Ok(Json(
+        load_detail(&state, Scope::Customer(user.id), number).await?,
+    ))
 }
 
 pub async fn reply(
@@ -271,24 +335,17 @@ pub async fn reply(
     Path(number): Path<i64>,
     Json(input): Json<CreateReply>,
 ) -> AppResult<Json<TicketDetail>> {
-    let ticket = load_summary(&state, user.id, number).await?;
-    let body = clean_body(&input.body_html)?;
-
-    let mut transaction = state.db.begin().await?;
-    sqlx::query("INSERT INTO ticket_messages (id, ticket_id, author_user_id, is_staff, body_html) VALUES ($1, $2, $3, FALSE, $4)")
-        .bind(Uuid::new_v4())
-        .bind(ticket.id)
-        .bind(user.id)
-        .bind(body)
-        .execute(&mut *transaction)
-        .await?;
-    sqlx::query("UPDATE tickets SET status = 'open', last_reply_at = now() WHERE id = $1")
-        .bind(ticket.id)
-        .execute(&mut *transaction)
-        .await?;
-    transaction.commit().await?;
-
-    Ok(Json(load_detail(&state, user.id, number).await?))
+    let scope = Scope::Customer(user.id);
+    let ticket = load_summary(&state, scope, number).await?;
+    add_message(
+        &state,
+        ticket.id,
+        user.id,
+        false,
+        clean_body(&input.body_html)?,
+    )
+    .await?;
+    Ok(Json(load_detail(&state, scope, number).await?))
 }
 
 pub async fn close(
@@ -296,12 +353,65 @@ pub async fn close(
     user: CurrentUser,
     Path(number): Path<i64>,
 ) -> AppResult<Json<TicketDetail>> {
-    let ticket = load_summary(&state, user.id, number).await?;
+    let scope = Scope::Customer(user.id);
+    let ticket = load_summary(&state, scope, number).await?;
     sqlx::query("UPDATE tickets SET status = 'closed' WHERE id = $1")
         .bind(ticket.id)
         .execute(&state.db)
         .await?;
-    Ok(Json(load_detail(&state, user.id, number).await?))
+    Ok(Json(load_detail(&state, scope, number).await?))
+}
+
+pub async fn staff_index(
+    State(state): State<AppState>,
+    _admin: CurrentAdmin,
+    Query(filter): Query<TicketFilter>,
+) -> AppResult<Json<Paginated<TicketSummary>>> {
+    Ok(Json(list(&state, Scope::Staff, &filter).await?))
+}
+
+pub async fn staff_show(
+    State(state): State<AppState>,
+    _admin: CurrentAdmin,
+    Path(number): Path<i64>,
+) -> AppResult<Json<TicketDetail>> {
+    Ok(Json(load_detail(&state, Scope::Staff, number).await?))
+}
+
+pub async fn staff_reply(
+    State(state): State<AppState>,
+    admin: CurrentAdmin,
+    Path(number): Path<i64>,
+    Json(input): Json<CreateReply>,
+) -> AppResult<Json<TicketDetail>> {
+    let ticket = load_summary(&state, Scope::Staff, number).await?;
+    add_message(
+        &state,
+        ticket.id,
+        admin.id,
+        true,
+        clean_body(&input.body_html)?,
+    )
+    .await?;
+    Ok(Json(load_detail(&state, Scope::Staff, number).await?))
+}
+
+pub async fn staff_update_status(
+    State(state): State<AppState>,
+    _admin: CurrentAdmin,
+    Path(number): Path<i64>,
+    Json(input): Json<UpdateStatus>,
+) -> AppResult<Json<TicketDetail>> {
+    if !STATUSES.contains(&input.status.as_str()) {
+        return Err(AppError::field("status", "Onbekende status."));
+    }
+    let ticket = load_summary(&state, Scope::Staff, number).await?;
+    sqlx::query("UPDATE tickets SET status = $2 WHERE id = $1")
+        .bind(ticket.id)
+        .bind(&input.status)
+        .execute(&state.db)
+        .await?;
+    Ok(Json(load_detail(&state, Scope::Staff, number).await?))
 }
 
 #[cfg(test)]

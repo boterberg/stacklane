@@ -11,6 +11,7 @@ import { NavList } from './NavList'
 import { itemBase, itemIdle } from './navStyles'
 import { NotificationsPanel } from './NotificationsPanel'
 import { SearchPalette } from './SearchPalette'
+import { DemoBanner } from './DemoBanner'
 import { UserMenu } from './UserMenu'
 
 type SidebarProps = {
@@ -38,7 +39,7 @@ function Sidebar({ profile, onSearch, onNotifications, onNavigate }: SidebarProp
         <kbd className="font-sans text-xs text-zinc-400/75">Ctrl+K</kbd>
       </button>
       <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
-        <NavList onNavigate={onNavigate} />
+        <NavList isAdmin={profile.role === 'admin'} onNavigate={onNavigate} />
       </div>
       <div className="mt-4 space-y-4.5">
         <button type="button" onClick={onNotifications} className={cn(itemBase, itemIdle)}>
@@ -116,11 +117,12 @@ export function AppShell() {
 
       <main className="lg:py-2 lg:pr-2 lg:pl-64">
         <div className="min-h-[calc(100vh-3.5rem)] bg-white p-6 sm:p-8 lg:min-h-[calc(100vh-1rem)] lg:rounded-xl lg:border lg:border-zinc-200 dark:bg-zinc-800 lg:dark:border-zinc-700">
+          <DemoBanner profile={profile} />
           <Outlet />
         </div>
       </main>
 
-      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} isAdmin={profile.role === 'admin'} />
       <NotificationsPanel open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
     </div>
   )

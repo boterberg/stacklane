@@ -1,9 +1,9 @@
-/server/target
-/server/.env
+/target
+/.env
 /web/node_modules
 /web/dist
 /web/.env
-/site/node_modules
-/site/dist
+/docs/node_modules
+/docs/dist
+/docs/.vitepress/cache
 /.claude
-/site/.vitepress/cache

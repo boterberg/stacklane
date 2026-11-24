@@ -1,4 +1,4 @@
-import { CalendarIcon, HashtagIcon, InboxIcon, LockClosedIcon } from '@heroicons/react/24/outline'
+import { CalendarIcon, HashtagIcon, InboxIcon, LockClosedIcon, UserIcon } from '@heroicons/react/24/outline'
 import { useState, type FormEvent } from 'react'
 import { useParams } from 'react-router'
 
@@ -9,8 +9,8 @@ import { RichTextEditor } from '../../components/ui/RichTextEditor'
 import { ApiError } from '../../lib/api'
 import { cn } from '../../lib/cn'
 import { formatDate, formatRelative } from '../../lib/format'
-import { ticketStatusColors, ticketStatusLabels } from '../../lib/labels'
-import { useCloseTicket, useReplyToTicket, useTicket, type TicketDetail, type TicketMessage } from '../../lib/support'
+import { ticketStatusColors, ticketStatuses, ticketStatusLabels, type TicketStatus } from '../../lib/labels'
+import { useCloseTicket, useReplyToTicket, useTicket, useUpdateTicketStatus, type TicketDetail, type TicketMessage, type TicketScope } from '../../lib/support'
 
 function Message({ message }: { message: TicketMessage }) {
   return (
@@ -29,9 +29,9 @@ function Message({ message }: { message: TicketMessage }) {
   )
 }
 
-function ReplyForm({ ticket }: { ticket: TicketDetail }) {
+function ReplyForm({ ticket, scope }: { ticket: TicketDetail; scope: TicketScope }) {
   const [body, setBody] = useState('')
-  const reply = useReplyToTicket(ticket.number)
+  const reply = useReplyToTicket(scope, ticket.number)
   const error = reply.error instanceof ApiError ? reply.error.fieldErrors.body_html : undefined
 
   function submit(event: FormEvent) {
@@ -41,7 +41,9 @@ function ReplyForm({ ticket }: { ticket: TicketDetail }) {
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <h2 className="text-sm font-medium text-zinc-800 dark:text-white">{ticket.status === 'closed' ? 'Ticket heropenen met een reactie' : 'Reageren'}</h2>
+      <h2 className="text-sm font-medium text-zinc-800 dark:text-white">
+        {scope === 'staff' ? 'Reageren als support' : ticket.status === 'closed' ? 'Ticket heropenen met een reactie' : 'Reageren'}
+      </h2>
       <RichTextEditor value={body} onChange={setBody} invalid={!!error} minHeight="min-h-40" />
       {error && <p className="text-sm font-medium text-red-500 dark:text-red-400">{error}</p>}
       <div className="flex justify-end">
@@ -53,10 +55,30 @@ function ReplyForm({ ticket }: { ticket: TicketDetail }) {
   )
 }
 
-export function TicketDetailPage() {
+function StatusSelect({ ticket }: { ticket: TicketDetail }) {
+  const update = useUpdateTicketStatus(ticket.number)
+  return (
+    <select
+      aria-label="Status"
+      value={ticket.status}
+      disabled={update.isPending}
+      onChange={(event) => update.mutate(event.target.value as TicketStatus)}
+      className="h-8 rounded-md border border-zinc-200 border-b-zinc-300/80 bg-white px-3 text-sm text-zinc-700 shadow-xs dark:border-white/10 dark:bg-white/10 dark:text-zinc-200"
+    >
+      {ticketStatuses.map((status) => (
+        <option key={status} value={status}>
+          {ticketStatusLabels[status]}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+export function TicketDetailPage({ scope = 'customer' }: { scope?: TicketScope }) {
   const { number = '' } = useParams()
-  const { data: ticket, isPending, error } = useTicket(number)
+  const { data: ticket, isPending, error } = useTicket(scope, number)
   const close = useCloseTicket(Number(number))
+  const backTo = scope === 'staff' ? '/admin/tickets' : '/support/tickets'
 
   if (isPending) return null
   if (error || !ticket) {
@@ -65,7 +87,7 @@ export function TicketDetailPage() {
         title="Ticket niet gevonden"
         description="Dit ticket bestaat niet of hoort niet bij je account."
         action={
-          <ButtonLink to="/support/tickets" size="sm">
+          <ButtonLink to={backTo} size="sm">
             Naar tickets
           </ButtonLink>
         }
@@ -86,6 +108,12 @@ export function TicketDetailPage() {
               <HashtagIcon className="size-4 text-zinc-400 dark:text-white/40" aria-hidden />
               {ticket.number}
             </span>
+            {scope === 'staff' && (
+              <span className="flex items-center gap-2">
+                <UserIcon className="size-4 text-zinc-400 dark:text-white/40" aria-hidden />
+                {ticket.customer_name} · {ticket.customer_email}
+              </span>
+            )}
             <span className="flex items-center gap-2">
               <InboxIcon className="size-4 text-zinc-400 dark:text-white/40" aria-hidden />
               {ticket.department}
@@ -96,10 +124,14 @@ export function TicketDetailPage() {
             </span>
           </div>
         </div>
-        {ticket.status !== 'closed' && (
-          <Button size="sm" icon={LockClosedIcon} disabled={close.isPending} onClick={() => close.mutate(undefined)}>
-            Ticket sluiten
-          </Button>
+        {scope === 'staff' ? (
+          <StatusSelect ticket={ticket} />
+        ) : (
+          ticket.status !== 'closed' && (
+            <Button size="sm" icon={LockClosedIcon} disabled={close.isPending} onClick={() => close.mutate(undefined)}>
+              Ticket sluiten
+            </Button>
+          )
         )}
       </div>
 
@@ -108,7 +140,7 @@ export function TicketDetailPage() {
           <Message key={message.id} message={message} />
         ))}
         <div className="pt-4">
-          <ReplyForm ticket={ticket} />
+          <ReplyForm ticket={ticket} scope={scope} />
         </div>
       </div>
     </>

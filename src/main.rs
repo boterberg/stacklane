@@ -1,5 +1,6 @@
 mod auth;
 mod config;
+mod demo;
 mod error;
 mod html;
 mod pagination;
@@ -37,10 +38,23 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("running migrations")?;
 
+    if std::env::args().nth(1).as_deref() == Some("demo-reset") {
+        demo::ensure_demo_mode(config.demo_mode)?;
+        return demo::reset(&pool).await;
+    }
+
     let state = AppState {
         db: pool,
         config: Arc::new(config),
     };
+    if state.config.demo_mode {
+        let users: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
+            .fetch_one(&state.db)
+            .await?;
+        if users == 0 {
+            demo::reset(&state.db).await?;
+        }
+    }
     let app = routes::router(state.clone()).layer(TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind(&state.config.bind_addr).await?;

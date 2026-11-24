@@ -1,7 +1,7 @@
 mod auth;
 mod dashboard;
 mod health;
-mod me;
+pub mod me;
 mod notifications;
 mod support;
 
@@ -11,6 +11,7 @@ use axum::{Json, Router};
 use serde_json::json;
 use tower_http::services::{ServeDir, ServeFile};
 
+use crate::demo;
 use crate::state::AppState;
 
 pub fn router(state: AppState) -> Router {
@@ -31,6 +32,18 @@ pub fn router(state: AppState) -> Router {
         .route("/support/tickets/{number}", get(support::show))
         .route("/support/tickets/{number}/replies", post(support::reply))
         .route("/support/tickets/{number}/close", post(support::close))
+        .route("/admin/tickets", get(support::staff_index))
+        .route("/admin/tickets/{number}", get(support::staff_show))
+        .route(
+            "/admin/tickets/{number}/replies",
+            post(support::staff_reply),
+        )
+        .route(
+            "/admin/tickets/{number}/status",
+            patch(support::staff_update_status),
+        )
+        .route("/meta", get(demo::meta))
+        .route("/demo/login", post(demo::login))
         .route("/{*rest}", any(api_not_found));
 
     let router = Router::new()

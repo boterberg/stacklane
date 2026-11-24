@@ -3,14 +3,16 @@ import { MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 
-import { flatNavigation, type NavLink } from '../../app/navigation'
+import { flatNavigationFor, type NavLink } from '../../app/navigation'
 
 type SearchPaletteProps = {
   open: boolean
   onClose: () => void
+  isAdmin: boolean
 }
 
-export function SearchPalette({ open, onClose }: SearchPaletteProps) {
+export function SearchPalette({ open, onClose, isAdmin }: SearchPaletteProps) {
+  const flatNavigation = flatNavigationFor(isAdmin)
   const [query, setQuery] = useState('')
   const navigate = useNavigate()
   const normalized = query.trim().toLowerCase()

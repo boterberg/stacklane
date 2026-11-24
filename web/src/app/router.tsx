@@ -38,6 +38,8 @@ export const router = createBrowserRouter([
       { path: '/', element: <DashboardPage /> },
       { path: '/support/tickets', element: <TicketsPage /> },
       { path: '/support/tickets/:number', element: <TicketDetailPage /> },
+      { path: '/admin/tickets', element: <TicketsPage scope="staff" /> },
+      { path: '/admin/tickets/:number', element: <TicketDetailPage scope="staff" /> },
       ...sections.map(([path, title]) => ({ path, element: <SectionPage title={title} /> })),
       { path: '*', element: <NotFoundPage /> },
     ],

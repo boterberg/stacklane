@@ -2,7 +2,7 @@ import { ArrowTopRightOnSquareIcon, ChevronDownIcon, ChevronRightIcon } from '@h
 import { useState } from 'react'
 import { NavLink as RouterNavLink, useLocation } from 'react-router'
 
-import { isGroup, navigation, type NavGroup, type NavLink } from '../../app/navigation'
+import { isGroup, navigationFor, type NavGroup, type NavLink } from '../../app/navigation'
 import { cn } from '../../lib/cn'
 import { itemActive, itemBase, itemIdle } from './navStyles'
 
@@ -55,10 +55,10 @@ function GroupItem({ group, onNavigate }: { group: NavGroup; onNavigate?: () => 
   )
 }
 
-export function NavList({ onNavigate }: { onNavigate?: () => void }) {
+export function NavList({ isAdmin, onNavigate }: { isAdmin: boolean; onNavigate?: () => void }) {
   return (
     <nav className="space-y-0.5">
-      {navigation.map((entry) =>
+      {navigationFor(isAdmin).map((entry) =>
         isGroup(entry) ? <GroupItem key={entry.label} group={entry} onNavigate={onNavigate} /> : <LeafItem key={entry.label} item={entry} onNavigate={onNavigate} />,
       )}
     </nav>

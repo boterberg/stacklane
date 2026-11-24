@@ -13,6 +13,8 @@ import {
   ArchiveBoxIcon,
   WindowIcon,
   GlobeEuropeAfricaIcon,
+  InboxStackIcon,
+  WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline'
 import type { ComponentType, SVGProps } from 'react'
 
@@ -78,4 +80,16 @@ export const navigation: NavEntry[] = [
   },
 ]
 
-export const flatNavigation: NavLink[] = navigation.flatMap((entry) => (isGroup(entry) ? entry.children : [entry]))
+export const adminNavigation: NavGroup = {
+  label: 'Beheer',
+  icon: WrenchScrewdriverIcon,
+  children: [{ label: 'Alle tickets', to: '/admin/tickets', icon: InboxStackIcon }],
+}
+
+export function navigationFor(isAdmin: boolean): NavEntry[] {
+  return isAdmin ? [...navigation, adminNavigation] : navigation
+}
+
+export function flatNavigationFor(isAdmin: boolean): NavLink[] {
+  return navigationFor(isAdmin).flatMap((entry) => (isGroup(entry) ? entry.children : [entry]))
+}

@@ -2,8 +2,8 @@
 set -e
 
 if [ "$1" = "remove" ]; then
-  systemctl stop stacklane.service >/dev/null 2>&1 || true
-  systemctl disable stacklane.service >/dev/null 2>&1 || true
+  systemctl stop stacklane-demo-reset.timer stacklane.service >/dev/null 2>&1 || true
+  systemctl disable stacklane-demo-reset.timer stacklane.service >/dev/null 2>&1 || true
 fi
 
 exit 0
