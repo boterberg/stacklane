@@ -1267,3 +1267,27 @@ async fn a_domain_on_one_hosting_package_cannot_be_ordered_again(db: PgPool) {
         order.body
     );
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn an_order_left_without_an_invoice_expires(db: PgPool) {
+    let client = Client::new(db);
+    let (user, _) = client.register("orphan@example.test").await;
+    let subscription = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO subscriptions (id, code, user_id, status, billing_interval, started_at, expires_at)
+         VALUES ($1, 'ORPHAN1', $2, 'pending', 'monthly', now() - interval '2 days', now())",
+    )
+    .bind(subscription)
+    .bind(user)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    crate::renewals::run_once(&client.state).await.unwrap();
+    let status: String = sqlx::query_scalar("SELECT status FROM subscriptions WHERE id = $1")
+        .bind(subscription)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(status, "expired");
+}
