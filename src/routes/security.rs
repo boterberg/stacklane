@@ -58,6 +58,9 @@ pub(super) async fn check_password(
     if user.via_api_token {
         return Err(AppError::Forbidden);
     }
+    state
+        .limits
+        .check(&crate::limits::REAUTH, &user.id.to_string())?;
     let hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1")
         .bind(user.id)
         .fetch_one(&state.db)
