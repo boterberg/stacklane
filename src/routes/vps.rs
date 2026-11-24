@@ -281,7 +281,17 @@ pub async fn create_snapshot(
     Json(input): Json<NewSnapshot>,
 ) -> AppResult<StatusCode> {
     actor.require("snapshots.create")?;
-    let machine = machine(&state, actor.owner, id).await?;
+    let key = format!("snapshots {id}");
+    crate::locks::exclusive(&state, key, take_snapshot(&state, &actor, id, input)).await
+}
+
+async fn take_snapshot(
+    state: &AppState,
+    actor: &VpsActor,
+    id: Uuid,
+    input: NewSnapshot,
+) -> AppResult<StatusCode> {
+    let machine = machine(state, actor.owner, id).await?;
     if machine.snapshots().await.map_err(failed)?.len() >= MAX_SNAPSHOTS {
         return Err(AppError::field(
             "description",

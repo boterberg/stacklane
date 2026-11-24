@@ -336,27 +336,41 @@ pub async fn mount(
         ));
     }
     let iso: Option<(String, String)> = sqlx::query_as(
-        "SELECT external_id, firmware FROM vps_isos
-         WHERE id = $1 AND user_id = $2 AND integration_id = $3 AND status = 'ready' AND mounted_on IS NULL",
+        "UPDATE vps_isos SET mounted_on = $4, last_used_at = now()
+         WHERE id = $1 AND user_id = $2 AND integration_id = $3 AND status = 'ready' AND mounted_on IS NULL
+         RETURNING external_id, firmware",
     )
     .bind(input.iso_id)
     .bind(actor.owner)
     .bind(integration_id)
+    .bind(id)
     .fetch_optional(&state.db)
-    .await?;
+    .await
+    .map_err(|error| match error {
+        sqlx::Error::Database(ref database) if database.is_unique_violation() => {
+            AppError::field("iso_id", "Koppel eerst de huidige ISO los.")
+        }
+        error => error.into(),
+    })?;
     let Some((external_id, firmware)) = iso else {
         return Err(AppError::field("iso_id", "Kies een ISO die klaar is."));
     };
-    store(&state, integration_id)
-        .await?
-        .mount(&server, &external_id, firmware == "uefi")
-        .await
-        .map_err(|error| AppError::upstream("iso_id", error))?;
-    sqlx::query("UPDATE vps_isos SET mounted_on = $2, last_used_at = now() WHERE id = $1")
-        .bind(input.iso_id)
-        .bind(id)
-        .execute(&state.db)
-        .await?;
+    let mounted = async {
+        store(&state, integration_id)
+            .await?
+            .mount(&server, &external_id, firmware == "uefi")
+            .await
+            .map_err(|error| AppError::upstream("iso_id", error))
+    }
+    .await;
+    if let Err(error) = mounted {
+        sqlx::query("UPDATE vps_isos SET mounted_on = NULL WHERE id = $1 AND mounted_on = $2")
+            .bind(input.iso_id)
+            .bind(id)
+            .execute(&state.db)
+            .await?;
+        return Err(error);
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
