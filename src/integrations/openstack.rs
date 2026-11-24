@@ -442,6 +442,20 @@ impl OpenStack {
         })
     }
 
+    pub async fn suspend(&self, id: &str) -> anyhow::Result<()> {
+        if self.status(id).await?.state == "running" {
+            self.power(id, "stop").await?;
+        }
+        Ok(())
+    }
+
+    pub async fn unsuspend(&self, id: &str) -> anyhow::Result<()> {
+        if self.status(id).await?.state != "running" {
+            self.power(id, "start").await?;
+        }
+        Ok(())
+    }
+
     pub async fn power(&self, id: &str, action: &str) -> anyhow::Result<()> {
         let body = match action {
             "start" => json!({ "os-start": null }),

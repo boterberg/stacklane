@@ -154,3 +154,38 @@ impl Client {
 }
 
 pub const PASSWORD: &str = "Dummy-pass-12345";
+
+pub type Calls = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
+
+pub async fn fake_api(respond: fn(&str, &str, &str) -> (u16, Value)) -> (String, Calls) {
+    let calls: Calls = Calls::default();
+    let recorded = calls.clone();
+    let app = Router::new().fallback(move |request: axum::extract::Request| {
+        let recorded = recorded.clone();
+        async move {
+            let method = request.method().to_string();
+            let path = request
+                .uri()
+                .path_and_query()
+                .map(|value| value.to_string())
+                .unwrap_or_default();
+            let bytes = axum::body::to_bytes(request.into_body(), 1 << 20)
+                .await
+                .unwrap_or_default();
+            let body = String::from_utf8_lossy(&bytes).into_owned();
+            recorded
+                .lock()
+                .unwrap()
+                .push(format!("{method} {path} {body}").trim_end().to_owned());
+            let (status, value) = respond(&method, &path, &body);
+            (
+                StatusCode::from_u16(status).unwrap_or(StatusCode::OK),
+                axum::Json(value),
+            )
+        }
+    });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await });
+    (base, calls)
+}
