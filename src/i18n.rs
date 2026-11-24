@@ -170,6 +170,24 @@ fn english(message: &str) -> Option<&'static str> {
         }
         "Dit is geen geldige publieke SSH-sleutel." => "This is not a valid public SSH key.",
         "Deze sleutel heb je al toegevoegd." => "You already added this key.",
+        "Vul de gebruikersnaam en een inlogsleutel van DirectAdmin in." => {
+            "Enter the DirectAdmin username and a login key."
+        }
+        "Vul een API-sleutel van Plesk in." => "Enter a Plesk API key.",
+        "Vul het IP-adres in waarop nieuwe websites komen." => {
+            "Enter the IP address new websites are placed on."
+        }
+        "Op dit moment kun je gameserver-, VPS- en webhostingproducten aanmaken." => {
+            "Right now you can create game server, VPS and web hosting products."
+        }
+        "Kies een koppeling met DirectAdmin of Plesk." => {
+            "Choose an integration with DirectAdmin or Plesk."
+        }
+        "Kies een hostingpakket." => "Choose a hosting package.",
+        "Dit webhostingpakket is nog niet klaar." => "This web hosting package is not ready yet.",
+        "Vul de domeinnaam van je website in, zoals jouwbedrijf.nl." => {
+            "Enter your website's domain name, such as yourcompany.com."
+        }
         "Vul het token-ID (gebruiker@realm!naam) en het geheim in." => {
             "Enter the token ID (user@realm!name) and the secret."
         }

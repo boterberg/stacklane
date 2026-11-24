@@ -7,7 +7,7 @@ import type { ServiceStatus } from './gameservers'
 
 export type Integration = {
   id: string
-  kind: 'pterodactyl' | 'proxmox' | 'openstack' | 'virtfusion'
+  kind: 'pterodactyl' | 'proxmox' | 'openstack' | 'virtfusion' | 'directadmin' | 'plesk'
   name: string
   base_url: string
   last_checked_at: string | null
@@ -16,8 +16,9 @@ export type Integration = {
 }
 
 export type Catalog = {
-  locations: Array<{ id: number; name: string }>
-  nests: Array<{ id: number; name: string; eggs: Array<{ id: number; name: string }> }>
+  locations?: Array<{ id: number; name: string }>
+  nests?: Array<{ id: number; name: string; eggs: Array<{ id: number; name: string }> }>
+  plans?: Array<{ id: string; name: string }>
 }
 
 export type Product = {
@@ -30,7 +31,7 @@ export type Product = {
   is_active: boolean
   integration_id: string | null
   integration_name: string | null
-  provisioning: { memory?: number; disk?: number; cpu?: number; egg_id?: number; location_id?: number }
+  provisioning: { memory?: number; disk?: number; cpu?: number; egg_id?: number; location_id?: number; plan?: string }
   service_count: number
 }
 

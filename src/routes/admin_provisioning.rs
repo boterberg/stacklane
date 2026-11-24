@@ -10,7 +10,9 @@ use uuid::Uuid;
 
 use crate::auth::CurrentAdmin;
 use crate::error::{AppError, AppResult};
-use crate::integrations::{self, IntegrationSummary, KINDS, proxmox, pterodactyl};
+use crate::integrations::{
+    self, IntegrationSummary, KINDS, directadmin, plesk, proxmox, pterodactyl, webhosting,
+};
 use crate::services;
 use crate::state::AppState;
 
@@ -126,7 +128,10 @@ pub async fn create_integration(
     let mut errors = BTreeMap::new();
     if !KINDS.contains(&input.kind.as_str()) {
         errors.insert("kind", "Kies een type.".to_owned());
-    } else if !matches!(input.kind.as_str(), "pterodactyl" | "proxmox") {
+    } else if !matches!(
+        input.kind.as_str(),
+        "pterodactyl" | "proxmox" | "directadmin" | "plesk"
+    ) {
         errors.insert(
             "kind",
             "Deze koppeling komt in een volgende versie.".to_owned(),
@@ -154,6 +159,14 @@ pub async fn create_integration(
             .is_ok_and(|credentials| {
                 credentials.token_id.contains('!') && !credentials.token_secret.trim().is_empty()
             }),
+        "directadmin" => serde_json::from_value::<directadmin::Credentials>(
+            input.credentials.clone(),
+        )
+        .is_ok_and(|credentials| {
+            !credentials.username.trim().is_empty() && !credentials.login_key.is_empty()
+        }),
+        "plesk" => serde_json::from_value::<plesk::Credentials>(input.credentials.clone())
+            .is_ok_and(|credentials| !credentials.api_key.trim().is_empty()),
         _ => true,
     };
     if !credentials_ok {
@@ -161,6 +174,8 @@ pub async fn create_integration(
             "credentials",
             match input.kind.as_str() {
                 "proxmox" => "Vul het token-ID (gebruiker@realm!naam) en het geheim in.",
+                "directadmin" => "Vul de gebruikersnaam en een inlogsleutel van DirectAdmin in.",
+                "plesk" => "Vul een API-sleutel van Plesk in.",
                 _ => "Vul de application- en de client-API-sleutel in.",
             }
             .to_owned(),
@@ -181,6 +196,18 @@ pub async fn create_integration(
                 Value::Null
             }
         }
+    } else if matches!(input.kind.as_str(), "directadmin" | "plesk") {
+        let ip = input.settings["ip"]
+            .as_str()
+            .map(str::trim)
+            .unwrap_or_default();
+        if ip.parse::<std::net::IpAddr>().is_err() {
+            errors.insert(
+                "settings",
+                "Vul het IP-adres in waarop nieuwe websites komen.".to_owned(),
+            );
+        }
+        json!({ "ip": ip })
     } else {
         json!({})
     };
@@ -260,6 +287,11 @@ pub async fn catalog(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Value>> {
     let driver = integrations::driver(&state, id).await?;
+    if let Some(hosting) = webhosting::Hosting::from_driver(&driver) {
+        return Ok(Json(hosting.plans().await.map_err(|error| {
+            AppError::field("integration", format!("{error:#}"))
+        })?));
+    }
     let catalog = driver
         .pterodactyl()?
         .catalog()
@@ -301,10 +333,10 @@ pub async fn create_product(
             "De prijs kan niet negatief zijn.".to_owned(),
         );
     }
-    if !matches!(input.kind.as_str(), "gameserver" | "vps") {
+    if !matches!(input.kind.as_str(), "gameserver" | "vps" | "webhosting") {
         errors.insert(
             "kind",
-            "Op dit moment kun je gameserver- en VPS-producten aanmaken.".to_owned(),
+            "Op dit moment kun je gameserver-, VPS- en webhostingproducten aanmaken.".to_owned(),
         );
     }
     if input.integration_id.is_none() {
@@ -313,7 +345,34 @@ pub async fn create_product(
             "Kies op welke koppeling de servers komen.".to_owned(),
         );
     }
+    let integration_kind: Option<String> = match input.integration_id {
+        Some(id) => {
+            sqlx::query_scalar("SELECT kind FROM integrations WHERE id = $1")
+                .bind(id)
+                .fetch_optional(&state.db)
+                .await?
+        }
+        None => None,
+    };
     let specs = match input.kind.as_str() {
+        "webhosting" => {
+            let plan = input.provisioning["plan"]
+                .as_str()
+                .map(str::trim)
+                .unwrap_or_default();
+            if !matches!(integration_kind.as_deref(), Some("directadmin" | "plesk")) {
+                errors.insert(
+                    "integration_id",
+                    "Kies een koppeling met DirectAdmin of Plesk.".to_owned(),
+                );
+                Value::Null
+            } else if plan.is_empty() {
+                errors.insert("provisioning", "Kies een hostingpakket.".to_owned());
+                Value::Null
+            } else {
+                json!({ "plan": plan })
+            }
+        }
         "vps" => match serde_json::from_value::<proxmox::ProductConfig>(input.provisioning.clone())
         {
             Ok(config) if config.cores >= 1 && config.memory_mb >= 256 && config.disk_gb >= 5 => {

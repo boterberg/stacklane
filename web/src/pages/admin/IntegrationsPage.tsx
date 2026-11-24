@@ -16,6 +16,8 @@ const kindLabels: Record<string, string> = {
   proxmox: 'Proxmox VE',
   openstack: 'OpenStack',
   virtfusion: 'VirtFusion',
+  directadmin: 'DirectAdmin',
+  plesk: 'Plesk',
 }
 
 const emptyForm = {
@@ -36,6 +38,9 @@ const emptyForm = {
   dns: '1.1.1.1',
   verify_tls: false,
   images: '9000 Debian 13',
+  wh_username: '',
+  wh_secret: '',
+  wh_ip: '',
 }
 
 function parseImages(text: string) {
@@ -55,6 +60,18 @@ type IntegrationInput = {
 }
 
 function payload(form: typeof emptyForm): IntegrationInput {
+  if (form.kind === 'directadmin') {
+    return {
+      kind: form.kind,
+      name: form.name,
+      base_url: form.base_url,
+      credentials: { username: form.wh_username.trim(), login_key: form.wh_secret.trim() },
+      settings: { ip: form.wh_ip.trim() },
+    }
+  }
+  if (form.kind === 'plesk') {
+    return { kind: form.kind, name: form.name, base_url: form.base_url, credentials: { api_key: form.wh_secret.trim() }, settings: { ip: form.wh_ip.trim() } }
+  }
   if (form.kind === 'proxmox') {
     return {
       kind: form.kind,
@@ -132,6 +149,8 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
             <Select id={id} value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value })}>
               <option value="pterodactyl">{t('Pterodactyl (gameservers)')}</option>
               <option value="proxmox">{t('Proxmox VE (VPS)')}</option>
+              <option value="directadmin">{t('DirectAdmin (webhosting)')}</option>
+              <option value="plesk">{t('Plesk (webhosting)')}</option>
               <option value="openstack" disabled>
                 {t('{name}, komt eraan', { name: 'OpenStack' })}
               </option>
@@ -146,10 +165,32 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
         </Field>
         <Field label={t('Adres van het panel')} error={errors.base_url}>
           {(id) => (
-            <Input id={id} placeholder={t('https://panel.jouwbedrijf.nl')} value={form.base_url} invalid={!!errors.base_url} onChange={(event) => setForm({ ...form, base_url: event.target.value })} />
+            <Input id={id} placeholder={form.kind === 'directadmin' ? 'https://server.jouwbedrijf.nl:2222' : form.kind === 'plesk' ? 'https://server.jouwbedrijf.nl:8443' : t('https://panel.jouwbedrijf.nl')} value={form.base_url} invalid={!!errors.base_url} onChange={(event) => setForm({ ...form, base_url: event.target.value })} />
           )}
         </Field>
-        {form.kind === 'proxmox' ? (
+        {form.kind === 'directadmin' || form.kind === 'plesk' ? (
+          <>
+            {form.kind === 'directadmin' && (
+              <Field label={t('Gebruikersnaam')} description={t('Een beheerder of reseller in DirectAdmin.')} error={errors.credentials}>
+                {(id) => <Input id={id} autoComplete="off" placeholder="admin" value={form.wh_username} onChange={(event) => setForm({ ...form, wh_username: event.target.value })} />}
+              </Field>
+            )}
+            <Field
+              label={form.kind === 'directadmin' ? t('Inlogsleutel') : t('API-sleutel')}
+              description={
+                form.kind === 'directadmin'
+                  ? t('Login Keys in DirectAdmin. Sta CMD_API_ACCOUNT_USER, CMD_API_SELECT_USERS, CMD_API_PACKAGES_USER en CMD_API_LOGIN_KEYS toe.')
+                  : t('Maak er een aan met plesk bin secret_key -c.')
+              }
+              error={form.kind === 'plesk' ? errors.credentials : undefined}
+            >
+              {(id) => <Input id={id} type="password" autoComplete="off" value={form.wh_secret} onChange={(event) => setForm({ ...form, wh_secret: event.target.value })} />}
+            </Field>
+            <Field label={t('IP-adres voor websites')} description={t('Het gedeelde IP-adres waarop nieuwe websites komen.')} error={errors.settings}>
+              {(id) => <Input id={id} placeholder="203.0.113.20" value={form.wh_ip} onChange={(event) => setForm({ ...form, wh_ip: event.target.value })} />}
+            </Field>
+          </>
+        ) : form.kind === 'proxmox' ? (
           <>
             <Field label={t('API-token')} description={t('Datacenter → Permissions → API Tokens, in de vorm gebruiker@realm!naam.')} error={errors.credentials}>
               {(id) => <Input id={id} autoComplete="off" placeholder="stacklane@pve!panel" value={form.token_id} onChange={(event) => setForm({ ...form, token_id: event.target.value })} />}
