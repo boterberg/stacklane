@@ -726,6 +726,7 @@ export const en: Record<string, string> = {
   "Vervaldatum: {date}": "Due date: {date}",
   "Verwijderen": "Delete",
   "Vet": "Bold",
+  "Via een firewall": "Through a firewall",
   "Via {panel} beheer je je bestanden, e-mailadressen, databases en SSL-certificaten.": "In {panel} you manage your files, email addresses, databases and SSL certificates.",
   "VirtFusion (VPS)": "VirtFusion (VPS)",
   "Voeg een extensie toe, zoals .nl of .com, om domeinen te verkopen.": "Add an extension, such as .nl or .com, to sell domains.",

@@ -1,4 +1,4 @@
-import { ArrowPathIcon, ArrowTopRightOnSquareIcon, CameraIcon, EyeIcon, GlobeAltIcon, PlayIcon, PlusIcon, PowerIcon, ServerIcon, StopIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, ArrowTopRightOnSquareIcon, CameraIcon, EyeIcon, GlobeAltIcon, PlayIcon, PowerIcon, ServerIcon, StopIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { useState } from 'react'
 import { useParams } from 'react-router'
 
@@ -7,7 +7,7 @@ import { Button, ButtonLink } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { Field, Input, Select } from '../../components/ui/Field'
+import { Field, Input } from '../../components/ui/Field'
 import { Tabs } from '../../components/ui/Tabs'
 import { ApiError } from '../../lib/api'
 import { formatBytes, formatDate, formatDuration } from '../../lib/format'
@@ -27,11 +27,12 @@ import {
   useSnapshots,
   useVpsServer,
   type Features,
-  type FirewallRule,
   type LiveStatus,
   type Snapshot,
   type VpsServer,
 } from '../../lib/vps'
+import { isManaged } from '../../lib/firewall'
+import { RuleForm, RuleList } from './FirewallRules'
 
 type Tab = 'overview' | 'snapshots' | 'firewall'
 
@@ -164,94 +165,22 @@ function Snapshots({ server }: { server: VpsServer }) {
   )
 }
 
-const emptyRule: { type: 'in' | 'out'; action: string; proto: string; dport: string; source: string; comment: string } = {
-  type: 'in',
-  action: 'ACCEPT',
-  proto: 'tcp',
-  dport: '',
-  source: '',
-  comment: '',
-}
-
 function Firewall({ server }: { server: VpsServer }) {
   const { data: rules, isPending } = useFirewall(server.id, true)
   const add = useAddFirewallRule(server.id)
   const remove = useDeleteFirewallRule(server.id)
-  const [rule, setRule] = useState(emptyRule)
   const errors = add.error instanceof ApiError ? add.error.fieldErrors : {}
 
   return (
     <div className="max-w-4xl space-y-6">
       <Card title={t('Regel toevoegen')} description={t('Zonder regels is al het verkeer toegestaan. Regels gelden van boven naar beneden.')}>
-        <form
-          noValidate
-          className="grid gap-4 sm:grid-cols-3"
-          onSubmit={(event) => {
-            event.preventDefault()
-            add.mutate(rule, { onSuccess: () => setRule(emptyRule) })
-          }}
-        >
-          <Field label={t('Richting')}>
-            {(id) => (
-              <Select id={id} value={rule.type} onChange={(event) => setRule({ ...rule, type: event.target.value as 'in' | 'out' })}>
-                <option value="in">{t('Inkomend')}</option>
-                <option value="out">{t('Uitgaand')}</option>
-              </Select>
-            )}
-          </Field>
-          <Field label={t('Actie')} error={errors.action}>
-            {(id) => (
-              <Select id={id} value={rule.action} onChange={(event) => setRule({ ...rule, action: event.target.value })}>
-                <option value="ACCEPT">{t('Toestaan')}</option>
-                <option value="DROP">{t('Blokkeren')}</option>
-              </Select>
-            )}
-          </Field>
-          <Field label={t('Protocol')} error={errors.proto}>
-            {(id) => (
-              <Select id={id} value={rule.proto} onChange={(event) => setRule({ ...rule, proto: event.target.value })}>
-                <option value="tcp">TCP</option>
-                <option value="udp">UDP</option>
-                <option value="icmp">ICMP</option>
-              </Select>
-            )}
-          </Field>
-          <Field label={t('Poort')} error={errors.dport}>
-            {(id) => <Input id={id} placeholder="22" invalid={!!errors.dport} value={rule.dport} onChange={(event) => setRule({ ...rule, dport: event.target.value })} />}
-          </Field>
-          <Field label={t('Vanaf IP-adres')} error={errors.source}>
-            {(id) => <Input id={id} placeholder={t('Iedereen')} invalid={!!errors.source} value={rule.source} onChange={(event) => setRule({ ...rule, source: event.target.value })} />}
-          </Field>
-          <Field label={t('Notitie')}>{(id) => <Input id={id} value={rule.comment} onChange={(event) => setRule({ ...rule, comment: event.target.value })} />}</Field>
-          <div className="flex justify-end sm:col-span-3">
-            <Button type="submit" variant="primary" icon={PlusIcon} disabled={add.isPending}>
-              {t('Regel toevoegen')}
-            </Button>
-          </div>
-        </form>
+        <RuleForm pending={add.isPending} errors={errors} onAdd={(rule, done) => add.mutate(rule, { onSuccess: done })} />
         {errors.server && <p className="mt-3 text-sm font-medium text-red-500 dark:text-red-400">{errors.server}</p>}
       </Card>
       {!isPending && (rules ?? []).length === 0 ? (
         <EmptyState title={t('Geen regels')} description={t('Al het verkeer naar deze server is toegestaan.')} />
       ) : (
-        <ul className="divide-y divide-zinc-200 rounded-xl border border-zinc-200 bg-white dark:divide-white/10 dark:border-white/10 dark:bg-white/10">
-          {(rules ?? []).map((item: FirewallRule) => (
-            <li key={item.id} className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 text-sm">
-              <div className="flex flex-wrap items-center gap-3">
-                <Badge color={item.action === 'ACCEPT' ? 'green' : 'red'}>{item.action === 'ACCEPT' ? t('Toestaan') : t('Blokkeren')}</Badge>
-                <span className="text-zinc-800 dark:text-white">
-                  {item.type === 'in' ? t('Inkomend') : t('Uitgaand')} · {(item.proto ?? t('alles')).toUpperCase()}
-                  {item.dport ? ` · ${t('poort {port}', { port: item.dport })}` : ''}
-                </span>
-                <span className="text-zinc-500 dark:text-white/60">{item.source ? t('vanaf {source}', { source: item.source }) : t('vanaf iedereen')}</span>
-                {item.comment && <span className="text-zinc-400 dark:text-white/50">{item.comment}</span>}
-              </div>
-              <Button size="sm" icon={TrashIcon} disabled={remove.isPending} onClick={() => remove.mutate(item.id)}>
-                {t('Verwijderen')}
-              </Button>
-            </li>
-          ))}
-        </ul>
+        <RuleList rules={rules ?? []} pending={remove.isPending} canDelete={(rule) => !isManaged(rule)} onDelete={(rule) => remove.mutate(rule.id)} />
       )}
     </div>
   )
