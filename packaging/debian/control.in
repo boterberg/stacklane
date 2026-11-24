@@ -1,0 +1,14 @@
+Package: stacklane
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: Stacklane <hello@stacklane.io>
+Installed-Size: @SIZE@
+Depends: libc6 (>= 2.36), adduser, systemd
+Recommends: postgresql (>= 15), caddy
+Section: web
+Priority: optional
+Homepage: https://stacklane.io
+Description: Customer panel for hosting companies
+ Stacklane gives hosting customers one panel for game servers, VPS,
+ domains, web hosting, support and billing. The package contains the
+ server, the web panel and the website.

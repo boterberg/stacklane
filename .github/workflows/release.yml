@@ -1,0 +1,64 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container: rust:1-bookworm
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: version
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::tag must look like v0.0.0.0"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: web
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm audit --omit=dev --audit-level=high
+          npm run build
+      - name: site
+        working-directory: site
+        env:
+          STACKLANE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: server
+        working-directory: server
+        env:
+          STACKLANE_VERSION: ${{ steps.version.outputs.version }}
+        run: cargo build --release --locked
+      - name: package
+        run: |
+          sh packaging/build-deb.sh --version "${{ steps.version.outputs.version }}" \
+            --bin server/target/release/stacklane-server --web web/dist --site site/dist --out dist
+          cd dist && sha256sum *.deb > SHA256SUMS && cat SHA256SUMS
+      - name: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends gh
+          gh release create "$GITHUB_REF_NAME" dist/*.deb dist/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --title "Stacklane $GITHUB_REF_NAME" --generate-notes

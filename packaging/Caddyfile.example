@@ -1,0 +1,10 @@
+panel.example.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8080
+}
+
+example.com {
+	encode zstd gzip
+	root * /usr/share/stacklane/site
+	file_server
+}
