@@ -25,6 +25,11 @@ pub const AREAS: &[Area] = &[
         admin_only: false,
     },
     Area {
+        key: "webhosting",
+        paths: &["/webhosting"],
+        admin_only: false,
+    },
+    Area {
         key: "billing",
         paths: &["/billing", "/shop", "/orders"],
         admin_only: false,

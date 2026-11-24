@@ -139,6 +139,7 @@ export function usePlaceOrder() {
     mutationFn: (input: NewOrder) => api<{ invoice_id: number; subscription_code: string; service_id: string }>('/orders', { method: 'POST', body: input }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vps'] })
+      queryClient.invalidateQueries({ queryKey: ['webhosting'] })
       queryClient.invalidateQueries({ queryKey: ['billing'] })
     },
   })

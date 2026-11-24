@@ -18,6 +18,9 @@ import { GameServerPage } from '../pages/gameservers/GameServerPage'
 import { OrderServerPage } from '../pages/vps/OrderServerPage'
 import { VpsServerPage } from '../pages/vps/ServerPage'
 import { VpsServersPage } from '../pages/vps/ServersPage'
+import { OrderWebhostingPage } from '../pages/webhosting/OrderWebhostingPage'
+import { WebhostingPage } from '../pages/webhosting/WebhostingPage'
+import { WebsitePage } from '../pages/webhosting/WebsitePage'
 import { SshKeysPage } from '../pages/vps/SshKeysPage'
 import { GameServersPage } from '../pages/gameservers/GameServersPage'
 import { AccountPage } from '../pages/account/AccountPage'
@@ -34,7 +37,6 @@ const sections: Array<[string, string]> = [
   ['/gameservers/backups', 'Back-ups'],
   ['/domains', 'Domeinen'],
   ['/domains/whois-profiles', 'WHOIS-profielen'],
-  ['/webhosting', 'Webhosting'],
 ]
 
 export const router = createBrowserRouter([
@@ -60,6 +62,9 @@ export const router = createBrowserRouter([
       { path: '/gameservers/servers', element: <GameServersPage /> },
       { path: '/gameservers/servers/:id', element: <GameServerPage /> },
       { path: '/vps', element: <Navigate to="/vps/servers" replace /> },
+      { path: '/webhosting', element: <WebhostingPage /> },
+      { path: '/webhosting/order', element: <OrderWebhostingPage /> },
+      { path: '/webhosting/:id', element: <WebsitePage /> },
       { path: '/vps/servers', element: <VpsServersPage /> },
       { path: '/vps/servers/order', element: <OrderServerPage /> },
       { path: '/vps/servers/:id', element: <VpsServerPage /> },

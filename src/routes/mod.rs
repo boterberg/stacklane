@@ -18,6 +18,7 @@ mod support;
 mod system;
 mod two_factor;
 mod vps;
+mod webhosting;
 
 use axum::http::StatusCode;
 use axum::routing::{any, delete, get, patch, post, put};
@@ -68,6 +69,9 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/shop/products", get(shop::products))
         .route("/orders", post(shop::place))
+        .route("/webhosting", get(webhosting::index))
+        .route("/webhosting/{id}", get(webhosting::show))
+        .route("/webhosting/{id}/panel", post(webhosting::panel_login))
         .route("/ssh-keys", get(ssh_keys::index).post(ssh_keys::create))
         .route("/ssh-keys/{id}", delete(ssh_keys::destroy))
         .route("/account/password", put(security::change_password))
