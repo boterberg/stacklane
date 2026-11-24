@@ -9,7 +9,7 @@ import { useDemoLogin, useMeta, type DemoRole } from '../../lib/meta'
 import { AuthFooter, AuthHeading, TextLink } from './AuthLayout'
 import { t } from '../../lib/i18n'
 
-type LoginInput = { email: string; password: string; remember: boolean }
+type LoginInput = { email: string; password: string; remember: boolean; code?: string }
 
 export function LoginPage() {
   const [form, setForm] = useState<LoginInput>({ email: '', password: '', remember: false })
@@ -19,6 +19,8 @@ export function LoginPage() {
   const errors = login.error instanceof ApiError ? login.error.fieldErrors : {}
   const { data: meta } = useMeta()
   const demoLogin = useDemoLogin()
+  const [needsCode, setNeedsCode] = useState(false)
+  const [code, setCode] = useState('')
 
   function enterDemo(role: DemoRole) {
     demoLogin.mutate(role, { onSuccess: () => navigate(role === 'admin' ? '/admin/tickets' : '/', { replace: true }) })
@@ -26,7 +28,46 @@ export function LoginPage() {
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    login.mutate(form, { onSuccess: () => navigate((location.state as { from?: string } | null)?.from ?? '/', { replace: true }) })
+    login.mutate(needsCode ? { ...form, code } : form, {
+      onSuccess: () => navigate((location.state as { from?: string } | null)?.from ?? '/', { replace: true }),
+      onError: (error) => {
+        if (!needsCode && error instanceof ApiError && error.fieldErrors.code) {
+          setNeedsCode(true)
+          login.reset()
+        }
+      },
+    })
+  }
+
+  if (needsCode) {
+    return (
+      <>
+        <AuthHeading>{t('Tweestapsverificatie')}</AuthHeading>
+        <form onSubmit={submit} className="space-y-6" noValidate>
+          <Field label={t('Code')} description={t('Open je authenticator-app en vul de code van zes cijfers in. Telefoon kwijt? Gebruik een van je herstelcodes.')} error={errors.code}>
+            {(id) => (
+              <Input id={id} autoFocus inputMode="numeric" autoComplete="one-time-code" invalid={!!errors.code} value={code} onChange={(event) => setCode(event.target.value)} />
+            )}
+          </Field>
+          <Button type="submit" variant="primary" className="w-full" disabled={login.isPending || !code.trim()}>
+            {t('Inloggen')}
+          </Button>
+        </form>
+        <AuthFooter>
+          <button
+            type="button"
+            className="font-medium text-zinc-800 underline-offset-4 hover:underline dark:text-white"
+            onClick={() => {
+              setNeedsCode(false)
+              setCode('')
+              login.reset()
+            }}
+          >
+            {t('Terug')}
+          </button>
+        </AuthFooter>
+      </>
+    )
   }
 
   return (
