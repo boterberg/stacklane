@@ -23,6 +23,12 @@ mod state;
 mod updates;
 mod vat;
 
+#[cfg(test)]
+mod testing;
+
+#[cfg(test)]
+mod regressions;
+
 use anyhow::Context;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;

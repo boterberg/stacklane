@@ -29,7 +29,7 @@ pub fn base32(bytes: &[u8]) -> String {
     out
 }
 
-fn code_at(secret: &[u8], counter: u64) -> u32 {
+pub(crate) fn code_at(secret: &[u8], counter: u64) -> u32 {
     let mut mac = Hmac::<Sha1>::new_from_slice(secret).expect("hmac accepts any key length");
     mac.update(&counter.to_be_bytes());
     let digest = mac.finalize().into_bytes();

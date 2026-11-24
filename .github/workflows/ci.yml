@@ -16,6 +16,22 @@ jobs:
   server:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: stacklane
+          POSTGRES_PASSWORD: stacklane
+          POSTGRES_DB: stacklane
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stacklane"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://stacklane:stacklane@127.0.0.1:5432/stacklane
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -27,7 +43,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets -- -D warnings
-      - run: cargo test --locked
+      - run: cargo test --locked -- --include-ignored
 
   web:
     runs-on: ubuntu-latest
