@@ -372,18 +372,23 @@ impl OpenStack {
             .context("OpenStack gaf geen security group terug")?
             .to_owned();
         for ethertype in ["IPv4", "IPv6"] {
-            self.call(
-                Service::Network,
-                Method::POST,
-                "/v2.0/security-group-rules",
-                Some(json!({ "security_group_rule": {
-                    "security_group_id": id,
-                    "direction": "ingress",
-                    "ethertype": ethertype,
-                    "description": "Stacklane: alles toestaan",
-                } })),
-            )
-            .await?;
+            let rule = self
+                .call(
+                    Service::Network,
+                    Method::POST,
+                    "/v2.0/security-group-rules",
+                    Some(json!({ "security_group_rule": {
+                        "security_group_id": id,
+                        "direction": "ingress",
+                        "ethertype": ethertype,
+                        "description": "Stacklane: alles toestaan",
+                    } })),
+                )
+                .await;
+            if let Err(error) = rule {
+                self.delete_security_group(&id).await.ok();
+                return Err(error);
+            }
         }
         Ok(id)
     }
@@ -487,13 +492,20 @@ impl OpenStack {
     }
 
     async fn delete_security_group(&self, group: &str) -> anyhow::Result<()> {
-        self.call(
-            Service::Network,
-            Method::DELETE,
-            &format!("/v2.0/security-groups/{group}"),
-            None,
-        )
-        .await?;
+        let (status, body) = self
+            .send(
+                Service::Network,
+                Method::DELETE,
+                &format!("/v2.0/security-groups/{group}"),
+                None,
+            )
+            .await?;
+        if !status.is_success() && status != StatusCode::NOT_FOUND {
+            bail!(
+                "OpenStack antwoordde {status}: {}",
+                error_message(&body).unwrap_or_else(|| "onbekende fout".to_owned())
+            );
+        }
         Ok(())
     }
 
@@ -705,7 +717,7 @@ impl OpenStack {
     }
 
     pub async fn destroy(&self, id: &str) -> anyhow::Result<()> {
-        let groups = self.security_groups(id).await.unwrap_or_default();
+        let groups = self.security_groups(id).await?;
         let (status, body) = self
             .send(
                 Service::Compute,
@@ -734,10 +746,22 @@ impl OpenStack {
             }
             tokio::time::sleep(Duration::from_secs(2)).await;
         }
-        for group in groups {
-            let _ = self.delete_security_group(&group).await;
-        }
         let mut left = Vec::new();
+        for group in groups {
+            let mut deleted = false;
+            for attempt in 0..5 {
+                if attempt > 0 {
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+                }
+                if self.delete_security_group(&group).await.is_ok() {
+                    deleted = true;
+                    break;
+                }
+            }
+            if !deleted {
+                left.push(group);
+            }
+        }
         for snapshot in self.snapshots(id).await? {
             let (status, _) = self
                 .send(
