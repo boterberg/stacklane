@@ -20,4 +20,4 @@ The accounts it creates:
 
 Both get a random password; the demo buttons on the login page are the only way in.
 
-`Caddyfile` in this folder is the configuration for demo.stacklane.io and stacklane.io.
+`Caddyfile` in this folder is the live configuration for stacklane.io (website and package repository) and demo.stacklane.io. The website is deployed on its own with `deploy/site/deploy.sh`, so it can change without a new release.

@@ -1,11 +1,24 @@
 stacklane.io {
 	encode zstd gzip
-	root * /usr/share/stacklane/site
-	try_files {path} {path}.html {path}/index.html
-	@assets path /assets/*
-	header @assets Cache-Control "public, max-age=31536000, immutable"
-	file_server
+	handle /apt/upload {
+		request_body {
+			max_size 200MB
+		}
+		reverse_proxy 127.0.0.1:8091
+	}
+	handle_path /apt/* {
+		root * /srv/stacklane-apt/public
+		file_server
+	}
+	handle {
+		root * /srv/stacklane-site
+		try_files {path} {path}.html {path}/index.html
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
 	handle_errors 404 {
+		root * /srv/stacklane-site
 		rewrite * /404.html
 		file_server
 	}
