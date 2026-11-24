@@ -39,7 +39,7 @@ Zet OSS aan zodra je over de EU-drempel van € 10.000 per jaar aan particuliere
 
 ### Btw-overzicht
 
-Onder **Beheer → Btw-overzicht** zie je per kwartaal de omzet en btw per regeling, land en tarief, op factuurdatum. Geannuleerde facturen tellen niet mee. De regels met OSS neem je over in je OSS-aangifte; met **CSV downloaden** krijg je hetzelfde overzicht als bestand.
+Onder **Beheer → Btw-overzicht** zie je per kwartaal de omzet en btw per regeling, land en tarief, op factuurdatum. Geannuleerde facturen tellen niet mee. Met **CSV downloaden** krijg je het hele overzicht als bestand. **OSS-aangifte downloaden** geeft alleen de OSS-regels, per land van verbruik en tarief, met de maatstaf van heffing en de btw: precies wat je per land invult in de OSS-aangifte in Mijn Belastingdienst Zakelijk.
 
 De tarieven komen uit een vaste lijst met de standaardtarieven van alle EU-landen (stand 2026). Hosting valt overal onder het standaardtarief.
 
