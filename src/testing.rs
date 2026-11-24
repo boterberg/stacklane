@@ -76,10 +76,13 @@ impl Client {
         body: Option<Value>,
         headers: &[(&str, &str)],
     ) -> Reply {
-        let mut request = Request::builder()
-            .method(method)
-            .uri(format!("/api{path}"))
-            .header(header::ORIGIN, "http://panel.test");
+        let mut request = Request::builder().method(method).uri(format!("/api{path}"));
+        if !headers
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case("origin"))
+        {
+            request = request.header(header::ORIGIN, "http://panel.test");
+        }
         if let Some(cookie) = cookie {
             request = request.header(header::COOKIE, cookie);
         }

@@ -4,6 +4,7 @@ use sqlx::PgPool;
 
 use crate::auth;
 use crate::testing::{Client, PASSWORD};
+use tower::ServiceExt;
 
 async fn verification_token(client: &Client, user: uuid::Uuid, email: &str) -> String {
     let token = hex::encode(rand::random::<[u8; 32]>());
@@ -680,4 +681,49 @@ async fn billing_runs_never_overlap(db: PgPool) {
         .unwrap();
     let run = crate::renewals::run_once(&client.state).await.unwrap();
     assert_eq!(run.invoices + run.suspended + run.ended + run.expired, 0);
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_foreign_site_cannot_post_with_the_session_cookie(db: PgPool) {
+    let client = Client::new(db);
+    let (_, cookie) = client.register("csrf@example.test").await;
+    let foreign = client
+        .send_with(
+            Method::POST,
+            "/auth/logout",
+            Some(&cookie),
+            None,
+            &[("origin", "https://evil.panel.test")],
+        )
+        .await;
+    assert_eq!(foreign.status, StatusCode::FORBIDDEN);
+    let me = client.send(Method::GET, "/me", Some(&cookie), None).await;
+    assert_eq!(me.status, StatusCode::OK);
+    let own = client
+        .send(Method::POST, "/auth/logout", Some(&cookie), None)
+        .await;
+    assert_eq!(own.status, StatusCode::NO_CONTENT);
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn pages_cannot_be_framed(db: PgPool) {
+    let client = Client::new(db);
+    let response = client
+        .app
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .uri("/api/meta")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let csp = response.headers()["content-security-policy"]
+        .to_str()
+        .unwrap();
+    assert!(csp.contains("frame-ancestors 'none'"));
+    assert_eq!(response.headers()["x-frame-options"], "DENY");
 }

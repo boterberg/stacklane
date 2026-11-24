@@ -227,8 +227,106 @@ pub fn router(state: AppState) -> Router {
             state.clone(),
             demo_guard,
         ))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            same_origin,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            security_headers,
+        ))
         .layer(axum::middleware::from_fn(crate::i18n::middleware))
         .with_state(state)
+}
+
+fn origin_of(url: &str) -> Option<String> {
+    let parsed = url::Url::parse(url).ok()?;
+    Some(parsed.origin().ascii_serialization())
+}
+
+fn cross_site(state: &AppState, request: &axum::extract::Request) -> bool {
+    use axum::http::{Method, header};
+    if matches!(
+        *request.method(),
+        Method::GET | Method::HEAD | Method::OPTIONS
+    ) || request.uri().path().starts_with("/api/webhooks/")
+        || request.headers().contains_key(header::AUTHORIZATION)
+    {
+        return false;
+    }
+    let has_session = request
+        .headers()
+        .get_all(header::COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .any(|value| value.contains("stacklane_session="));
+    if !has_session {
+        return false;
+    }
+    let Some(expected) = origin_of(&state.config.public_url) else {
+        return false;
+    };
+    let sent = request
+        .headers()
+        .get(header::ORIGIN)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
+        .or_else(|| {
+            request
+                .headers()
+                .get(header::REFERER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(origin_of)
+        });
+    sent.is_none_or(|sent| !sent.eq_ignore_ascii_case(&expected))
+}
+
+async fn same_origin(
+    State(state): State<AppState>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    if cross_site(&state, &request) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "message": crate::i18n::tr("Je hebt geen toegang tot dit onderdeel.") })),
+        )
+            .into_response();
+    }
+    next.run(request).await
+}
+
+async fn security_headers(
+    State(state): State<AppState>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::http::HeaderValue;
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+    for (name, value) in [
+        (
+            "content-security-policy",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+        ),
+        ("x-frame-options", "DENY"),
+        ("x-content-type-options", "nosniff"),
+        ("referrer-policy", "same-origin"),
+        (
+            "permissions-policy",
+            "camera=(), microphone=(), geolocation=(), payment=()",
+        ),
+    ] {
+        headers.insert(name, HeaderValue::from_static(value));
+    }
+    if state.config.public_url.starts_with("https://") {
+        headers.insert(
+            "strict-transport-security",
+            HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+        );
+    }
+    response
 }
 
 fn demo_allows(method: &axum::http::Method, path: &str) -> bool {
