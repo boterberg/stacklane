@@ -365,6 +365,7 @@ fn english(message: &str) -> Option<&'static str> {
         "Het is even te druk. Probeer het over een paar seconden opnieuw." => {
             "It is busy right now. Try again in a few seconds."
         }
+        "Gebruik hoogstens 100 tekens." => "Use at most 100 characters.",
         _ => return None,
     })
 }

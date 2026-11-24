@@ -66,6 +66,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/account/shared-access", get(vps_access::shared))
         .route("/account/shared-access/{owner}", delete(vps_access::leave))
+        .route(
+            "/account/shared-access/{owner}/accept",
+            post(vps_access::accept),
+        )
         .route("/vps/servers", get(vps::index))
         .route("/vps/snapshots", get(vps::all_snapshots))
         .route("/vps/isos", get(vps_isos::index).post(vps_isos::create))

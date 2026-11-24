@@ -1,4 +1,4 @@
-import { ArrowRightIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { ArrowRightIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 
@@ -10,11 +10,12 @@ import { DataTable } from '../../components/ui/ResourceList'
 import { currentVpsOwner } from '../../lib/api'
 import { formatDate } from '../../lib/format'
 import { t } from '../../lib/i18n'
-import { useLeaveEnvironment, useSharedEnvironments, useSwitchEnvironment, type SharedEnvironment } from '../../lib/vpsAccess'
+import { useAcceptInvitation, useLeaveEnvironment, useSharedEnvironments, useSwitchEnvironment, type SharedEnvironment } from '../../lib/vpsAccess'
 
 export function SharedAccessPage() {
   const { data, isPending } = useSharedEnvironments()
   const leave = useLeaveEnvironment()
+  const accept = useAcceptInvitation()
   const switchTo = useSwitchEnvironment()
   const navigate = useNavigate()
   const [confirm, setConfirm] = useState<SharedEnvironment | null>(null)
@@ -56,20 +57,30 @@ export function SharedAccessPage() {
               ),
             },
             { header: t('Rechten'), cell: (item) => item.permissions.length },
-            { header: t('Sinds'), cell: (item) => formatDate(item.created_at) },
+            { header: t('Sinds'), cell: (item) => (item.accepted ? formatDate(item.created_at) : t('Uitnodiging')) },
             {
               header: '',
               className: 'text-right',
-              cell: (item) => (
-                <div className="flex justify-end gap-2">
-                  <Button size="sm" icon={ArrowRightIcon} variant={active === item.owner_id ? 'primary' : undefined} onClick={() => open(item.owner_id)}>
-                    {active === item.owner_id ? t('Geopend') : t('Openen')}
-                  </Button>
-                  <Button size="sm" icon={XMarkIcon} onClick={() => setConfirm(item)}>
-                    {t('Toegang opgeven')}
-                  </Button>
-                </div>
-              ),
+              cell: (item) =>
+                item.accepted ? (
+                  <div className="flex justify-end gap-2">
+                    <Button size="sm" icon={ArrowRightIcon} variant={active === item.owner_id ? 'primary' : undefined} onClick={() => open(item.owner_id)}>
+                      {active === item.owner_id ? t('Geopend') : t('Openen')}
+                    </Button>
+                    <Button size="sm" icon={XMarkIcon} onClick={() => setConfirm(item)}>
+                      {t('Toegang opgeven')}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex justify-end gap-2">
+                    <Button size="sm" icon={CheckIcon} variant="primary" disabled={accept.isPending} onClick={() => accept.mutate(item.owner_id)}>
+                      {t('Accepteren')}
+                    </Button>
+                    <Button size="sm" icon={XMarkIcon} disabled={leave.isPending} onClick={() => leave.mutate(item.owner_id)}>
+                      {t('Weigeren')}
+                    </Button>
+                  </div>
+                ),
             },
           ]}
         />

@@ -40,6 +40,11 @@ pub const VERIFY: Rule = Rule {
     max: 20,
     window: Duration::from_secs(15 * 60),
 };
+pub const INVITE: Rule = Rule {
+    name: "invite",
+    max: 20,
+    window: Duration::from_secs(60 * 60),
+};
 pub const DOMAIN_SEARCH: Rule = Rule {
     name: "domain-search",
     max: 30,
@@ -82,6 +87,7 @@ fn window_of(name: &str) -> Duration {
         REGISTER,
         RECOVERY,
         VERIFY,
+        INVITE,
         DOMAIN_SEARCH,
     ]
     .into_iter()

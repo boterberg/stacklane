@@ -127,7 +127,9 @@ impl FromRequestParts<AppState> for VpsActor {
             });
         };
         let permissions: Vec<String> = sqlx::query_scalar(
-            "SELECT permissions FROM vps_members WHERE owner_id = $1 AND user_id = $2",
+            "SELECT m.permissions FROM vps_members m JOIN users o ON o.id = m.owner_id
+             WHERE m.owner_id = $1 AND m.user_id = $2 AND m.accepted_at IS NOT NULL
+               AND o.deleted_at IS NULL",
         )
         .bind(owner)
         .bind(user.id)
@@ -146,6 +148,7 @@ pub struct Member {
     id: Uuid,
     email: String,
     name: String,
+    accepted: bool,
     permissions: Vec<String>,
     #[serde(with = "time::serde::rfc3339")]
     created_at: OffsetDateTime,
@@ -156,6 +159,7 @@ pub struct Shared {
     owner_id: Uuid,
     email: String,
     name: String,
+    accepted: bool,
     permissions: Vec<String>,
     #[serde(with = "time::serde::rfc3339")]
     created_at: OffsetDateTime,
@@ -235,7 +239,9 @@ pub async fn index(State(state): State<AppState>, actor: VpsActor) -> AppResult<
     actor.require("access.users")?;
     Ok(Json(
         sqlx::query_as(sqlx::AssertSqlSafe(format!(
-            "SELECT m.id, u.email::text AS email, {NAME} AS name, m.permissions, m.created_at
+            "SELECT m.id, u.email::text AS email,
+                    CASE WHEN m.accepted_at IS NULL THEN u.email::text ELSE {NAME} END AS name,
+                    m.accepted_at IS NOT NULL AS accepted, m.permissions, m.created_at
              FROM vps_members m JOIN users u ON u.id = m.user_id
              WHERE m.owner_id = $1 ORDER BY m.created_at"
         )))
@@ -251,6 +257,9 @@ pub async fn create(
     Json(input): Json<NewMember>,
 ) -> AppResult<StatusCode> {
     actor.require("access.users")?;
+    state
+        .limits
+        .check(&crate::limits::INVITE, &actor.owner.to_string())?;
     let permissions = clean(&actor, input.permissions)?;
     let email = input.email.trim();
     if email.is_empty() {
@@ -295,22 +304,20 @@ pub async fn create(
     if inserted.rows_affected() == 0 {
         return Err(AppError::field("email", "Deze gebruiker heeft al toegang."));
     }
-    let owner: String = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-        "SELECT {NAME} FROM users u WHERE u.id = $1"
-    )))
-    .bind(actor.owner)
-    .fetch_one(&state.db)
-    .await?;
+    let owner: String = sqlx::query_scalar("SELECT email::text FROM users WHERE id = $1")
+        .bind(actor.owner)
+        .fetch_one(&state.db)
+        .await?;
     let _ = crate::renewals::notify(
         &state,
         user,
         (
-            "Je hebt toegang tot een VPS-omgeving".to_owned(),
-            format!("{owner} heeft je toegang gegeven tot zijn VPS-omgeving. Je vindt hem onder Gedeelde toegang."),
+            "Uitnodiging voor een VPS-omgeving".to_owned(),
+            format!("Het account {owner} nodigt je uit voor zijn VPS-omgeving. Onder Gedeelde toegang kun je de uitnodiging accepteren of weigeren."),
         ),
         (
-            "You have access to a VPS environment".to_owned(),
-            format!("{owner} gave you access to their VPS environment. You can find it under Shared access."),
+            "Invitation to a VPS environment".to_owned(),
+            format!("The account {owner} invited you to their VPS environment. Accept or decline it under Shared access."),
         ),
         "/account/shared-access",
     )
@@ -363,14 +370,37 @@ pub async fn shared(
 ) -> AppResult<Json<Vec<Shared>>> {
     Ok(Json(
         sqlx::query_as(sqlx::AssertSqlSafe(format!(
-            "SELECT m.owner_id, u.email::text AS email, {NAME} AS name, m.permissions, m.created_at
+            "SELECT m.owner_id, u.email::text AS email, {NAME} AS name,
+                    m.accepted_at IS NOT NULL AS accepted, m.permissions, m.created_at
              FROM vps_members m JOIN users u ON u.id = m.owner_id
-             WHERE m.user_id = $1 ORDER BY name"
+             WHERE m.user_id = $1 AND u.deleted_at IS NULL ORDER BY name"
         )))
         .bind(user.id)
         .fetch_all(&state.db)
         .await?,
     ))
+}
+
+pub async fn accept(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(owner): Path<Uuid>,
+) -> AppResult<StatusCode> {
+    if user.via_api_token {
+        return Err(AppError::Forbidden);
+    }
+    let accepted = sqlx::query(
+        "UPDATE vps_members SET accepted_at = now(), updated_at = now()
+         WHERE owner_id = $1 AND user_id = $2 AND accepted_at IS NULL",
+    )
+    .bind(owner)
+    .bind(user.id)
+    .execute(&state.db)
+    .await?;
+    if accepted.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn leave(

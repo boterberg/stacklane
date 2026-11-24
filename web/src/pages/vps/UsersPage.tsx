@@ -2,6 +2,7 @@ import { PencilSquareIcon, PlusIcon, ShareIcon, TrashIcon } from '@heroicons/rea
 import { useState, type FormEvent } from 'react'
 
 import { SlideOver } from '../../components/layout/SlideOver'
+import { Badge } from '../../components/ui/Badge'
 import { Button, ButtonLink } from '../../components/ui/Button'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -175,7 +176,10 @@ export function UsersPage() {
               header: t('Gebruiker'),
               cell: (member) => (
                 <div>
-                  <p className="font-medium text-zinc-800 dark:text-white">{member.name}</p>
+                  <p className="flex items-center gap-2 font-medium text-zinc-800 dark:text-white">
+                    {member.name}
+                    {!member.accepted && <Badge color="amber">{t('Uitgenodigd')}</Badge>}
+                  </p>
                   <p className="text-zinc-500 dark:text-white/60">{member.email}</p>
                 </div>
               ),

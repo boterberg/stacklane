@@ -744,3 +744,63 @@ async fn billing_runs_never_overlap(db: PgPool) {
     let run = crate::renewals::run_once(&client.state).await.unwrap();
     assert_eq!(run.invoices + run.suspended + run.ended + run.expired, 0);
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn shared_access_needs_consent_and_ends_with_the_owner(db: PgPool) {
+    let client = Client::new(db);
+    let (owner, owner_cookie) = client.register("vps-owner@example.test").await;
+    let (_, member_cookie) = client.register("vps-member@example.test").await;
+    let invited = client
+        .send(
+            Method::POST,
+            "/vps/members",
+            Some(&owner_cookie),
+            Some(json!({ "email": "vps-member@example.test", "permissions": ["servers.view"] })),
+        )
+        .await;
+    assert_eq!(invited.status, StatusCode::CREATED, "{}", invited.body);
+    let owner_header = owner.to_string();
+    let as_member = |cookie: String| {
+        let owner_header = owner_header.clone();
+        let client = &client;
+        async move {
+            client
+                .send_with(
+                    Method::GET,
+                    "/vps/access",
+                    Some(&cookie),
+                    None,
+                    &[("x-vps-owner", &owner_header)],
+                )
+                .await
+                .status
+        }
+    };
+    assert_eq!(
+        as_member(member_cookie.clone()).await,
+        StatusCode::FORBIDDEN
+    );
+
+    let accepted = client
+        .send(
+            Method::POST,
+            &format!("/account/shared-access/{owner}/accept"),
+            Some(&member_cookie),
+            None,
+        )
+        .await;
+    assert_eq!(accepted.status, StatusCode::NO_CONTENT);
+    assert_eq!(as_member(member_cookie.clone()).await, StatusCode::OK);
+
+    let deleted = client
+        .send(
+            Method::POST,
+            "/account/delete",
+            Some(&owner_cookie),
+            Some(json!({ "password": PASSWORD })),
+        )
+        .await;
+    assert_eq!(deleted.status, StatusCode::NO_CONTENT, "{}", deleted.body);
+    assert_eq!(as_member(member_cookie).await, StatusCode::FORBIDDEN);
+}

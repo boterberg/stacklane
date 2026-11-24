@@ -114,6 +114,15 @@ pub async fn update(
         return Err(AppError::field("country", "Kies een land."));
     }
     let company_name = tidy(input.company_name);
+    for (field, value) in [
+        ("first_name", Some(first_name)),
+        ("last_name", Some(input.last_name.as_str())),
+        ("company_name", company_name.as_deref()),
+    ] {
+        if value.is_some_and(|value| value.chars().count() > 100) {
+            return Err(AppError::field(field, "Gebruik hoogstens 100 tekens."));
+        }
+    }
     if input.is_business && company_name.is_none() {
         return Err(AppError::field(
             "company_name",
@@ -334,12 +343,17 @@ pub async fn destroy(
     .bind(user.id)
     .execute(&mut *transaction)
     .await?;
+    sqlx::query("DELETE FROM vps_members WHERE owner_id = $1 OR user_id = $1")
+        .bind(user.id)
+        .execute(&mut *transaction)
+        .await?;
     for table in [
         "sessions",
         "api_tokens",
         "notifications",
         "recovery_codes",
         "password_resets",
+        "email_verifications",
     ] {
         sqlx::query(sqlx::AssertSqlSafe(format!(
             "DELETE FROM {table} WHERE user_id = $1"

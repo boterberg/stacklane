@@ -3,8 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, currentVpsOwner, setVpsOwner } from './api'
 
 export type VpsAccess = { owner_id: string; is_owner: boolean; owner_name: string; permissions: string[] }
-export type Member = { id: string; email: string; name: string; permissions: string[]; created_at: string }
-export type SharedEnvironment = { owner_id: string; email: string; name: string; permissions: string[]; created_at: string }
+export type Member = { id: string; email: string; name: string; accepted: boolean; permissions: string[]; created_at: string }
+export type SharedEnvironment = { owner_id: string; email: string; name: string; accepted: boolean; permissions: string[]; created_at: string }
 
 export const permissionGroups: Array<{ id: string; label: string; rights: Array<[string, string]> }> = [
   {
@@ -153,6 +153,14 @@ export function useRemoveMember() {
 
 export function useSharedEnvironments() {
   return useQuery({ queryKey: ['shared-access'], queryFn: () => api<SharedEnvironment[]>('/account/shared-access') })
+}
+
+export function useAcceptInvitation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (owner: string) => api<void>(`/account/shared-access/${owner}/accept`, { method: 'POST' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shared-access'] }),
+  })
 }
 
 export function useLeaveEnvironment() {

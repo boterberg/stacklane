@@ -89,7 +89,7 @@ Stacklane weigert links naar privé-adressen, localhost en link-local adressen, 
 
 Een klant kan onder **VPS → Gebruikers** anderen toegang geven tot zijn VPS-omgeving, bijvoorbeeld een collega of een beheerder. Die persoon heeft een eigen Stacklane-account nodig; de klant vult het e-mailadres in en kiest de rechten. Er zijn 49 rechten in negen groepen, van *Servers → Start* tot *Firewalls → Regels verwijderen*.
 
-De gebruiker krijgt een melding en vindt de omgeving onder **Gedeelde toegang**. Met **Openen** werkt hij in de omgeving van de eigenaar; het menu toont dan alleen wat hij mag. Stacklane controleert elk recht op de server, niet alleen in het scherm.
+De gebruiker krijgt een uitnodiging en vindt die onder **Gedeelde toegang**. Pas als hij op **Accepteren** klikt, krijgt hij toegang en ziet de eigenaar zijn naam; tot dan staat hij als *Uitgenodigd* in de lijst. Met **Openen** werkt hij in de omgeving van de eigenaar; het menu toont dan alleen wat hij mag. Stacklane controleert elk recht op de server, niet alleen in het scherm.
 
 - Bestellen, betalen en het rootwachtwoord blijven bij de eigenaar.
 - Iemand met het recht *Gebruikers beheren* kan anderen alleen rechten geven die hij zelf heeft.
