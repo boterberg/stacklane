@@ -130,6 +130,11 @@ fn english(message: &str) -> Option<&'static str> {
         }
         "Er loopt al een update." => "An update is already running.",
         "Er is geen nieuwere versie." => "There is no newer version.",
+        "Vul de naam van je bedrijf in." => "Enter the name of your company.",
+        "Kies een btw-tarief tussen 0 en 100 procent." => {
+            "Choose a VAT rate between 0 and 100 percent."
+        }
+        "Gebruik een aantal dagen tussen 0 en 365." => "Use a number of days between 0 and 365.",
         _ => return None,
     })
 }

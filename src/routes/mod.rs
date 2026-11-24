@@ -1,4 +1,5 @@
 mod admin_provisioning;
+mod admin_settings;
 mod auth;
 mod billing;
 mod dashboard;
@@ -98,6 +99,10 @@ pub fn router(state: AppState) -> Router {
             post(admin_provisioning::service_action),
         )
         .route("/admin/customers", get(admin_provisioning::customers))
+        .route(
+            "/admin/settings",
+            get(admin_settings::show).put(admin_settings::update),
+        )
         .route(
             "/admin/system/update",
             get(system::show).post(system::start),

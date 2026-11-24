@@ -22,6 +22,7 @@ pub struct Meta {
     demo: bool,
     #[serde(with = "time::serde::rfc3339::option")]
     next_reset_at: Option<OffsetDateTime>,
+    company: Option<crate::settings::Company>,
 }
 
 #[derive(Deserialize)]
@@ -38,13 +39,15 @@ fn next_full_hour(now: OffsetDateTime) -> OffsetDateTime {
     truncated + Duration::hours(1)
 }
 
-pub async fn meta(State(state): State<AppState>) -> Json<Meta> {
+pub async fn meta(State(state): State<AppState>) -> AppResult<Json<Meta>> {
     let demo = state.config.demo_mode;
-    Json(Meta {
+    let company: crate::settings::Company = crate::settings::get(&state.db, "company").await?;
+    Ok(Json(Meta {
         version: VERSION,
         demo,
         next_reset_at: demo.then(|| next_full_hour(OffsetDateTime::now_utc())),
-    })
+        company: (!company.name.is_empty()).then_some(company),
+    }))
 }
 
 pub async fn login(
@@ -288,6 +291,21 @@ pub async fn reset(pool: &PgPool) -> anyhow::Result<()> {
     sqlx::query("ALTER SEQUENCE invoices_id_seq RESTART WITH 100001")
         .execute(&mut *seed.transaction)
         .await?;
+    sqlx::query(
+        "INSERT INTO settings (key, value) VALUES ('company', $1)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+    )
+    .bind(serde_json::json!({
+        "name": "Stacklane Demo B.V.",
+        "address": "Demostraat 1, 1234 AB Amsterdam",
+        "email": "support@demo.stacklane.io",
+        "website": "demo.stacklane.io",
+        "coc_number": "12345678",
+        "vat_number": "NL001234567B01",
+        "iban": "NL00 DEMO 0123 4567 89",
+    }))
+    .execute(&mut *seed.transaction)
+    .await?;
 
     let admin = seed
         .user(ADMIN_EMAIL, "Sam", "de Vries", "admin", None)

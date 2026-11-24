@@ -13,6 +13,7 @@ mod mail;
 mod pagination;
 mod routes;
 mod services;
+mod settings;
 mod state;
 mod updates;
 
