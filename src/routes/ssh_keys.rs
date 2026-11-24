@@ -8,8 +8,8 @@ use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::auth::CurrentUser;
 use crate::error::{AppError, AppResult};
+use crate::routes::vps_access::VpsActor;
 use crate::state::AppState;
 
 const KEY_TYPES: [&str; 6] = [
@@ -60,13 +60,11 @@ pub fn parse(public_key: &str) -> Option<(String, String)> {
     Some((normalized, fingerprint))
 }
 
-pub async fn index(
-    State(state): State<AppState>,
-    user: CurrentUser,
-) -> AppResult<Json<Vec<SshKey>>> {
+pub async fn index(State(state): State<AppState>, actor: VpsActor) -> AppResult<Json<Vec<SshKey>>> {
+    actor.require("ssh_keys.view")?;
     Ok(Json(
         sqlx::query_as("SELECT id, name, fingerprint, created_at FROM ssh_keys WHERE user_id = $1 ORDER BY created_at DESC")
-            .bind(user.id)
+            .bind(actor.owner)
             .fetch_all(&state.db)
             .await?,
     ))
@@ -74,9 +72,10 @@ pub async fn index(
 
 pub async fn create(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Json(input): Json<NewKey>,
 ) -> AppResult<(StatusCode, Json<SshKey>)> {
+    actor.require("ssh_keys.create")?;
     let name = input.name.trim();
     if name.is_empty() || name.chars().count() > 60 {
         return Err(AppError::field(
@@ -93,7 +92,7 @@ pub async fn create(
          RETURNING id, name, fingerprint, created_at",
     )
     .bind(Uuid::new_v4())
-    .bind(user.id)
+    .bind(actor.owner)
     .bind(name)
     .bind(public_key)
     .bind(fingerprint)
@@ -105,12 +104,13 @@ pub async fn create(
 
 pub async fn destroy(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
+    actor.require("ssh_keys.delete")?;
     let deleted = sqlx::query("DELETE FROM ssh_keys WHERE id = $1 AND user_id = $2")
         .bind(id)
-        .bind(user.id)
+        .bind(actor.owner)
         .execute(&state.db)
         .await?
         .rows_affected();

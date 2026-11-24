@@ -6,9 +6,9 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use super::vps::machine_of;
-use crate::auth::CurrentUser;
 use crate::error::{AppError, AppResult};
 use crate::integrations::{self, isos};
+use crate::routes::vps_access::VpsActor;
 use crate::state::AppState;
 
 pub const MAX_ISOS: i64 = 2;
@@ -81,18 +81,19 @@ async fn store(state: &AppState, integration_id: Uuid) -> AppResult<isos::IsoSto
         .ok_or_else(|| AppError::field("iso", "Dit platform kan geen ISO's gebruiken."))
 }
 
-pub async fn index(State(state): State<AppState>, user: CurrentUser) -> AppResult<Json<Overview>> {
+pub async fn index(State(state): State<AppState>, actor: VpsActor) -> AppResult<Json<Overview>> {
+    actor.require("isos.view")?;
     let isos: Vec<Iso> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "{SELECT} ORDER BY i.created_at"
     )))
-    .bind(user.id)
+    .bind(actor.owner)
     .fetch_all(&state.db)
     .await?;
     Ok(Json(Overview {
         used: i64::try_from(isos.len()).unwrap_or(i64::MAX),
         isos,
         limit: MAX_ISOS,
-        can_import: capable_server(&state, user.id).await?.is_some(),
+        can_import: capable_server(&state, actor.owner).await?.is_some(),
     }))
 }
 
@@ -132,9 +133,10 @@ async fn run_import(
 
 pub async fn create(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Json(input): Json<NewIso>,
 ) -> AppResult<(StatusCode, Json<Iso>)> {
+    actor.require("isos.import")?;
     let name = input.name.trim();
     if name.is_empty() || name.chars().count() > 60 {
         return Err(AppError::field(
@@ -149,7 +151,7 @@ pub async fn create(
         .await
         .map_err(|error| AppError::field("url", format!("{error:#}")))?;
     let used: i64 = sqlx::query_scalar("SELECT count(*) FROM vps_isos WHERE user_id = $1")
-        .bind(user.id)
+        .bind(actor.owner)
         .fetch_one(&state.db)
         .await?;
     if used >= MAX_ISOS {
@@ -158,7 +160,7 @@ pub async fn create(
             "Je hebt al 2 ISO's. Verwijder er eerst een.",
         ));
     }
-    let Some(server) = capable_server(&state, user.id).await? else {
+    let Some(server) = capable_server(&state, actor.owner).await? else {
         return Err(AppError::field(
             "name",
             "Je hebt minimaal één actieve VPS nodig voordat je ISO's kunt importeren.",
@@ -175,7 +177,7 @@ pub async fn create(
          VALUES ($1, $2, $3, $4, $5, $6, 'importing')",
     )
     .bind(id)
-    .bind(user.id)
+    .bind(actor.owner)
     .bind(integration_id)
     .bind(name)
     .bind(&url)
@@ -191,7 +193,7 @@ pub async fn create(
         input.firmware == "uefi",
     ));
     let iso = sqlx::query_as(sqlx::AssertSqlSafe(format!("{SELECT} AND i.id = $2")))
-        .bind(user.id)
+        .bind(actor.owner)
         .bind(id)
         .fetch_one(&state.db)
         .await?;
@@ -220,13 +222,14 @@ pub async fn remove(state: &AppState, id: Uuid) -> anyhow::Result<()> {
 
 pub async fn destroy(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
+    actor.require("isos.delete")?;
     let row: Option<(String, Option<Uuid>)> =
         sqlx::query_as("SELECT status, mounted_on FROM vps_isos WHERE id = $1 AND user_id = $2")
             .bind(id)
-            .bind(user.id)
+            .bind(actor.owner)
             .fetch_optional(&state.db)
             .await?;
     match row {
@@ -251,12 +254,8 @@ pub async fn destroy(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn server_context(
-    state: &AppState,
-    user: &CurrentUser,
-    id: Uuid,
-) -> AppResult<(Uuid, String)> {
-    machine_of(state, user.id, id).await?;
+async fn server_context(state: &AppState, actor: &VpsActor, id: Uuid) -> AppResult<(Uuid, String)> {
+    machine_of(state, actor.owner, id).await?;
     let (integration_id, external_id): (Option<Uuid>, Option<String>) =
         sqlx::query_as("SELECT integration_id, external_id FROM services WHERE id = $1")
             .bind(id)
@@ -270,14 +269,15 @@ async fn server_context(
 
 pub async fn server(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<ServerIso>> {
+    actor.require("isos.view")?;
     let integration_id: Option<Uuid> = sqlx::query_scalar(
         "SELECT integration_id FROM services WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
     )
     .bind(id)
-    .bind(user.id)
+    .bind(actor.owner)
     .fetch_optional(&state.db)
     .await?
     .flatten();
@@ -287,7 +287,7 @@ pub async fn server(
     let isos: Vec<Iso> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "{SELECT} AND i.integration_id = $2 ORDER BY i.created_at"
     )))
-    .bind(user.id)
+    .bind(actor.owner)
     .bind(integration_id)
     .fetch_all(&state.db)
     .await?;
@@ -304,11 +304,12 @@ pub async fn server(
 
 pub async fn mount(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
     Json(input): Json<Mount>,
 ) -> AppResult<StatusCode> {
-    let (integration_id, server) = server_context(&state, &user, id).await?;
+    actor.require("isos.mount")?;
+    let (integration_id, server) = server_context(&state, &actor, id).await?;
     let already: bool =
         sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM vps_isos WHERE mounted_on = $1)")
             .bind(id)
@@ -325,7 +326,7 @@ pub async fn mount(
          WHERE id = $1 AND user_id = $2 AND integration_id = $3 AND status = 'ready' AND mounted_on IS NULL",
     )
     .bind(input.iso_id)
-    .bind(user.id)
+    .bind(actor.owner)
     .bind(integration_id)
     .fetch_optional(&state.db)
     .await?;
@@ -347,10 +348,11 @@ pub async fn mount(
 
 pub async fn unmount(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
-    let (integration_id, server) = server_context(&state, &user, id).await?;
+    actor.require("isos.mount")?;
+    let (integration_id, server) = server_context(&state, &actor, id).await?;
     store(&state, integration_id)
         .await?
         .unmount(&server)

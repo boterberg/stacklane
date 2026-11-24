@@ -8,9 +8,9 @@ use uuid::Uuid;
 
 use super::shop::MAX_VOLUMES;
 use super::vps::machine_of;
-use crate::auth::CurrentUser;
 use crate::error::{AppError, AppResult};
 use crate::integrations::{self, volumes};
+use crate::routes::vps_access::VpsActor;
 use crate::state::AppState;
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -48,7 +48,8 @@ pub struct Attach {
     server_id: Uuid,
 }
 
-pub async fn index(State(state): State<AppState>, user: CurrentUser) -> AppResult<Json<Overview>> {
+pub async fn index(State(state): State<AppState>, actor: VpsActor) -> AppResult<Json<Overview>> {
+    actor.require("volumes.view")?;
     let volumes: Vec<Volume> = sqlx::query_as(
         "SELECT v.id, v.name, v.status, (v.details->>'size_gb')::int AS size_gb,
                 s.id AS server_id, s.name AS server_name, sub.code AS subscription_code,
@@ -59,7 +60,7 @@ pub async fn index(State(state): State<AppState>, user: CurrentUser) -> AppResul
          WHERE v.user_id = $1 AND v.kind = 'volume' AND v.status <> 'terminated'
          ORDER BY v.created_at",
     )
-    .bind(user.id)
+    .bind(actor.owner)
     .fetch_all(&state.db)
     .await?;
     let used = i64::try_from(volumes.len()).unwrap_or(i64::MAX);
@@ -72,8 +73,9 @@ pub async fn index(State(state): State<AppState>, user: CurrentUser) -> AppResul
 
 pub async fn options(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
 ) -> AppResult<Json<Vec<VolumeOption>>> {
+    actor.require_owner()?;
     let candidates: Vec<VolumeOption> = sqlx::query_as(
         "SELECT DISTINCT ON (s.id) s.id AS server_id, s.name AS server_name, p.id AS product_id,
                 p.monthly_price_cents AS price_per_gb_cents
@@ -82,12 +84,12 @@ pub async fn options(
          WHERE s.user_id = $1 AND s.kind = 'vps' AND s.status = 'active'
          ORDER BY s.id, p.monthly_price_cents",
     )
-    .bind(user.id)
+    .bind(actor.owner)
     .fetch_all(&state.db)
     .await?;
     let mut usable = Vec::new();
     for option in candidates {
-        if let Ok(machine) = machine_of(&state, user.id, option.server_id).await
+        if let Ok(machine) = machine_of(&state, actor.owner, option.server_id).await
             && machine.features().volumes
         {
             usable.push(option);
@@ -103,13 +105,13 @@ struct Owned {
     details: Value,
 }
 
-async fn owned(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<Owned> {
+async fn owned(state: &AppState, actor: &VpsActor, id: Uuid) -> AppResult<Owned> {
     let row: (Option<Uuid>, Option<String>, Value, String) = sqlx::query_as(
         "SELECT integration_id, external_id, details, status FROM services
          WHERE id = $1 AND user_id = $2 AND kind = 'volume' AND status <> 'terminated'",
     )
     .bind(id)
-    .bind(user.id)
+    .bind(actor.owner)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound)?;
@@ -158,10 +160,11 @@ fn reference(volume: &Owned) -> volumes::VolumeRef {
 
 pub async fn detach(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
-    let volume = owned(&state, &user, id).await?;
+    actor.require("volumes.detach")?;
+    let volume = owned(&state, &actor, id).await?;
     let Some(server) = server_external(&state, volume.details["server_id"].as_str()).await? else {
         return Err(AppError::field(
             "volume",
@@ -184,11 +187,12 @@ pub async fn detach(
 
 pub async fn attach(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
     Json(input): Json<Attach>,
 ) -> AppResult<StatusCode> {
-    let volume = owned(&state, &user, id).await?;
+    actor.require("volumes.attach")?;
+    let volume = owned(&state, &actor, id).await?;
     if volume.details["server_id"].as_str().is_some() {
         return Err(AppError::field(
             "volume",
@@ -200,7 +204,7 @@ pub async fn attach(
          WHERE id = $1 AND user_id = $2 AND kind = 'vps' AND status = 'active'",
     )
     .bind(input.server_id)
-    .bind(user.id)
+    .bind(actor.owner)
     .fetch_optional(&state.db)
     .await?;
     let Some((Some(integration_id), Some(server))) = target else {
