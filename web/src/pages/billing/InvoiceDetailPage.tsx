@@ -1,15 +1,17 @@
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react'
-import { ArrowDownTrayIcon, CalendarDaysIcon, CalendarIcon, ChevronDownIcon, PrinterIcon } from '@heroicons/react/24/outline'
-import { useParams } from 'react-router'
+import { ArrowDownTrayIcon, CalendarDaysIcon, CalendarIcon, CheckCircleIcon, ChevronDownIcon, ClockIcon, CreditCardIcon, PrinterIcon, XCircleIcon } from '@heroicons/react/24/outline'
+import { useState } from 'react'
+import { useParams, useSearchParams } from 'react-router'
 
 import { Badge } from '../../components/ui/Badge'
-import { ButtonLink } from '../../components/ui/Button'
+import { Button, ButtonLink } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { invoicePdfUrl, useInvoice } from '../../lib/billing'
 import { formatDate, formatEuro } from '../../lib/format'
 import { intlLocale, t } from '../../lib/i18n'
 import { invoiceStatusColors, invoiceStatusLabels } from '../../lib/labels'
 import { useMeta } from '../../lib/meta'
+import { PayInvoicePanel } from './PayInvoicePanel'
 
 const menuItem = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-zinc-800 data-focus:bg-zinc-50 dark:text-white dark:data-focus:bg-zinc-600'
 
@@ -50,8 +52,12 @@ function DownloadButton({ id }: { id: number }) {
 
 export function InvoiceDetailPage() {
   const { id = '' } = useParams()
-  const { data: invoice, isPending, error } = useInvoice(id)
+  const [params] = useSearchParams()
+  const returned = params.has('payment')
+  const cancelled = params.get('cancelled') === '1'
+  const { data: invoice, isPending, error } = useInvoice(id, returned && !cancelled)
   const { data: meta } = useMeta()
+  const [paying, setPaying] = useState(false)
 
   if (isPending) return null
   if (error || !invoice) {
@@ -91,8 +97,17 @@ export function InvoiceDetailPage() {
             </span>
           </div>
         </div>
-        <DownloadButton id={invoice.id} />
+        <div className="flex gap-2">
+          {invoice.status === 'open' && (
+            <Button variant="primary" icon={CreditCardIcon} onClick={() => setPaying(true)}>
+              {t('Betalen')}
+            </Button>
+          )}
+          <DownloadButton id={invoice.id} />
+        </div>
       </div>
+
+      {returned && <PaymentResult status={invoice.status} cancelled={cancelled} />}
 
       <section className="max-w-4xl rounded-xl border border-zinc-200 bg-zinc-50 dark:border-white/7 dark:bg-white/5">
         <h2 className="px-6 py-4 text-sm font-medium text-zinc-800 dark:text-white">{t('Specificatie')}</h2>
@@ -150,6 +165,22 @@ export function InvoiceDetailPage() {
           </div>
         )}
       </section>
+      {invoice.status === 'open' && <PayInvoicePanel invoice={invoice} open={paying} onClose={() => setPaying(false)} />}
     </>
+  )
+}
+
+function PaymentResult({ status, cancelled }: { status: string; cancelled: boolean }) {
+  const [Icon, text, tone] =
+    status === 'paid'
+      ? [CheckCircleIcon, t('Bedankt, je betaling is ontvangen.'), 'text-green-600 dark:text-green-400']
+      : cancelled
+        ? [XCircleIcon, t('Je hebt de betaling afgebroken. Je kunt het opnieuw proberen.'), 'text-zinc-400']
+        : [ClockIcon, t('We verwerken je betaling. Dit duurt meestal een paar seconden.'), 'animate-pulse text-amber-500']
+  return (
+    <div className="mb-6 flex max-w-4xl items-center gap-3 rounded-xl border border-zinc-200 bg-white px-5 py-4 text-sm text-zinc-800 dark:border-white/10 dark:bg-white/10 dark:text-white">
+      <Icon className={`size-5 shrink-0 ${tone}`} aria-hidden />
+      {text}
+    </div>
   )
 }

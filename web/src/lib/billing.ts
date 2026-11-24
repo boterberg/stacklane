@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from './api'
 import { formatRelative } from './format'
@@ -30,6 +30,8 @@ export type InvoiceSummary = {
 
 export type SubscriptionDetail = SubscriptionSummary & {
   started_at: string
+  mandate_id: string | null
+  mandate: string | null
   items: Array<{ description: string; specs_line: string | null; monthly_price_cents: number }>
   invoices: InvoiceSummary[]
 }
@@ -85,8 +87,59 @@ export function useInvoices(filters: Filters) {
   })
 }
 
-export function useInvoice(id: string) {
-  return useQuery({ queryKey: ['billing', 'invoice', id], queryFn: () => api<InvoiceDetail>(`/billing/invoices/${id}`) })
+export function useInvoice(id: string, waitForPayment = false) {
+  return useQuery({
+    queryKey: ['billing', 'invoice', id],
+    queryFn: () => api<InvoiceDetail>(`/billing/invoices/${id}`),
+    refetchInterval: (query) => (waitForPayment && query.state.data?.status === 'open' ? 3000 : false),
+  })
+}
+
+export type Mandate = { id: string; provider: 'mollie' | 'stripe'; description: string; created_at: string }
+
+export type PaymentOptions = {
+  providers: { mollie: boolean; stripe: boolean; bank_transfer: boolean }
+  iban: string | null
+  account_holder: string | null
+  mandates: Mandate[]
+}
+
+export function usePaymentOptions() {
+  return useQuery({ queryKey: ['billing', 'payment-options'], queryFn: () => api<PaymentOptions>('/billing/payment-options') })
+}
+
+export function usePayInvoice(id: number) {
+  return useMutation({
+    mutationFn: (input: { provider: 'mollie' | 'stripe'; save: boolean }) => api<{ checkout_url: string }>(`/billing/invoices/${id}/pay`, { method: 'POST', body: input }),
+    onSuccess: ({ checkout_url }) => {
+      window.location.href = checkout_url
+    },
+  })
+}
+
+function useSubscriptionMutation<TInput>(code: string, request: (input: TInput) => Promise<SubscriptionDetail>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: request,
+    onSuccess: (subscription) => {
+      queryClient.setQueryData(['billing', 'subscription', code], subscription)
+      queryClient.invalidateQueries({ queryKey: ['billing', 'subscriptions'] })
+    },
+  })
+}
+
+export function useCancelSubscription(code: string) {
+  return useSubscriptionMutation(code, () => api<SubscriptionDetail>(`/billing/subscriptions/${code}/cancel`, { method: 'POST' }))
+}
+
+export function useResumeSubscription(code: string) {
+  return useSubscriptionMutation(code, () => api<SubscriptionDetail>(`/billing/subscriptions/${code}/resume`, { method: 'POST' }))
+}
+
+export function useSetPaymentMethod(code: string) {
+  return useSubscriptionMutation(code, (mandateId: string | null) =>
+    api<SubscriptionDetail>(`/billing/subscriptions/${code}/payment-method`, { method: 'PUT', body: { mandate_id: mandateId } }),
+  )
 }
 
 export function invoicePdfUrl(id: number) {
