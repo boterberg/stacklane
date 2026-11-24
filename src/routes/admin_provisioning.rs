@@ -11,8 +11,8 @@ use uuid::Uuid;
 use crate::auth::CurrentAdmin;
 use crate::error::{AppError, AppResult};
 use crate::integrations::{
-    self, IntegrationSummary, KINDS, directadmin, openstack, plesk, proxmox, pterodactyl,
-    virtfusion, webhosting,
+    self, IntegrationSummary, KINDS, directadmin, openprovider, openstack, plesk, proxmox,
+    pterodactyl, virtfusion, webhosting,
 };
 use crate::services;
 use crate::state::AppState;
@@ -131,7 +131,13 @@ pub async fn create_integration(
         errors.insert("kind", "Kies een type.".to_owned());
     } else if !matches!(
         input.kind.as_str(),
-        "pterodactyl" | "proxmox" | "openstack" | "virtfusion" | "directadmin" | "plesk"
+        "pterodactyl"
+            | "proxmox"
+            | "openstack"
+            | "virtfusion"
+            | "directadmin"
+            | "plesk"
+            | "openprovider"
     ) {
         errors.insert(
             "kind",
@@ -160,6 +166,12 @@ pub async fn create_integration(
             .is_ok_and(|credentials| {
                 credentials.token_id.contains('!') && !credentials.token_secret.trim().is_empty()
             }),
+        "openprovider" => {
+            serde_json::from_value::<openprovider::Credentials>(input.credentials.clone())
+                .is_ok_and(|credentials| {
+                    !credentials.username.trim().is_empty() && !credentials.password.is_empty()
+                })
+        }
         "virtfusion" => {
             serde_json::from_value::<virtfusion::Credentials>(input.credentials.clone())
                 .is_ok_and(|credentials| !credentials.api_token.trim().is_empty())
@@ -188,12 +200,36 @@ pub async fn create_integration(
                 "virtfusion" => "Vul een API-token van VirtFusion in.",
                 "directadmin" => "Vul de gebruikersnaam en een inlogsleutel van DirectAdmin in.",
                 "plesk" => "Vul een API-sleutel van Plesk in.",
+                "openprovider" => "Vul de gebruikersnaam en het wachtwoord van Openprovider in.",
                 _ => "Vul de application- en de client-API-sleutel in.",
             }
             .to_owned(),
         );
     }
-    let settings = if input.kind == "virtfusion" {
+    let settings = if input.kind == "openprovider" {
+        let mut settings = serde_json::from_value::<openprovider::Settings>(input.settings.clone())
+            .unwrap_or(openprovider::Settings {
+                nameservers: openprovider::default_nameservers(),
+            });
+        settings.nameservers = settings
+            .nameservers
+            .iter()
+            .map(|server| server.trim().trim_end_matches('.').to_lowercase())
+            .filter(|server| !server.is_empty())
+            .collect();
+        if settings.nameservers.len() < 2
+            || settings
+                .nameservers
+                .iter()
+                .any(|server| openprovider::split_domain(server).is_none())
+        {
+            errors.insert(
+                "settings",
+                "Vul minstens twee geldige nameservers in.".to_owned(),
+            );
+        }
+        serde_json::to_value(settings).map_err(anyhow::Error::from)?
+    } else if input.kind == "virtfusion" {
         match serde_json::from_value::<virtfusion::Settings>(input.settings.clone()) {
             Ok(settings) if settings.hypervisor_group_id > 0 && !settings.images.is_empty() => {
                 serde_json::to_value(settings).map_err(anyhow::Error::from)?

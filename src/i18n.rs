@@ -239,6 +239,14 @@ fn english(message: &str) -> Option<&'static str> {
             "To change the holder's name, move the domain to a new profile."
         }
         "Dit profiel hoort nog bij een domein." => "This profile still belongs to a domain.",
+        "Vul de gebruikersnaam en het wachtwoord van Openprovider in." => {
+            "Enter the Openprovider username and password."
+        }
+        "Vul minstens twee geldige nameservers in." => "Enter at least two valid name servers.",
+        "Vul een extensie in, zoals nl of co.uk." => "Enter an extension, such as nl or co.uk.",
+        "Vul een prijs van 0 of hoger in." => "Enter a price of 0 or more.",
+        "Kies een koppeling met een registrar." => "Choose an integration with a registrar.",
+        "Deze extensie staat er al." => "This extension already exists.",
         "Kies een flavor." => "Choose a flavor.",
         "Kies TCP, UDP of ICMP." => "Choose TCP, UDP or ICMP.",
         "Vul een poort in, zoals 22, 80,443 of 8000:8100." => {

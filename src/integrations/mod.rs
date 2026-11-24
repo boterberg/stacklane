@@ -17,13 +17,14 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
-pub const KINDS: [&str; 6] = [
+pub const KINDS: [&str; 7] = [
     "pterodactyl",
     "proxmox",
     "openstack",
     "virtfusion",
     "directadmin",
     "plesk",
+    "openprovider",
 ];
 
 #[derive(Serialize, sqlx::FromRow)]
