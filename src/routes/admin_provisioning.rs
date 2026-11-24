@@ -420,10 +420,14 @@ pub async fn create_product(
             "De prijs kan niet negatief zijn.".to_owned(),
         );
     }
-    if !matches!(input.kind.as_str(), "gameserver" | "vps" | "webhosting") {
+    if !matches!(
+        input.kind.as_str(),
+        "gameserver" | "vps" | "webhosting" | "volume"
+    ) {
         errors.insert(
             "kind",
-            "Op dit moment kun je gameserver-, VPS- en webhostingproducten aanmaken.".to_owned(),
+            "Op dit moment kun je gameserver-, VPS-, volume- en webhostingproducten aanmaken."
+                .to_owned(),
         );
     }
     if input.integration_id.is_none() {
@@ -468,6 +472,15 @@ pub async fn create_product(
                     Value::Null
                 }
             }
+        }
+        ("volume", kind) => {
+            if !matches!(kind, Some("proxmox" | "openstack")) {
+                errors.insert(
+                    "integration_id",
+                    "Kies een koppeling met Proxmox VE of OpenStack.".to_owned(),
+                );
+            }
+            json!({ "per_gb": true })
         }
         ("vps", Some("openstack")) => {
             match serde_json::from_value::<openstack::ProductConfig>(input.provisioning.clone()) {

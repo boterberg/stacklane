@@ -155,7 +155,14 @@ pub struct NewOrder {
     image: Option<String>,
     #[serde(default)]
     ssh_key_ids: Vec<Uuid>,
+    #[serde(default)]
+    server_id: Option<Uuid>,
+    #[serde(default)]
+    size_gb: Option<u32>,
 }
+
+pub const MAX_VOLUMES: i64 = 10;
+pub const VOLUME_SIZES: std::ops::RangeInclusive<u32> = 10..=2000;
 
 #[derive(Serialize)]
 pub struct OrderPlaced {
@@ -177,8 +184,59 @@ fn kind_label(kind: &str) -> &'static str {
         "vps" => "VPS",
         "gameserver" => "Gameserver",
         "webhosting" => "Webhosting",
+        "volume" => "Volume",
         _ => "Dienst",
     }
+}
+
+async fn volume_order(
+    state: &AppState,
+    user: &CurrentUser,
+    product: &ProductRow,
+    server_id: Option<Uuid>,
+    size_gb: Option<u32>,
+) -> AppResult<(Uuid, u32)> {
+    let size_gb = size_gb
+        .filter(|size| VOLUME_SIZES.contains(size))
+        .ok_or_else(|| AppError::field("size_gb", "Kies een grootte tussen 10 en 2000 GB."))?;
+    let server_id = server_id.ok_or_else(|| AppError::field("server_id", "Kies een server."))?;
+    let same_integration: Option<bool> = sqlx::query_scalar(
+        "SELECT integration_id IS NOT DISTINCT FROM $3 FROM services
+         WHERE id = $1 AND user_id = $2 AND kind = 'vps' AND status = 'active'",
+    )
+    .bind(server_id)
+    .bind(user.id)
+    .bind(product.integration_id)
+    .fetch_optional(&state.db)
+    .await?;
+    match same_integration {
+        None => {
+            return Err(AppError::field(
+                "server_id",
+                "Kies een van je actieve servers.",
+            ));
+        }
+        Some(false) => {
+            return Err(AppError::field(
+                "server_id",
+                "Dit volume kan niet bij deze server. Kies een server op hetzelfde platform.",
+            ));
+        }
+        Some(true) => {}
+    }
+    let owned: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM services WHERE user_id = $1 AND kind = 'volume' AND status <> 'terminated'",
+    )
+    .bind(user.id)
+    .fetch_one(&state.db)
+    .await?;
+    if owned >= MAX_VOLUMES {
+        return Err(AppError::field(
+            "product_id",
+            "Je hebt al 10 volumes. Zeg er eerst een op.",
+        ));
+    }
+    Ok((server_id, size_gb))
 }
 
 pub async fn place(
@@ -230,6 +288,11 @@ pub async fn place(
             "Geef de server een naam van hoogstens 60 tekens.",
         ));
     }
+    let volume = if product.kind == "volume" {
+        Some(volume_order(&state, &user, &product, input.server_id, input.size_gb).await?)
+    } else {
+        None
+    };
     let images = images(&product);
     let image = match (input.image, images.first()) {
         (Some(wanted), _) if images.iter().any(|image| image.id == wanted) => Some(wanted),
@@ -257,7 +320,20 @@ pub async fn place(
     let code = subscription_code();
     let subscription_id = Uuid::new_v4();
     let service_id = Uuid::new_v4();
-    let description = format!("{}: {}", kind_label(&product.kind), product.name);
+    let (description, monthly_price_cents, details) = match volume {
+        Some((server_id, size_gb)) => (
+            format!("Volume: {name} ({size_gb} GB)"),
+            product
+                .monthly_price_cents
+                .saturating_mul(i32::try_from(size_gb).unwrap_or(i32::MAX)),
+            json!({ "size_gb": size_gb, "server_id": server_id }),
+        ),
+        None => (
+            format!("{}: {}", kind_label(&product.kind), product.name),
+            product.monthly_price_cents,
+            json!({ "image": image, "ssh_key_ids": input.ssh_key_ids }),
+        ),
+    };
 
     let mut transaction = state.db.begin().await?;
     sqlx::query(
@@ -279,7 +355,7 @@ pub async fn place(
     .bind(subscription_id)
     .bind(product.id)
     .bind(&description)
-    .bind(product.monthly_price_cents)
+    .bind(monthly_price_cents)
     .execute(&mut *transaction)
     .await?;
     sqlx::query(
@@ -293,7 +369,7 @@ pub async fn place(
     .bind(product.integration_id)
     .bind(&product.kind)
     .bind(name)
-    .bind(json!({ "image": image, "ssh_key_ids": input.ssh_key_ids }))
+    .bind(details)
     .execute(&mut *transaction)
     .await?;
     transaction.commit().await?;
@@ -303,7 +379,7 @@ pub async fn place(
         description,
         period_start: Some(today.date()),
         period_end: Some(period_end),
-        amount_cents: i64::from(product.monthly_price_cents) * months,
+        amount_cents: i64::from(monthly_price_cents) * months,
     }];
     let due_at = today.date() + Duration::days(i64::from(billing.payment_term_days));
     let (invoice_id, _) = invoicing::issue(&state, user.id, &lines, due_at, &billing).await?;

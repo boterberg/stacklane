@@ -89,6 +89,7 @@ async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()>
             }
             _ => anyhow::bail!("deze koppeling kan geen VPS maken"),
         },
+        "volume" => provision_volume(state, &context, driver).await?,
         "webhosting" => {
             let hosting = webhosting::Hosting::from_driver(&driver)
                 .ok_or_else(|| anyhow::anyhow!("deze koppeling kan geen webhosting maken"))?;
@@ -113,6 +114,43 @@ async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()>
         tracing::warn!(%service_id, error = %format!("{error:#}"), "applying automatic firewalls failed");
     }
     Ok(())
+}
+
+#[derive(Deserialize)]
+struct VolumeOrder {
+    size_gb: u32,
+    server_id: Uuid,
+}
+
+async fn provision_volume(
+    state: &AppState,
+    context: &ProvisionContext,
+    driver: integrations::Driver,
+) -> anyhow::Result<pterodactyl::Provisioned> {
+    let order: VolumeOrder = serde_json::from_value(context.details.clone())?;
+    let storage = integrations::volumes::Storage::from_driver(driver)
+        .ok_or_else(|| anyhow::anyhow!("deze koppeling kan geen volumes maken"))?;
+    let server: Option<String> = sqlx::query_scalar(
+        "SELECT external_id FROM services WHERE id = $1 AND user_id = $2 AND kind = 'vps' AND status = 'active'",
+    )
+    .bind(order.server_id)
+    .bind(context.user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .flatten();
+    let server =
+        server.ok_or_else(|| anyhow::anyhow!("de server voor dit volume is niet actief"))?;
+    let volume = storage
+        .create(&server, &context.name, order.size_gb)
+        .await?;
+    Ok(pterodactyl::Provisioned {
+        external_id: volume.id.clone(),
+        details: json!({
+            "size_gb": order.size_gb,
+            "server_id": order.server_id,
+            "host": volume.host,
+        }),
+    })
 }
 
 #[derive(Deserialize, Default)]
@@ -559,13 +597,48 @@ pub fn provision_in_background(state: AppState, service_id: Uuid) {
     });
 }
 
+async fn delete_volume(
+    state: &AppState,
+    integration_id: Uuid,
+    external_id: &str,
+    details: &Value,
+) -> anyhow::Result<()> {
+    let driver = integrations::driver(state, integration_id)
+        .await
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+    let storage = integrations::volumes::Storage::from_driver(driver)
+        .ok_or_else(|| anyhow::anyhow!("deze koppeling kan geen volumes beheren"))?;
+    let server: Option<String> = match details["server_id"].as_str() {
+        Some(server_id) => {
+            sqlx::query_scalar("SELECT external_id FROM services WHERE id = $1::uuid")
+                .bind(server_id)
+                .fetch_optional(&state.db)
+                .await?
+                .flatten()
+        }
+        None => None,
+    };
+    let volume = integrations::volumes::VolumeRef {
+        host: details["host"].as_str().unwrap_or_default().to_owned(),
+        id: external_id.to_owned(),
+    };
+    storage.delete(&volume, server.as_deref()).await
+}
+
 pub async fn change_state(state: &AppState, service_id: Uuid, action: &str) -> AppResult<()> {
-    let (integration_id, external_id, status): (Option<Uuid>, Option<String>, String) =
-        sqlx::query_as("SELECT integration_id, external_id, status FROM services WHERE id = $1")
-            .bind(service_id)
-            .fetch_optional(&state.db)
-            .await?
-            .ok_or(AppError::NotFound)?;
+    let (integration_id, external_id, status, kind, details): (
+        Option<Uuid>,
+        Option<String>,
+        String,
+        String,
+        Value,
+    ) = sqlx::query_as(
+        "SELECT integration_id, external_id, status, kind, details FROM services WHERE id = $1",
+    )
+    .bind(service_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
 
     let next = match (action, status.as_str()) {
         ("suspend", "active") => "suspended",
@@ -579,7 +652,17 @@ pub async fn change_state(state: &AppState, service_id: Uuid, action: &str) -> A
         }
     };
 
-    if let (Some(integration_id), Some(external_id)) = (integration_id, external_id.as_deref()) {
+    if kind == "volume" {
+        if let (Some(integration_id), Some(external_id), "terminate") =
+            (integration_id, external_id.as_deref(), action)
+        {
+            delete_volume(state, integration_id, external_id, &details)
+                .await
+                .map_err(|error| AppError::field("action", format!("{error:#}")))?;
+        }
+    } else if let (Some(integration_id), Some(external_id)) =
+        (integration_id, external_id.as_deref())
+    {
         let driver = integrations::driver(state, integration_id).await?;
         let result = match action {
             "suspend" => driver.suspend(external_id).await,
