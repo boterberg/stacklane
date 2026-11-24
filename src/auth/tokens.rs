@@ -20,8 +20,13 @@ pub const AREAS: &[Area] = &[
         admin_only: false,
     },
     Area {
+        key: "vps",
+        paths: &["/vps", "/ssh-keys"],
+        admin_only: false,
+    },
+    Area {
         key: "billing",
-        paths: &["/billing"],
+        paths: &["/billing", "/shop", "/orders"],
         admin_only: false,
     },
     Area {

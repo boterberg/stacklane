@@ -12,6 +12,7 @@ pub mod me;
 mod notifications;
 mod payments;
 mod security;
+mod shop;
 mod ssh_keys;
 mod support;
 mod system;
@@ -40,6 +41,8 @@ pub fn router(state: AppState) -> Router {
             "/account/payment-defaults",
             get(account::payment_defaults).put(account::update_payment_defaults),
         )
+        .route("/shop/products", get(shop::products))
+        .route("/orders", post(shop::place))
         .route("/ssh-keys", get(ssh_keys::index).post(ssh_keys::create))
         .route("/ssh-keys/{id}", delete(ssh_keys::destroy))
         .route("/account/password", put(security::change_password))
