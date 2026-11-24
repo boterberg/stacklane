@@ -28,6 +28,12 @@ pub struct AccountDetails {
     address_line2: Option<String>,
     postal_code: Option<String>,
     city: Option<String>,
+    #[serde(default, skip_serializing)]
+    #[sqlx(default)]
+    current_password: Option<String>,
+    #[serde(default, skip_serializing)]
+    #[sqlx(default)]
+    code: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -110,29 +116,42 @@ pub async fn update(
             "Vul de naam van je bedrijf in.",
         ));
     }
-    if state.config.demo_mode {
-        let current: String = sqlx::query_scalar("SELECT email::text FROM users WHERE id = $1")
+    let (current_email, totp_secret): (String, Option<String>) =
+        sqlx::query_as("SELECT email::text, totp_secret FROM users WHERE id = $1")
             .bind(user.id)
             .fetch_one(&state.db)
             .await?;
-        if current != email {
+    let changing = current_email != email;
+    if changing {
+        if state.config.demo_mode {
             return Err(AppError::field(
                 "email",
                 "In de demo kun je het e-mailadres niet wijzigen.",
             ));
         }
-    }
-    let taken: bool =
-        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM users WHERE email = $1 AND id <> $2)")
-            .bind(&email)
-            .bind(user.id)
-            .fetch_one(&state.db)
-            .await?;
-    if taken {
-        return Err(AppError::field(
-            "email",
-            "Er bestaat al een account met dit e-mailadres.",
-        ));
+        let taken: bool =
+            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM users WHERE email = $1 AND id <> $2)")
+                .bind(&email)
+                .bind(user.id)
+                .fetch_one(&state.db)
+                .await?;
+        if taken {
+            return Err(AppError::field(
+                "email",
+                "Er bestaat al een account met dit e-mailadres.",
+            ));
+        }
+        check_password(
+            &state,
+            &user,
+            input.current_password.as_deref().unwrap_or_default(),
+            "current_password",
+        )
+        .await?;
+        if let Some(sealed) = totp_secret {
+            super::two_factor::check_login_code(&state, user.id, &sealed, input.code.as_deref())
+                .await?;
+        }
     }
     sqlx::query(
         "UPDATE users SET first_name = $2, last_name = $3, email = $4, invoice_email = $5, phone = $6, is_business = $7,
@@ -143,7 +162,7 @@ pub async fn update(
     .bind(user.id)
     .bind(first_name)
     .bind(input.last_name.trim())
-    .bind(&email)
+    .bind(&current_email)
     .bind(invoice_email)
     .bind(tidy(input.phone))
     .bind(input.is_business)
@@ -157,6 +176,9 @@ pub async fn update(
     .bind(tidy(input.city))
     .execute(&state.db)
     .await?;
+    if changing {
+        super::email_verification::send(&state, user.id, &email).await?;
+    }
     Ok(Json(load(&state, user.id).await?))
 }
 

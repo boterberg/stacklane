@@ -1,18 +1,24 @@
-import { BuildingOfficeIcon, EnvelopeIcon, IdentificationIcon, MapPinIcon, PhoneIcon, ReceiptPercentIcon, UserIcon } from '@heroicons/react/24/outline'
+import { BuildingOfficeIcon, EnvelopeIcon, KeyIcon, ShieldCheckIcon, IdentificationIcon, MapPinIcon, PhoneIcon, ReceiptPercentIcon, UserIcon } from '@heroicons/react/24/outline'
 import { useState, type FormEvent } from 'react'
 
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Checkbox, Field, Input, Select } from '../../components/ui/Field'
-import { useAccount, useSaveAccount, type AccountDetails } from '../../lib/account'
+import { useAccount, useCancelEmailChange, useResendVerification, useSaveAccount, type AccountDetails } from '../../lib/account'
 import { ApiError } from '../../lib/api'
+import { useMe } from '../../lib/auth'
 import { countries } from '../../lib/countries'
 import { t } from '../../lib/i18n'
 
 function ProfileForm({ initial }: { initial: AccountDetails }) {
   const [form, setForm] = useState(initial)
   const save = useSaveAccount()
+  const { data: profile } = useMe()
+  const resend = useResendVerification()
+  const cancel = useCancelEmailChange()
   const errors = save.error instanceof ApiError ? save.error.fieldErrors : {}
+  const changingEmail = form.email.trim().toLowerCase() !== initial.email.toLowerCase()
+  const askCode = changingEmail && (!!errors.code || !!form.code)
   const text = (key: keyof AccountDetails) => ({
     value: (form[key] as string | null) ?? '',
     invalid: !!errors[key],
@@ -21,7 +27,9 @@ function ProfileForm({ initial }: { initial: AccountDetails }) {
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    save.mutate(form)
+    save.mutate(form, {
+      onSuccess: (account) => setForm({ ...account, current_password: '', code: '' }),
+    })
   }
 
   const footer = (
@@ -57,9 +65,36 @@ function ProfileForm({ initial }: { initial: AccountDetails }) {
               </Field>
             </>
           )}
-          <Field label={t('E-mailadres')} error={errors.email}>
+          <Field
+            label={t('E-mailadres')}
+            description={changingEmail ? t('We sturen een link naar het nieuwe adres. Het verandert pas als je op die link klikt.') : undefined}
+            error={errors.email}
+          >
             {(id) => <Input id={id} type="email" icon={EnvelopeIcon} autoComplete="email" {...text('email')} />}
           </Field>
+          {profile?.pending_email && !changingEmail && (
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-white/10 dark:bg-white/5 dark:text-white/70">
+              <p>{t('We hebben een link gestuurd naar {email}. Klik erop om dit adres te gebruiken.', { email: profile.pending_email })}</p>
+              <div className="mt-2 flex gap-4">
+                <button type="button" disabled={resend.isPending} onClick={() => resend.mutate()} className="font-medium text-zinc-800 hover:underline dark:text-white">
+                  {resend.isSuccess ? t('Opnieuw gestuurd') : t('Opnieuw sturen')}
+                </button>
+                <button type="button" disabled={cancel.isPending} onClick={() => cancel.mutate()} className="font-medium text-zinc-800 hover:underline dark:text-white">
+                  {t('Wijziging annuleren')}
+                </button>
+              </div>
+            </div>
+          )}
+          {changingEmail && (
+            <Field label={t('Huidig wachtwoord')} description={t('Nodig om je e-mailadres te wijzigen.')} error={errors.current_password}>
+              {(id) => <Input id={id} type="password" icon={KeyIcon} autoComplete="current-password" {...text('current_password')} />}
+            </Field>
+          )}
+          {askCode && (
+            <Field label={t('Code uit je authenticator-app')} error={errors.code}>
+              {(id) => <Input id={id} icon={ShieldCheckIcon} inputMode="numeric" autoComplete="one-time-code" {...text('code')} />}
+            </Field>
+          )}
           <Field label={t('E-mailadres voor facturen')} description={t('Laat leeg om facturen naar je gewone e-mailadres te sturen.')} error={errors.invoice_email}>
             {(id) => <Input id={id} type="email" icon={EnvelopeIcon} placeholder={form.email} {...text('invoice_email')} />}
           </Field>
