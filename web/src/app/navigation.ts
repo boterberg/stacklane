@@ -18,6 +18,7 @@ import {
   KeyIcon,
   LifebuoyIcon,
   LinkIcon,
+  PlayCircleIcon,
   QuestionMarkCircleIcon,
   ReceiptPercentIcon,
   ServerStackIcon,
@@ -122,6 +123,7 @@ export const vpsSection: NavSection = {
       children: [
         { label: 'Volumes', to: '/vps/volumes', icon: CircleStackIcon },
         { label: 'Snapshots', to: '/vps/snapshots', icon: CameraIcon },
+        { label: "ISO's", to: '/vps/isos', icon: PlayCircleIcon },
       ],
     },
     { label: 'Netwerk', children: [{ label: 'Firewalls', to: '/vps/firewalls', icon: ShieldCheckIcon }] },

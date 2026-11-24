@@ -33,8 +33,9 @@ import {
 } from '../../lib/vps'
 import { isManaged } from '../../lib/firewall'
 import { RuleForm, RuleList } from './FirewallRules'
+import { ServerIso } from './ServerIso'
 
-type Tab = 'overview' | 'snapshots' | 'firewall'
+type Tab = 'overview' | 'snapshots' | 'firewall' | 'iso'
 
 function errorText(error: Error | null) {
   return error instanceof ApiError ? (Object.values(error.fieldErrors)[0] ?? error.message) : error?.message
@@ -312,6 +313,7 @@ export function VpsServerPage() {
               { id: 'overview' as const, label: 'Overzicht' },
               ...(server.features?.snapshots === false ? [] : [{ id: 'snapshots' as const, label: 'Snapshots' }]),
               ...(server.features?.firewall === false ? [] : [{ id: 'firewall' as const, label: 'Firewall' }]),
+              ...(server.features?.volumes === false ? [] : [{ id: 'iso' as const, label: 'ISO' }]),
             ]}
             active={tab}
             onChange={setTab}
@@ -319,6 +321,7 @@ export function VpsServerPage() {
           {tab === 'overview' && <Overview server={server} live={server.live} features={server.features} />}
           {tab === 'snapshots' && <Snapshots server={server} />}
           {tab === 'firewall' && <Firewall server={server} />}
+          {tab === 'iso' && <ServerIso serverId={server.id} />}
         </>
       )}
     </>
