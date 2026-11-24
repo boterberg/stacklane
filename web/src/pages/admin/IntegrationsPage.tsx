@@ -18,6 +18,7 @@ const kindLabels: Record<string, string> = {
   virtfusion: 'VirtFusion',
   directadmin: 'DirectAdmin',
   plesk: 'Plesk',
+  openprovider: 'Openprovider',
 }
 
 const emptyForm = {
@@ -49,6 +50,9 @@ const emptyForm = {
   api_token: '',
   hypervisor_group_id: '1',
   vf_images: '',
+  op_username: '',
+  op_password: '',
+  op_nameservers: 'ns1.openprovider.nl\nns2.openprovider.be\nns3.openprovider.eu',
 }
 
 function parseImages(text: string) {
@@ -76,6 +80,15 @@ type IntegrationInput = {
 }
 
 function payload(form: typeof emptyForm): IntegrationInput {
+  if (form.kind === 'openprovider') {
+    return {
+      kind: form.kind,
+      name: form.name,
+      base_url: form.base_url || 'https://api.openprovider.eu',
+      credentials: { username: form.op_username.trim(), password: form.op_password },
+      settings: { nameservers: form.op_nameservers.split(/\s+/).filter(Boolean) },
+    }
+  }
   if (form.kind === 'directadmin') {
     return {
       kind: form.kind,
@@ -187,24 +200,31 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
               <option value="plesk">{t('Plesk (webhosting)')}</option>
               <option value="openstack">{t('OpenStack (VPS)')}</option>
               <option value="virtfusion">{t('VirtFusion (VPS)')}</option>
+              <option value="openprovider">{t('Openprovider (domeinen)')}</option>
             </Select>
           )}
         </Field>
         <Field label={t('Naam')} description={t('Alleen voor jezelf, bijvoorbeeld Gamenode Amsterdam.')} error={errors.name}>
           {(id) => <Input id={id} value={form.name} invalid={!!errors.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />}
         </Field>
-        <Field label={form.kind === 'openstack' ? t('Adres van Keystone') : t('Adres van het panel')} error={errors.base_url}>
+        <Field
+          label={form.kind === 'openstack' ? t('Adres van Keystone') : form.kind === 'openprovider' ? t('Adres van de API') : t('Adres van het panel')}
+          description={form.kind === 'openprovider' ? t('Leeg laten voor de gewone API van Openprovider.') : undefined}
+          error={errors.base_url}
+        >
           {(id) => (
             <Input
               id={id}
               placeholder={
                 form.kind === 'openstack'
                   ? 'https://keystone.jouwbedrijf.nl:5000/v3'
-                  : form.kind === 'directadmin'
-                    ? 'https://server.jouwbedrijf.nl:2222'
-                    : form.kind === 'plesk'
-                      ? 'https://server.jouwbedrijf.nl:8443'
-                      : t('https://panel.jouwbedrijf.nl')
+                  : form.kind === 'openprovider'
+                    ? 'https://api.openprovider.eu'
+                    : form.kind === 'directadmin'
+                      ? 'https://server.jouwbedrijf.nl:2222'
+                      : form.kind === 'plesk'
+                        ? 'https://server.jouwbedrijf.nl:8443'
+                        : t('https://panel.jouwbedrijf.nl')
               }
               value={form.base_url}
               invalid={!!errors.base_url}
@@ -242,6 +262,27 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
             </Field>
           </>
         )}
+        {form.kind === 'openprovider' && (
+          <>
+            <Field label={t('Gebruikersnaam')} description={t('Van je Openprovider-account. Maak bij voorkeur een aparte API-gebruiker aan.')} error={errors.credentials}>
+              {(id) => <Input id={id} autoComplete="off" value={form.op_username} onChange={(event) => setForm({ ...form, op_username: event.target.value })} />}
+            </Field>
+            <Field label={t('Wachtwoord')}>
+              {(id) => <Input id={id} type="password" autoComplete="new-password" value={form.op_password} onChange={(event) => setForm({ ...form, op_password: event.target.value })} />}
+            </Field>
+            <Field label={t('Standaard nameservers')} description={t('Een per regel. Nieuwe domeinen krijgen deze nameservers.')} error={errors.settings}>
+              {(id) => (
+                <textarea
+                  id={id}
+                  rows={3}
+                  value={form.op_nameservers}
+                  onChange={(event) => setForm({ ...form, op_nameservers: event.target.value })}
+                  className="block w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-sm text-zinc-700 shadow-xs dark:border-white/10 dark:bg-white/10 dark:text-zinc-300"
+                />
+              )}
+            </Field>
+          </>
+        )}
         {form.kind === 'virtfusion' && (
           <>
             <Field label={t('API-token')} description={t('Configuration → API in VirtFusion.')} error={errors.credentials}>
@@ -264,7 +305,7 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
             </Field>
           </>
         )}
-        {form.kind === 'openstack' || form.kind === 'virtfusion' ? null : form.kind === 'directadmin' || form.kind === 'plesk' ? (
+        {form.kind === 'openstack' || form.kind === 'virtfusion' || form.kind === 'openprovider' ? null : form.kind === 'directadmin' || form.kind === 'plesk' ? (
           <>
             {form.kind === 'directadmin' && (
               <Field label={t('Gebruikersnaam')} description={t('Een beheerder of reseller in DirectAdmin.')} error={errors.credentials}>
