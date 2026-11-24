@@ -59,6 +59,20 @@ Stacklane zet de regels van een firewall bovenaan de firewall van de server en h
 
 Lukt het bijwerken van een server niet, dan slaat Stacklane de firewall toch op en toont het welke server niet is bijgewerkt en waarom.
 
+### Volumes
+
+Een volume is extra schijfruimte voor een server. Maak onder **Beheer → Producten** een product van de soort **Volume** op een Proxmox- of OpenStack-koppeling, met een prijs per GB per maand. De klant bestelt onder **VPS → Volumes** een volume van 10 tot 2000 GB voor een van zijn servers en betaalt de prijs per GB keer de grootte. Een klant heeft hoogstens tien volumes.
+
+Na betaling maakt Stacklane het volume aan en koppelt het aan de server. De klant kan het loskoppelen en aan een andere server op dezelfde koppeling hangen.
+
+| Platform | Hoe het werkt |
+| --- | --- |
+| Proxmox VE | Een extra schijf (`scsi1` en verder) op de opslag uit de koppeling. Losgekoppeld blijft hij als `unused` bij de oude VM staan; koppelen aan een andere VM gaat met *move disk*. Wordt de VM opgeheven, dan verdwijnt het volume mee en zegt Stacklane het abonnement op. |
+| OpenStack | Een volume in Cinder (blokopslag), gekoppeld via Nova. Wordt de server opgeheven, dan blijft het volume los bestaan. |
+| VirtFusion | Geen volumes. |
+
+Vergroten kan nog niet. Een volume opzeggen gaat via het abonnement.
+
 ## OpenStack
 
 Bij OpenStack regelt de cloud zelf de IP-adressen, de schijf en de firewall. Stacklane praat met Keystone, Nova, Glance en Neutron.
