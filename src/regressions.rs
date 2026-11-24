@@ -817,3 +817,33 @@ async fn password_checks_stop_after_ten_tries(db: PgPool) {
         .await;
     assert_eq!(reply.status, StatusCode::TOO_MANY_REQUESTS);
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_restart_frees_work_that_was_cut_off(db: PgPool) {
+    use crate::testing::{NewService, service};
+    let client = Client::new(db);
+    let (user, _) = client.register("restart@example.test").await;
+    let stuck = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "provisioning",
+            integration: None,
+            external_id: None,
+            details: json!({}),
+        },
+    )
+    .await;
+    crate::services::recover_interrupted(&client.state)
+        .await
+        .unwrap();
+    let status: String = sqlx::query_scalar("SELECT status FROM services WHERE id = $1")
+        .bind(stuck)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(status, "failed");
+}
