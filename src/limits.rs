@@ -40,6 +40,11 @@ pub const VERIFY: Rule = Rule {
     max: 20,
     window: Duration::from_secs(15 * 60),
 };
+pub const REAUTH: Rule = Rule {
+    name: "reauth",
+    max: 10,
+    window: Duration::from_secs(15 * 60),
+};
 pub const INVITE: Rule = Rule {
     name: "invite",
     max: 20,
@@ -87,6 +92,7 @@ fn window_of(name: &str) -> Duration {
         REGISTER,
         RECOVERY,
         VERIFY,
+        REAUTH,
         INVITE,
         DOMAIN_SEARCH,
     ]

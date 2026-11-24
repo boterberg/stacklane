@@ -1056,3 +1056,30 @@ async fn only_local_checks_see_the_version(db: PgPool) {
     assert!(ask("127.0.0.1:9000", true).await["version"].is_null());
     assert!(ask("198.51.100.7:9000", false).await["version"].is_null());
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn password_checks_stop_after_ten_tries(db: PgPool) {
+    let client = Client::new(db);
+    let (_, cookie) = client.register("guess@example.test").await;
+    for _ in 0..10 {
+        let reply = client
+            .send(
+                Method::POST,
+                "/account/two-factor/recovery-codes",
+                Some(&cookie),
+                Some(json!({ "password": "wrong-guess-123", "code": "000000" })),
+            )
+            .await;
+        assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    let reply = client
+        .send(
+            Method::POST,
+            "/account/two-factor/recovery-codes",
+            Some(&cookie),
+            Some(json!({ "password": PASSWORD, "code": "000000" })),
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::TOO_MANY_REQUESTS);
+}
