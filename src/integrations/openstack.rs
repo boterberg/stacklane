@@ -85,6 +85,7 @@ pub struct OpenStack {
 
 const COMPUTE_VERSION: &str = "compute 2.47";
 const VOLUME_VERSION: &str = "volume 3.42";
+const RESCUE_VERSION: &str = "compute 2.87";
 
 fn error_message(body: &Value) -> Option<String> {
     let nested = body
@@ -209,6 +210,21 @@ impl OpenStack {
         path: &str,
         body: Option<Value>,
     ) -> anyhow::Result<(StatusCode, Value)> {
+        let version = match service {
+            Service::Volume => VOLUME_VERSION,
+            _ => COMPUTE_VERSION,
+        };
+        self.send_as(service, version, method, path, body).await
+    }
+
+    async fn send_as(
+        &self,
+        service: Service,
+        version: &str,
+        method: Method,
+        path: &str,
+        body: Option<Value>,
+    ) -> anyhow::Result<(StatusCode, Value)> {
         let session = self.session.get_or_try_init(|| self.authenticate()).await?;
         let base = match service {
             Service::Compute => &session.compute,
@@ -218,10 +234,6 @@ impl OpenStack {
                 .volume
                 .as_ref()
                 .context("deze OpenStack heeft geen blokopslag (Cinder)")?,
-        };
-        let version = match service {
-            Service::Volume => VOLUME_VERSION,
-            _ => COMPUTE_VERSION,
         };
         let mut request = self
             .http
@@ -573,6 +585,108 @@ impl OpenStack {
             );
         }
         Ok(())
+    }
+
+    pub async fn import_iso(&self, name: &str, url: &str, uefi: bool) -> anyhow::Result<String> {
+        let mut image = json!({
+            "name": name,
+            "disk_format": "iso",
+            "container_format": "bare",
+            "visibility": "private",
+            "hw_rescue_device": "cdrom",
+            "hw_rescue_bus": "sata",
+        });
+        if uefi {
+            image["hw_firmware_type"] = json!("uefi");
+        }
+        let created = self
+            .call(Service::Image, Method::POST, "/v2/images", Some(image))
+            .await?;
+        let id = created["id"]
+            .as_str()
+            .context("OpenStack gaf geen image-ID terug")?
+            .to_owned();
+        let (status, body) = self
+            .send(
+                Service::Image,
+                Method::POST,
+                &format!("/v2/images/{id}/import"),
+                Some(json!({ "method": { "name": "web-download", "uri": url } })),
+            )
+            .await?;
+        if !status.is_success() {
+            let _ = self.delete_iso(&id).await;
+            bail!(
+                "OpenStack antwoordde {status}: {}",
+                error_message(&body).unwrap_or_else(|| "importeren mislukt".to_owned())
+            );
+        }
+        for _ in 0..1800 {
+            let image = self
+                .call(
+                    Service::Image,
+                    Method::GET,
+                    &format!("/v2/images/{id}"),
+                    None,
+                )
+                .await?;
+            match image["status"].as_str() {
+                Some("active") => return Ok(id),
+                Some("killed" | "deleted" | "deactivated") => {
+                    let _ = self.delete_iso(&id).await;
+                    bail!("OpenStack kon de ISO niet ophalen");
+                }
+                _ => tokio::time::sleep(Duration::from_secs(2)).await,
+            }
+        }
+        let _ = self.delete_iso(&id).await;
+        bail!("het ophalen van de ISO duurde te lang")
+    }
+
+    pub async fn delete_iso(&self, image: &str) -> anyhow::Result<()> {
+        let (status, body) = self
+            .send(
+                Service::Image,
+                Method::DELETE,
+                &format!("/v2/images/{image}"),
+                None,
+            )
+            .await?;
+        if !status.is_success() && status != StatusCode::NOT_FOUND {
+            bail!(
+                "OpenStack antwoordde {status}: {}",
+                error_message(&body).unwrap_or_else(|| "onbekende fout".to_owned())
+            );
+        }
+        Ok(())
+    }
+
+    async fn rescue_action(&self, id: &str, body: Value) -> anyhow::Result<()> {
+        let (status, reply) = self
+            .send_as(
+                Service::Compute,
+                RESCUE_VERSION,
+                Method::POST,
+                &format!("/servers/{id}/action"),
+                Some(body),
+            )
+            .await?;
+        if !status.is_success() {
+            bail!(
+                "OpenStack antwoordde {status}: {}",
+                error_message(&reply).unwrap_or_else(|| "onbekende fout".to_owned())
+            );
+        }
+        Ok(())
+    }
+
+    pub async fn mount_iso(&self, id: &str, image: &str) -> anyhow::Result<()> {
+        self.rescue_action(id, json!({ "rescue": { "rescue_image_ref": image } }))
+            .await
+    }
+
+    pub async fn unmount_iso(&self, id: &str) -> anyhow::Result<()> {
+        self.rescue_action(id, json!({ "unrescue": null })).await
     }
 
     pub async fn destroy(&self, id: &str) -> anyhow::Result<()> {
