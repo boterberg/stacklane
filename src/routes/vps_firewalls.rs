@@ -1,0 +1,501 @@
+use axum::Json;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
+use uuid::Uuid;
+
+use super::vps::{machine_of, validate_rule};
+use crate::auth::CurrentUser;
+use crate::error::{AppError, AppResult};
+use crate::integrations::vps::FirewallRule;
+use crate::state::AppState;
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct Firewall {
+    id: Uuid,
+    name: String,
+    auto_assign: bool,
+    rules: i64,
+    servers: i64,
+    #[serde(with = "time::serde::rfc3339")]
+    created_at: OffsetDateTime,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct AttachedServer {
+    id: Uuid,
+    name: String,
+}
+
+#[derive(Serialize)]
+pub struct FirewallDetail {
+    #[serde(flatten)]
+    firewall: Firewall,
+    rule_list: Vec<FirewallRule>,
+    server_list: Vec<AttachedServer>,
+}
+
+#[derive(Deserialize)]
+pub struct FirewallInput {
+    name: String,
+    #[serde(default)]
+    auto_assign: bool,
+    #[serde(default)]
+    rules: Vec<FirewallRule>,
+    #[serde(default)]
+    server_ids: Option<Vec<Uuid>>,
+}
+
+#[derive(Serialize)]
+pub struct SyncProblem {
+    server: String,
+    error: String,
+}
+
+#[derive(Serialize)]
+pub struct Saved {
+    id: Uuid,
+    problems: Vec<SyncProblem>,
+}
+
+const SELECT: &str = "SELECT f.id, f.name, f.auto_assign, f.created_at,
+        (SELECT count(*) FROM vps_firewall_rules r WHERE r.firewall_id = f.id) AS rules,
+        (SELECT count(*) FROM vps_firewall_servers s JOIN services v ON v.id = s.service_id
+            WHERE s.firewall_id = f.id AND v.status <> 'terminated') AS servers
+     FROM vps_firewalls f WHERE f.user_id = $1";
+
+pub fn marker(firewall_id: Uuid) -> String {
+    let short: String = firewall_id.simple().to_string().chars().take(8).collect();
+    format!("[fw:{short}]")
+}
+
+fn tagged(rule: &FirewallRule, marker: &str) -> FirewallRule {
+    let comment = match rule.comment.as_deref().map(str::trim) {
+        Some(text) if !text.is_empty() => format!("{marker} {text}"),
+        _ => marker.to_owned(),
+    };
+    FirewallRule {
+        id: String::new(),
+        comment: Some(comment),
+        ..rule.clone()
+    }
+}
+
+pub fn managed_ids(existing: &[FirewallRule], marker: &str) -> Vec<String> {
+    let mut ids: Vec<String> = existing
+        .iter()
+        .filter(|rule| {
+            rule.comment
+                .as_deref()
+                .is_some_and(|comment| comment.starts_with(marker))
+        })
+        .map(|rule| rule.id.clone())
+        .collect();
+    ids.sort_by_key(|id| std::cmp::Reverse(id.parse::<u64>().unwrap_or(0)));
+    ids
+}
+
+async fn sync_server(
+    state: &AppState,
+    user_id: Uuid,
+    service_id: Uuid,
+    marker: &str,
+    rules: &[FirewallRule],
+) -> anyhow::Result<()> {
+    let machine = machine_of(state, user_id, service_id)
+        .await
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+    if !machine.features().firewall {
+        anyhow::bail!("dit platform heeft geen firewall");
+    }
+    let existing = machine.firewall_rules().await?;
+    for id in managed_ids(&existing, marker) {
+        machine.delete_firewall_rule(&id).await?;
+    }
+    for rule in rules.iter().rev() {
+        machine.add_firewall_rule(&tagged(rule, marker)).await?;
+    }
+    Ok(())
+}
+
+type RuleRow = (
+    Uuid,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+async fn rules_of(state: &AppState, firewall_id: Uuid) -> AppResult<Vec<FirewallRule>> {
+    let rows: Vec<RuleRow> = sqlx::query_as(
+        "SELECT id, direction, action, proto, dport, source, comment FROM vps_firewall_rules
+             WHERE firewall_id = $1 ORDER BY position",
+    )
+    .bind(firewall_id)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(
+            |(id, direction, action, proto, dport, source, comment)| FirewallRule {
+                id: id.to_string(),
+                direction,
+                action,
+                proto,
+                dport,
+                source,
+                comment,
+            },
+        )
+        .collect())
+}
+
+async fn server_name(state: &AppState, service_id: Uuid) -> String {
+    sqlx::query_scalar("SELECT name FROM services WHERE id = $1")
+        .bind(service_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| service_id.to_string())
+}
+
+async fn sync_all(
+    state: &AppState,
+    user_id: Uuid,
+    firewall_id: Uuid,
+    servers: &[Uuid],
+    rules: &[FirewallRule],
+) -> Vec<SyncProblem> {
+    let marker = marker(firewall_id);
+    let mut problems = Vec::new();
+    for service_id in servers {
+        if let Err(error) = sync_server(state, user_id, *service_id, &marker, rules).await {
+            problems.push(SyncProblem {
+                server: server_name(state, *service_id).await,
+                error: format!("{error:#}"),
+            });
+        }
+    }
+    problems
+}
+
+async fn attached(state: &AppState, firewall_id: Uuid) -> AppResult<Vec<Uuid>> {
+    Ok(sqlx::query_scalar(
+        "SELECT s.service_id FROM vps_firewall_servers s JOIN services v ON v.id = s.service_id
+         WHERE s.firewall_id = $1 AND v.status = 'active'",
+    )
+    .bind(firewall_id)
+    .fetch_all(&state.db)
+    .await?)
+}
+
+async fn owned(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<Firewall> {
+    sqlx::query_as(sqlx::AssertSqlSafe(format!("{SELECT} AND f.id = $2")))
+        .bind(user.id)
+        .bind(id)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or(AppError::NotFound)
+}
+
+fn clean(input: &mut FirewallInput) -> AppResult<()> {
+    input.name = input.name.trim().to_owned();
+    if input.name.is_empty() || input.name.chars().count() > 60 {
+        return Err(AppError::field(
+            "name",
+            "Geef de firewall een naam van hoogstens 60 tekens.",
+        ));
+    }
+    if input.rules.len() > 50 {
+        return Err(AppError::field(
+            "rules",
+            "Een firewall heeft hoogstens 50 regels.",
+        ));
+    }
+    for rule in &mut input.rules {
+        validate_rule(rule)?;
+        rule.comment = rule
+            .comment
+            .as_deref()
+            .map(|comment| comment.trim().chars().take(80).collect::<String>())
+            .filter(|comment| !comment.is_empty());
+    }
+    Ok(())
+}
+
+async fn eligible(state: &AppState, user_id: Uuid) -> AppResult<Vec<AttachedServer>> {
+    let servers: Vec<AttachedServer> = sqlx::query_as(
+        "SELECT id, name FROM services WHERE user_id = $1 AND kind = 'vps' AND status = 'active' ORDER BY name",
+    )
+    .bind(user_id)
+    .fetch_all(&state.db)
+    .await?;
+    let mut capable = Vec::new();
+    for server in servers {
+        if let Ok(machine) = machine_of(state, user_id, server.id).await
+            && machine.features().firewall
+        {
+            capable.push(server);
+        }
+    }
+    Ok(capable)
+}
+
+pub async fn servers(
+    State(state): State<AppState>,
+    user: CurrentUser,
+) -> AppResult<Json<Vec<AttachedServer>>> {
+    Ok(Json(eligible(&state, user.id).await?))
+}
+
+async fn store(
+    state: &AppState,
+    user: &CurrentUser,
+    id: Uuid,
+    input: &FirewallInput,
+) -> AppResult<Vec<Uuid>> {
+    let wanted: Option<Vec<Uuid>> = match &input.server_ids {
+        Some(ids) => {
+            let capable = eligible(state, user.id).await?;
+            if let Some(other) = ids
+                .iter()
+                .find(|id| !capable.iter().any(|server| server.id == **id))
+            {
+                return Err(AppError::field(
+                    "server_ids",
+                    if sqlx::query_scalar::<_, bool>(
+                        "SELECT EXISTS (SELECT 1 FROM services WHERE id = $1 AND user_id = $2)",
+                    )
+                    .bind(other)
+                    .bind(user.id)
+                    .fetch_one(&state.db)
+                    .await?
+                    {
+                        "Deze server kan geen firewall van Stacklane gebruiken."
+                    } else {
+                        "Kies een van je eigen servers."
+                    },
+                ));
+            }
+            Some(ids.clone())
+        }
+        None => None,
+    };
+    let mut transaction = state.db.begin().await?;
+    sqlx::query(
+        "INSERT INTO vps_firewalls (id, user_id, name, auto_assign) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, auto_assign = EXCLUDED.auto_assign, updated_at = now()",
+    )
+    .bind(id)
+    .bind(user.id)
+    .bind(&input.name)
+    .bind(input.auto_assign)
+    .execute(&mut *transaction)
+    .await?;
+    sqlx::query("DELETE FROM vps_firewall_rules WHERE firewall_id = $1")
+        .bind(id)
+        .execute(&mut *transaction)
+        .await?;
+    for (position, rule) in input.rules.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO vps_firewall_rules (id, firewall_id, position, direction, action, proto, dport, source, comment)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(id)
+        .bind(i32::try_from(position).unwrap_or(i32::MAX))
+        .bind(&rule.direction)
+        .bind(&rule.action)
+        .bind(rule.proto.as_deref().filter(|value| !value.is_empty()))
+        .bind(rule.dport.as_deref().filter(|value| !value.is_empty()))
+        .bind(rule.source.as_deref().filter(|value| !value.is_empty()))
+        .bind(&rule.comment)
+        .execute(&mut *transaction)
+        .await?;
+    }
+    let mut detached = Vec::new();
+    if let Some(wanted) = &wanted {
+        detached = sqlx::query_scalar(
+            "DELETE FROM vps_firewall_servers WHERE firewall_id = $1 AND NOT (service_id = ANY($2)) RETURNING service_id",
+        )
+        .bind(id)
+        .bind(wanted)
+        .fetch_all(&mut *transaction)
+        .await?;
+        for service_id in wanted {
+            sqlx::query(
+                "INSERT INTO vps_firewall_servers (firewall_id, service_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            )
+            .bind(id)
+            .bind(service_id)
+            .execute(&mut *transaction)
+            .await?;
+        }
+    }
+    transaction.commit().await?;
+    Ok(detached)
+}
+
+pub async fn index(
+    State(state): State<AppState>,
+    user: CurrentUser,
+) -> AppResult<Json<Vec<Firewall>>> {
+    Ok(Json(
+        sqlx::query_as(sqlx::AssertSqlSafe(format!(
+            "{SELECT} ORDER BY f.created_at"
+        )))
+        .bind(user.id)
+        .fetch_all(&state.db)
+        .await?,
+    ))
+}
+
+pub async fn show(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<FirewallDetail>> {
+    let firewall = owned(&state, &user, id).await?;
+    let server_list = sqlx::query_as(
+        "SELECT v.id, v.name FROM vps_firewall_servers s JOIN services v ON v.id = s.service_id
+         WHERE s.firewall_id = $1 AND v.status <> 'terminated' ORDER BY v.name",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(FirewallDetail {
+        firewall,
+        rule_list: rules_of(&state, id).await?,
+        server_list,
+    }))
+}
+
+pub async fn create(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Json(mut input): Json<FirewallInput>,
+) -> AppResult<(StatusCode, Json<Saved>)> {
+    clean(&mut input)?;
+    let id = Uuid::new_v4();
+    store(&state, &user, id, &input).await?;
+    let problems = sync_all(
+        &state,
+        user.id,
+        id,
+        &attached(&state, id).await?,
+        &input.rules,
+    )
+    .await;
+    Ok((StatusCode::CREATED, Json(Saved { id, problems })))
+}
+
+pub async fn update(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(mut input): Json<FirewallInput>,
+) -> AppResult<Json<Saved>> {
+    owned(&state, &user, id).await?;
+    clean(&mut input)?;
+    let detached = store(&state, &user, id, &input).await?;
+    let mut problems = sync_all(&state, user.id, id, &detached, &[]).await;
+    problems.extend(
+        sync_all(
+            &state,
+            user.id,
+            id,
+            &attached(&state, id).await?,
+            &input.rules,
+        )
+        .await,
+    );
+    Ok(Json(Saved { id, problems }))
+}
+
+pub async fn destroy(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Saved>> {
+    owned(&state, &user, id).await?;
+    let problems = sync_all(&state, user.id, id, &attached(&state, id).await?, &[]).await;
+    sqlx::query("DELETE FROM vps_firewalls WHERE id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await?;
+    Ok(Json(Saved { id, problems }))
+}
+
+pub async fn apply_automatic(state: &AppState, service_id: Uuid) -> anyhow::Result<()> {
+    let user_id: Uuid = sqlx::query_scalar("SELECT user_id FROM services WHERE id = $1")
+        .bind(service_id)
+        .fetch_one(&state.db)
+        .await?;
+    let firewalls: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM vps_firewalls WHERE user_id = $1 AND auto_assign ORDER BY created_at",
+    )
+    .bind(user_id)
+    .fetch_all(&state.db)
+    .await?;
+    for firewall_id in firewalls {
+        sqlx::query(
+            "INSERT INTO vps_firewall_servers (firewall_id, service_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(firewall_id)
+        .bind(service_id)
+        .execute(&state.db)
+        .await?;
+        let rules = rules_of(state, firewall_id)
+            .await
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+        sync_server(state, user_id, service_id, &marker(firewall_id), &rules).await?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{managed_ids, marker, tagged};
+    use crate::integrations::vps::FirewallRule;
+    use uuid::Uuid;
+
+    fn rule(id: &str, comment: Option<&str>) -> FirewallRule {
+        FirewallRule {
+            id: id.to_owned(),
+            direction: "in".to_owned(),
+            action: "ACCEPT".to_owned(),
+            proto: Some("tcp".to_owned()),
+            dport: Some("22".to_owned()),
+            source: None,
+            comment: comment.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn tags_and_finds_managed_rules() {
+        let id = Uuid::parse_str("1234abcd-0000-0000-0000-000000000000").unwrap();
+        assert_eq!(marker(id), "[fw:1234abcd]");
+        assert_eq!(
+            tagged(&rule("", Some(" ssh ")), "[fw:1234abcd]")
+                .comment
+                .as_deref(),
+            Some("[fw:1234abcd] ssh")
+        );
+        assert_eq!(
+            tagged(&rule("", None), "[fw:1234abcd]").comment.as_deref(),
+            Some("[fw:1234abcd]")
+        );
+        let existing = [
+            rule("0", Some("eigen regel")),
+            rule("1", Some("[fw:1234abcd] ssh")),
+            rule("4", Some("[fw:1234abcd]")),
+            rule("2", Some("[fw:99999999] web")),
+        ];
+        assert_eq!(managed_ids(&existing, "[fw:1234abcd]"), ["4", "1"]);
+    }
+}

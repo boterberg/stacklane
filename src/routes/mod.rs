@@ -21,6 +21,7 @@ mod support;
 mod system;
 mod two_factor;
 mod vps;
+pub mod vps_firewalls;
 mod webhosting;
 pub mod whois_profiles;
 
@@ -49,6 +50,17 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/vps/servers", get(vps::index))
         .route("/vps/snapshots", get(vps::all_snapshots))
+        .route("/vps/firewalls/servers", get(vps_firewalls::servers))
+        .route(
+            "/vps/firewalls",
+            get(vps_firewalls::index).post(vps_firewalls::create),
+        )
+        .route(
+            "/vps/firewalls/{id}",
+            get(vps_firewalls::show)
+                .put(vps_firewalls::update)
+                .delete(vps_firewalls::destroy),
+        )
         .route("/vps/servers/{id}", get(vps::show))
         .route("/vps/servers/{id}/power", post(vps::power))
         .route("/vps/servers/{id}/password", get(vps::root_password))

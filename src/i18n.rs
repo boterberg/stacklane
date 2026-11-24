@@ -276,6 +276,14 @@ fn english(message: &str) -> Option<&'static str> {
             "Enter an IPv4 address or range, such as 203.0.113.4 or 10.0.0.0/8."
         }
         "Kies een kwartaal van 1 tot en met 4." => "Choose a quarter from 1 to 4.",
+        "Geef de firewall een naam van hoogstens 60 tekens." => {
+            "Give the firewall a name of at most 60 characters."
+        }
+        "Een firewall heeft hoogstens 50 regels." => "A firewall has at most 50 rules.",
+        "Deze server kan geen firewall van Stacklane gebruiken." => {
+            "This server cannot use a Stacklane firewall."
+        }
+        "Kies een van je eigen servers." => "Choose one of your own servers.",
         "Kies het land van je bedrijf." => "Choose the country of your business.",
         "Vul een btw-nummer uit de EU in, zoals NL123456789B01." => {
             "Enter an EU VAT number, such as NL123456789B01."

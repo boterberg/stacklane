@@ -52,11 +52,19 @@ async fn load(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<Serve
 }
 
 async fn machine(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<vps::Machine> {
+    machine_of(state, user.id, id).await
+}
+
+pub(crate) async fn machine_of(
+    state: &AppState,
+    user_id: Uuid,
+    id: Uuid,
+) -> AppResult<vps::Machine> {
     let (integration_id, external_id, status): (Option<Uuid>, Option<String>, String) = sqlx::query_as(
         "SELECT integration_id, external_id, status FROM services WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
     )
     .bind(id)
-    .bind(user.id)
+    .bind(user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound)?;
@@ -351,12 +359,7 @@ fn valid_source(source: &str) -> bool {
         && prefix.parse::<u8>().is_ok_and(|prefix| prefix <= 32)
 }
 
-pub async fn add_firewall_rule(
-    State(state): State<AppState>,
-    user: CurrentUser,
-    Path(id): Path<Uuid>,
-    Json(mut rule): Json<vps::FirewallRule>,
-) -> AppResult<StatusCode> {
+pub fn validate_rule(rule: &mut vps::FirewallRule) -> AppResult<()> {
     rule.direction = rule.direction.to_lowercase();
     rule.action = rule.action.to_uppercase();
     if !matches!(rule.direction.as_str(), "in" | "out")
@@ -394,6 +397,16 @@ pub async fn add_firewall_rule(
             "Vul een IPv4-adres of -reeks in, zoals 203.0.113.4 of 10.0.0.0/8.",
         ));
     }
+    Ok(())
+}
+
+pub async fn add_firewall_rule(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(mut rule): Json<vps::FirewallRule>,
+) -> AppResult<StatusCode> {
+    validate_rule(&mut rule)?;
     let machine = machine(&state, &user, id).await?;
     if rule.action != "ACCEPT" && !machine.can_block() {
         return Err(AppError::field(
