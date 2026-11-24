@@ -12,7 +12,7 @@ Stacklane staat aan het begin. Bekijk de [releases](/releases/) voor wat er per 
 | --- | --- |
 | Account aanmaken, inloggen, wachtwoord vergeten | Beschikbaar |
 | Dashboard met actieve tickets en diensten die verlopen | Beschikbaar |
-| Tickets: aanmaken, reageren, sluiten, zoeken en filteren | Vanaf v0.0.2.0 |
+| Tickets: aanmaken, reageren, sluiten, zoeken en filteren | Beschikbaar |
 | Licht en donker thema, zoeken met <kbd>Ctrl</kbd>+<kbd>K</kbd> | Beschikbaar |
 | Facturatie: abonnementen en facturen | In ontwikkeling |
 | VPS, gameservers, domeinen en webhosting | Gepland |
