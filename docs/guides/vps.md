@@ -1,6 +1,6 @@
-# VPS met Proxmox VE of OpenStack
+# VPS met Proxmox VE, OpenStack of VirtFusion
 
-Stacklane maakt virtuele servers aan op je eigen Proxmox VE-cluster of in een OpenStack-cloud. Klanten bestellen een server in het panel, betalen de factuur, en binnen een paar minuten draait hij. Daarna zetten ze hem zelf aan en uit, maken ze snapshots en stellen ze de firewall in.
+Stacklane maakt virtuele servers aan op je eigen Proxmox VE-cluster, in een OpenStack-cloud of via VirtFusion. Klanten bestellen een server in het panel, betalen de factuur, en binnen een paar minuten draait hij. Daarna zetten ze hem zelf aan en uit, maken ze snapshots en stellen ze de firewall in.
 
 ## Wat je nodig hebt
 
@@ -65,6 +65,23 @@ Verschillen met Proxmox:
 - een snapshot is een image in Glance; terugzetten herbouwt de server vanaf dat image
 - het panel toont geen live processor- en geheugengebruik
 - bij opheffen ruimt Stacklane de server, de security group en de snapshots op
+
+## VirtFusion
+
+VirtFusion heeft een eigen panel voor klanten. Stacklane regelt de bestelling, de facturen en het aanmaken, en stuurt klanten voor de rest door naar VirtFusion.
+
+Je hebt nodig:
+
+- een API-token onder **Configuration → API**, met rechten op gebruikers, servers, pakketten en SSH-sleutels
+- het nummer van de hypervisorgroep waarop nieuwe servers komen
+- de nummers van de templates die klanten mogen kiezen
+- een of meer pakketten
+
+Koppel onder **Beheer → Koppelingen** met als platform **VirtFusion**. Vul het adres van je VirtFusion-panel in, het token, de groep en per regel een template-nummer met een naam, zoals `8 Debian 12`. Bij een VPS-product kies je daarna een pakket van VirtFusion.
+
+Na betaling maakt Stacklane de klant aan in VirtFusion (als die nog niet bestaat), zet zijn SSH-sleutels erbij, maakt de server en installeert het besturingssysteem. In Stacklane kan de klant de server aan- en uitzetten en herstarten. Met **Open in VirtFusion** logt hij in één klik in op het panel van VirtFusion; daar vindt hij het rootwachtwoord, de console en back-ups. Voor die inloglink is een commerciële licentie van VirtFusion nodig.
+
+Opschorten en heractiveren gebeurt in VirtFusion zelf. Opheffen verwijdert de server meteen.
 
 ## Lokaal testen
 
