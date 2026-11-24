@@ -177,9 +177,6 @@ fn english(message: &str) -> Option<&'static str> {
         "Vul het IP-adres in waarop nieuwe websites komen." => {
             "Enter the IP address new websites are placed on."
         }
-        "Op dit moment kun je gameserver-, VPS- en webhostingproducten aanmaken." => {
-            "Right now you can create game server, VPS and web hosting products."
-        }
         "Vul de WHM-gebruiker en een API-token in." => "Enter the WHM user and an API token.",
         "Kies een koppeling met cPanel, DirectAdmin of Plesk." => {
             "Choose an integration with cPanel, DirectAdmin or Plesk."
@@ -284,6 +281,27 @@ fn english(message: &str) -> Option<&'static str> {
             "This server cannot use a Stacklane firewall."
         }
         "Kies een van je eigen servers." => "Choose one of your own servers.",
+        "Kies een grootte tussen 10 en 2000 GB." => "Choose a size between 10 and 2000 GB.",
+        "Kies een server." => "Choose a server.",
+        "Kies een van je actieve servers." => "Choose one of your active servers.",
+        "Dit volume kan niet bij deze server. Kies een server op hetzelfde platform." => {
+            "This volume cannot go with this server. Choose a server on the same platform."
+        }
+        "Je hebt al 10 volumes. Zeg er eerst een op." => {
+            "You already have 10 volumes. Cancel one first."
+        }
+        "Dit volume is nog niet klaar." => "This volume is not ready yet.",
+        "Dit platform kan geen volumes beheren." => "This platform cannot manage volumes.",
+        "Dit volume zit niet aan een server vast." => "This volume is not attached to a server.",
+        "Koppel het volume eerst los van de huidige server." => {
+            "Detach the volume from its current server first."
+        }
+        "Op dit moment kun je gameserver-, VPS-, volume- en webhostingproducten aanmaken." => {
+            "For now you can create game server, VPS, volume and web hosting products."
+        }
+        "Kies een koppeling met Proxmox VE of OpenStack." => {
+            "Choose a Proxmox VE or OpenStack integration."
+        }
         "Kies het land van je bedrijf." => "Choose the country of your business.",
         "Vul een btw-nummer uit de EU in, zoals NL123456789B01." => {
             "Enter an EU VAT number, such as NL123456789B01."
