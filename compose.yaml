@@ -1,0 +1,14 @@
+services:
+  db:
+    image: docker.io/library/postgres:17-alpine
+    environment:
+      POSTGRES_USER: stacklane
+      POSTGRES_PASSWORD: stacklane
+      POSTGRES_DB: stacklane
+    ports:
+      - 127.0.0.1:5432:5432
+    volumes:
+      - stacklane-db:/var/lib/postgresql/data
+
+volumes:
+  stacklane-db:
