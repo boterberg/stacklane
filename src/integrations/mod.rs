@@ -3,6 +3,7 @@ pub mod openstack;
 pub mod plesk;
 pub mod proxmox;
 pub mod pterodactyl;
+pub mod virtfusion;
 pub mod vps;
 pub mod webhosting;
 
@@ -44,6 +45,7 @@ pub enum Driver {
     DirectAdmin(directadmin::DirectAdmin),
     Plesk(plesk::Plesk),
     OpenStack(openstack::OpenStack),
+    VirtFusion(virtfusion::VirtFusion),
 }
 
 fn wrong_kind() -> AppError {
@@ -78,6 +80,7 @@ impl Driver {
             Self::DirectAdmin(client) => client.test().await,
             Self::Plesk(client) => client.test().await,
             Self::OpenStack(client) => client.test().await,
+            Self::VirtFusion(client) => client.test().await,
         }
     }
 
@@ -88,6 +91,7 @@ impl Driver {
             Self::DirectAdmin(client) => client.suspend(external_id).await,
             Self::Plesk(client) => client.suspend(webhosting::plesk_parts(external_id).1).await,
             Self::OpenStack(client) => client.power(external_id, "stop").await,
+            Self::VirtFusion(client) => client.suspend(external_id).await,
         }
     }
 
@@ -102,6 +106,7 @@ impl Driver {
                     .await
             }
             Self::OpenStack(client) => client.power(external_id, "start").await,
+            Self::VirtFusion(client) => client.unsuspend(external_id).await,
         }
     }
 
@@ -115,6 +120,7 @@ impl Driver {
                 client.terminate(domain, username).await
             }
             Self::OpenStack(client) => client.destroy(external_id).await,
+            Self::VirtFusion(client) => client.destroy(external_id).await,
         }
     }
 }
@@ -175,6 +181,17 @@ pub fn build(kind: &str, base_url: &str, credentials: &[u8], settings: Value) ->
             let settings =
                 serde_json::from_value(settings).context("ongeldige OpenStack-instellingen")?;
             Ok(Driver::OpenStack(openstack::OpenStack::new(
+                base_url,
+                credentials,
+                settings,
+            )?))
+        }
+        "virtfusion" => {
+            let credentials =
+                serde_json::from_slice(credentials).context("ongeldige VirtFusion-sleutel")?;
+            let settings =
+                serde_json::from_value(settings).context("ongeldige VirtFusion-instellingen")?;
+            Ok(Driver::VirtFusion(virtfusion::VirtFusion::new(
                 base_url,
                 credentials,
                 settings,

@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::error::{AppError, AppResult};
-use crate::integrations::{openstack, proxmox};
+use crate::integrations::{openstack, proxmox, virtfusion};
 use crate::invoicing::{self, Line};
 use crate::payments::interval_months;
 use crate::settings::{self, Billing};
@@ -60,6 +60,20 @@ fn images(row: &ProductRow) -> Vec<ImageOption> {
     match (row.integration_kind.as_deref(), &row.integration_settings) {
         (Some("proxmox"), Some(settings)) => {
             serde_json::from_value::<proxmox::Settings>(settings.clone())
+                .map(|settings| {
+                    settings
+                        .images
+                        .into_iter()
+                        .map(|image| ImageOption {
+                            id: image.template.to_string(),
+                            name: image.name,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+        (Some("virtfusion"), Some(settings)) => {
+            serde_json::from_value::<virtfusion::Settings>(settings.clone())
                 .map(|settings| {
                     settings
                         .images

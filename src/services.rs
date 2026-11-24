@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
-use crate::integrations::{self, openstack, proxmox, pterodactyl, webhosting};
+use crate::integrations::{self, openstack, proxmox, pterodactyl, virtfusion, webhosting};
 use crate::state::AppState;
 
 #[derive(sqlx::FromRow)]
@@ -74,6 +74,9 @@ async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()>
             }
             integrations::Driver::OpenStack(client) => {
                 provision_openstack(state, service_id, client, &context).await?
+            }
+            integrations::Driver::VirtFusion(client) => {
+                provision_virtfusion(state, service_id, client, &context).await?
             }
             _ => anyhow::bail!("deze koppeling kan geen VPS maken"),
         },
@@ -332,6 +335,85 @@ async fn provision_webhosting(
             "panel": hosting.panel_name(),
             "panel_url": hosting.panel_url(),
         }),
+    })
+}
+
+async fn provision_virtfusion(
+    state: &AppState,
+    service_id: Uuid,
+    client: &virtfusion::VirtFusion,
+    context: &ProvisionContext,
+) -> anyhow::Result<pterodactyl::Provisioned> {
+    let config: virtfusion::ProductConfig = serde_json::from_value(context.provisioning.clone())?;
+    let order: VpsOrder = serde_json::from_value(context.details.clone()).unwrap_or_default();
+    let image = order
+        .image
+        .as_deref()
+        .and_then(|wanted| {
+            client
+                .settings()
+                .images
+                .iter()
+                .find(|image| image.template.to_string() == wanted)
+        })
+        .or_else(|| client.settings().images.first())
+        .ok_or_else(|| anyhow::anyhow!("er staat geen besturingssysteem op deze koppeling"))?
+        .clone();
+
+    if let Some(previous) = order.server_id.as_deref() {
+        let _ = client.destroy(previous).await;
+    }
+
+    let keys: Vec<(String, String)> =
+        sqlx::query_as("SELECT name, public_key FROM ssh_keys WHERE user_id = $1 AND id = ANY($2)")
+            .bind(context.user_id)
+            .bind(&order.ssh_key_ids)
+            .fetch_all(&state.db)
+            .await?;
+    let reference = context.user_id.to_string();
+    let name = format!("{} {}", context.first_name, context.last_name);
+    let created = client
+        .create(
+            &virtfusion::Owner {
+                reference: &reference,
+                name: name.trim(),
+                email: &context.email,
+            },
+            &config,
+            &keys,
+        )
+        .await?;
+    let server_id = created.id.to_string();
+    sqlx::query("UPDATE services SET details = details || $2 WHERE id = $1")
+        .bind(service_id)
+        .bind(json!({ "server_id": server_id }))
+        .execute(&state.db)
+        .await?;
+    let hostname = hostname(&context.name);
+    let ipv4 = match client
+        .build(created.id, image.template, &hostname, &created.key_ids)
+        .await?
+    {
+        Some(ipv4) => Some(ipv4),
+        None => client.ipv4(created.id).await?,
+    };
+
+    let mut details = context.details.clone();
+    let extra = json!({
+        "server_id": server_id,
+        "ipv4": ipv4,
+        "hostname": hostname,
+        "image": image.name,
+        "cores": config.cores,
+        "memory_mb": config.memory_mb,
+        "disk_gb": config.disk_gb,
+    });
+    if let (Some(target), Some(source)) = (details.as_object_mut(), extra.as_object()) {
+        target.extend(source.clone());
+    }
+    Ok(pterodactyl::Provisioned {
+        external_id: server_id,
+        details,
     })
 }
 

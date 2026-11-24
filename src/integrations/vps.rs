@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::openstack::OpenStack;
 use super::proxmox::Proxmox;
+use super::virtfusion::VirtFusion;
 
 #[derive(Serialize)]
 pub struct Status {
@@ -37,12 +38,33 @@ pub struct FirewallRule {
     pub comment: Option<String>,
 }
 
+#[derive(Serialize)]
+pub struct Features {
+    pub snapshots: bool,
+    pub firewall: bool,
+    pub panel: bool,
+}
+
+fn unsupported<T>() -> anyhow::Result<T> {
+    anyhow::bail!("dit kan alleen in het panel van VirtFusion")
+}
+
 pub enum Machine {
     Proxmox(Proxmox, u32),
     OpenStack(OpenStack, String),
+    VirtFusion(VirtFusion, String),
 }
 
 impl Machine {
+    pub fn features(&self) -> Features {
+        let virtfusion = matches!(self, Self::VirtFusion(..));
+        Features {
+            snapshots: !virtfusion,
+            firewall: !virtfusion,
+            panel: virtfusion,
+        }
+    }
+
     pub fn can_block(&self) -> bool {
         matches!(self, Self::Proxmox(..))
     }
@@ -51,6 +73,7 @@ impl Machine {
         match self {
             Self::Proxmox(client, vmid) => client.status(*vmid).await,
             Self::OpenStack(client, id) => client.status(id).await,
+            Self::VirtFusion(client, id) => client.status(id).await,
         }
     }
 
@@ -58,6 +81,7 @@ impl Machine {
         match self {
             Self::Proxmox(client, vmid) => client.power(*vmid, action).await,
             Self::OpenStack(client, id) => client.power(id, action).await,
+            Self::VirtFusion(client, id) => client.power(id, action).await,
         }
     }
 
@@ -65,6 +89,7 @@ impl Machine {
         match self {
             Self::Proxmox(client, vmid) => client.snapshots(*vmid).await,
             Self::OpenStack(client, id) => client.snapshots(id).await,
+            Self::VirtFusion(..) => unsupported(),
         }
     }
 
@@ -72,6 +97,7 @@ impl Machine {
         match self {
             Self::Proxmox(client, vmid) => client.create_snapshot(*vmid, name, description).await,
             Self::OpenStack(client, id) => client.create_snapshot(id, name, description).await,
+            Self::VirtFusion(..) => unsupported(),
         }
     }
 
@@ -79,6 +105,7 @@ impl Machine {
         match self {
             Self::Proxmox(client, vmid) => client.rollback_snapshot(*vmid, name).await,
             Self::OpenStack(client, id) => client.rollback_snapshot(id, name).await,
+            Self::VirtFusion(..) => unsupported(),
         }
     }
 
@@ -86,6 +113,7 @@ impl Machine {
         match self {
             Self::Proxmox(client, vmid) => client.delete_snapshot(*vmid, name).await,
             Self::OpenStack(client, id) => client.delete_snapshot(id, name).await,
+            Self::VirtFusion(..) => unsupported(),
         }
     }
 
@@ -93,6 +121,7 @@ impl Machine {
         match self {
             Self::Proxmox(client, vmid) => client.firewall_rules(*vmid).await,
             Self::OpenStack(client, id) => client.firewall_rules(id).await,
+            Self::VirtFusion(..) => unsupported(),
         }
     }
 
@@ -100,6 +129,7 @@ impl Machine {
         match self {
             Self::Proxmox(client, vmid) => client.add_firewall_rule(*vmid, rule).await,
             Self::OpenStack(client, id) => client.add_firewall_rule(id, rule).await,
+            Self::VirtFusion(..) => unsupported(),
         }
     }
 
@@ -107,6 +137,7 @@ impl Machine {
         match self {
             Self::Proxmox(client, vmid) => client.delete_firewall_rule(*vmid, rule.parse()?).await,
             Self::OpenStack(client, id) => client.delete_firewall_rule(id, rule).await,
+            Self::VirtFusion(..) => unsupported(),
         }
     }
 }

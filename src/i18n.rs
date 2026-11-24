@@ -221,6 +221,11 @@ fn english(message: &str) -> Option<&'static str> {
         "Op dit platform geef je per regel één poort of reeks op." => {
             "On this platform each rule takes one port or range."
         }
+        "Vul een API-token van VirtFusion in." => "Enter a VirtFusion API token.",
+        "Vul de hypervisorgroep en minstens één besturingssysteem in." => {
+            "Enter the hypervisor group and at least one operating system."
+        }
+        "Kies een pakket van VirtFusion." => "Choose a VirtFusion package.",
         "Kies een flavor." => "Choose a flavor.",
         "Kies TCP, UDP of ICMP." => "Choose TCP, UDP or ICMP.",
         "Vul een poort in, zoals 22, 80,443 of 8000:8100." => {

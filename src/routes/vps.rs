@@ -32,6 +32,7 @@ pub struct ServerDetail {
     #[serde(flatten)]
     server: Server,
     live: Option<vps::Status>,
+    features: Option<vps::Features>,
 }
 
 const SELECT: &str = "SELECT s.id, s.name, s.status, s.details - 'root_password' - 'ssh_key_ids' AS details, s.last_error,
@@ -75,6 +76,9 @@ async fn machine(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<vp
             external_id.parse().map_err(|_| not_ready())?,
         )),
         integrations::Driver::OpenStack(client) => Ok(vps::Machine::OpenStack(client, external_id)),
+        integrations::Driver::VirtFusion(client) => {
+            Ok(vps::Machine::VirtFusion(client, external_id))
+        }
         _ => Err(AppError::NotFound),
     }
 }
@@ -103,11 +107,15 @@ pub async fn show(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<ServerDetail>> {
     let server = load(&state, &user, id).await?;
-    let live = match machine(&state, &user, id).await {
-        Ok(machine) => machine.status().await.ok(),
-        Err(_) => None,
+    let (live, features) = match machine(&state, &user, id).await {
+        Ok(machine) => (machine.status().await.ok(), Some(machine.features())),
+        Err(_) => (None, None),
     };
-    Ok(Json(ServerDetail { server, live }))
+    Ok(Json(ServerDetail {
+        server,
+        live,
+        features,
+    }))
 }
 
 #[derive(Deserialize)]
@@ -156,6 +164,30 @@ pub async fn root_password(
     Ok(Json(Password {
         password: reveal(&state, sealed.as_ref()),
     }))
+}
+
+#[derive(Serialize)]
+pub struct PanelLink {
+    url: String,
+}
+
+pub async fn panel_login(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<PanelLink>> {
+    if user.via_api_token {
+        return Err(AppError::Forbidden);
+    }
+    match machine(&state, &user, id).await? {
+        vps::Machine::VirtFusion(client, server) => Ok(Json(PanelLink {
+            url: client
+                .login_url(&user.id.to_string(), &server)
+                .await
+                .map_err(failed)?,
+        })),
+        _ => Err(AppError::NotFound),
+    }
 }
 
 pub async fn snapshots(
