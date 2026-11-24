@@ -15,21 +15,25 @@ jobs:
   package:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    container: rust:1-bookworm
-    environment: release
+    container: rust:1.99.1-bookworm@sha256:e6f2cff35d0f309acf8433b4f05878ed77092602c5065cc81801177da0bb3a9c
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: 22
+          node-version: 22.23.4
           package-manager-cache: false
       - name: version
         id: version
         run: |
           version="${GITHUB_REF_NAME#v}"
           echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::tag must look like v0.0.0.0"; exit 1; }
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/v1-stable || { echo "::error::the tagged commit is not on v1-stable"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: web
         working-directory: web
@@ -51,13 +55,31 @@ jobs:
           gpg --dearmor < packaging/stacklane.asc > stacklane.gpg
           sh packaging/build-deb.sh --version "${{ steps.version.outputs.version }}" \
             --bin target/release/stacklane --web web/dist --site docs/dist --keyring stacklane.gpg --out dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: deb
+          path: dist/stacklane_${{ steps.version.outputs.version }}_amd64.deb
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: deb
+          path: dist
       - name: publish
         env:
           APT_UPLOAD_TOKEN: ${{ secrets.APT_UPLOAD_TOKEN }}
+          VERSION: ${{ needs.package.outputs.version }}
         run: |
           test -n "$APT_UPLOAD_TOKEN" || { echo "::error::APT_UPLOAD_TOKEN is not set"; exit 1; }
           curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer $APT_UPLOAD_TOKEN" \
             -H "Content-Type: application/vnd.debian.binary-package" \
-            --data-binary "@dist/stacklane_${{ steps.version.outputs.version }}_amd64.deb" \
+            --data-binary "@dist/stacklane_${VERSION}_amd64.deb" \
             https://stacklane.io/apt/upload
