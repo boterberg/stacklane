@@ -14,6 +14,7 @@ mod mail;
 mod pagination;
 mod payments;
 mod pdf;
+mod renewals;
 mod routes;
 mod services;
 mod settings;
@@ -50,6 +51,16 @@ async fn main() -> anyhow::Result<()> {
         "import" => cli::import::run(&args[1..]).await,
         "admin" if args.get(1).map(String::as_str) == Some("create") => {
             cli::admin::create(&args[2..]).await
+        }
+        "billing" if args.get(1).map(String::as_str) == Some("run") => {
+            init_tracing();
+            let config = Config::from_env()?;
+            let state = AppState::new(connect(&config).await?, config)?;
+            let (invoices, suspended, ended) = renewals::run_once(&state)
+                .await
+                .map_err(|error| anyhow::anyhow!("{error}"))?;
+            println!("facturen: {invoices}, opgeschort: {suspended}, beëindigd: {ended}");
+            Ok(())
         }
         "demo-reset" => {
             init_tracing();
@@ -114,6 +125,7 @@ async fn serve() -> anyhow::Result<()> {
         }
     }
     state.updates.spawn_checks();
+    renewals::spawn(state.clone());
     let app = routes::router(state.clone()).layer(TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind(&state.config.bind_addr).await?;
