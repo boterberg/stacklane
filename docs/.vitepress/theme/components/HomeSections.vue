@@ -33,6 +33,12 @@ const reasons = [
   },
 ]
 
+const sources = [
+  { title: 'WHMCS', text: 'Klanten met hun wachtwoord, producten, diensten, facturen en tickets' },
+  { title: 'Paymenter', text: 'Klanten, producten, diensten, facturen en tickets' },
+  { title: 'Pterodactyl', text: 'Gebruikers en hun servers, meteen gekoppeld' },
+]
+
 const roadmap = [
   { icon: 'server', title: 'Meer VPS', text: 'Servers, volumes en snapshots op OpenStack en VirtFusion' },
   { icon: 'globe', title: 'Domeinen', text: 'Registreren, DNS-records en nameservers via Openprovider' },
@@ -47,6 +53,30 @@ const roadmap = [
       <div class="frame">
         <img src="/panel-dashboard.webp" width="1600" height="801" alt="Het dashboard van Stacklane met actieve tickets en een VPS die binnenkort verloopt" />
       </div>
+    </section>
+
+    <section class="block">
+      <div class="intro">
+        <p class="eyebrow">Overstappen</p>
+        <h2>Neem je klanten mee uit WHMCS, Paymenter of Pterodactyl</h2>
+        <p>
+          Eén commando leest je huidige systeem en zet alles over. Draai het eerst met --dry-run om te zien wat er gebeurt. Een import kun je veilig
+          vaker draaien: wat al in Stacklane staat, slaat hij over.
+        </p>
+      </div>
+      <ul class="sources">
+        <li v-for="source in sources" :key="source.title">
+          <Icon name="arrow-right-left" :size="18" class="reason-icon" />
+          <div>
+            <p class="roadmap-title">{{ source.title }}</p>
+            <p class="roadmap-text">{{ source.text }}</p>
+          </div>
+        </li>
+      </ul>
+      <a class="import-link" href="/docs/guides/import">
+        Zo werkt importeren
+        <Icon name="arrow-right" :size="16" />
+      </a>
     </section>
 
     <section class="block">
@@ -249,6 +279,35 @@ h2 {
   color: var(--vp-c-text-2);
   font-size: 14px;
   line-height: 1.6;
+}
+
+.sources {
+  display: grid;
+  gap: 16px;
+  margin: 32px 0 0;
+  padding: 0;
+  list-style: none;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.sources li {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  border: 1px solid var(--sl-border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.import-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 24px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--vp-c-text-1);
+  text-decoration: none;
 }
 
 .roadmap {
