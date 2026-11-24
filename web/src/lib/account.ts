@@ -86,6 +86,7 @@ export type AccountDetails = {
   company_name: string | null
   coc_number: string | null
   tax_id: string | null
+  tax_id_verified?: boolean
   country: string
   address_line1: string | null
   address_line2: string | null

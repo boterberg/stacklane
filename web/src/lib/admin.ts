@@ -185,6 +185,8 @@ export type Company = {
 
 export type BillingSettings = {
   tax_rate_basis_points: number
+  home_country: string
+  oss: boolean
   payment_term_days: number
   renewal_notice_days: number
   suspend_after_days: number

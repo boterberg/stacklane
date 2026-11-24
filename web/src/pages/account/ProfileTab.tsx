@@ -52,7 +52,17 @@ function ProfileForm({ initial }: { initial: AccountDetails }) {
               <Field label={t('KVK-nummer')} error={errors.coc_number}>
                 {(id) => <Input id={id} icon={IdentificationIcon} {...text('coc_number')} />}
               </Field>
-              <Field label={t('Btw-nummer')} error={errors.tax_id}>
+              <Field
+                label={t('Btw-nummer')}
+                description={
+                  form.tax_id
+                    ? form.tax_id_verified
+                      ? t('Gecontroleerd bij VIES. Je krijgt facturen met verlegde btw als je buiten ons land zit.')
+                      : t('Nog niet gecontroleerd. We proberen het opnieuw bij de volgende facturatie.')
+                    : undefined
+                }
+                error={errors.tax_id}
+              >
                 {(id) => <Input id={id} icon={ReceiptPercentIcon} placeholder="NL123456789B01" {...text('tax_id')} />}
               </Field>
             </>
