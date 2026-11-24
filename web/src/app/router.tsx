@@ -15,6 +15,7 @@ import { NotFoundPage, SectionPage } from '../pages/SectionPage'
 import { TicketDetailPage } from '../pages/support/TicketDetailPage'
 import { TicketsPage } from '../pages/support/TicketsPage'
 import { GameServerPage } from '../pages/gameservers/GameServerPage'
+import { OrderServerPage } from '../pages/vps/OrderServerPage'
 import { VpsServerPage } from '../pages/vps/ServerPage'
 import { VpsServersPage } from '../pages/vps/ServersPage'
 import { GameServersPage } from '../pages/gameservers/GameServersPage'
@@ -59,6 +60,7 @@ export const router = createBrowserRouter([
       { path: '/gameservers/servers/:id', element: <GameServerPage /> },
       { path: '/vps', element: <Navigate to="/vps/servers" replace /> },
       { path: '/vps/servers', element: <VpsServersPage /> },
+      { path: '/vps/servers/order', element: <OrderServerPage /> },
       { path: '/vps/servers/:id', element: <VpsServerPage /> },
       { path: '/admin/services', element: <ServicesPage /> },
       { path: '/admin/products', element: <ProductsPage /> },
