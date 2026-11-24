@@ -11,7 +11,8 @@ use uuid::Uuid;
 use crate::auth::CurrentAdmin;
 use crate::error::{AppError, AppResult};
 use crate::integrations::{
-    self, IntegrationSummary, KINDS, directadmin, plesk, proxmox, pterodactyl, webhosting,
+    self, IntegrationSummary, KINDS, directadmin, openstack, plesk, proxmox, pterodactyl,
+    webhosting,
 };
 use crate::services;
 use crate::state::AppState;
@@ -130,7 +131,7 @@ pub async fn create_integration(
         errors.insert("kind", "Kies een type.".to_owned());
     } else if !matches!(
         input.kind.as_str(),
-        "pterodactyl" | "proxmox" | "directadmin" | "plesk"
+        "pterodactyl" | "proxmox" | "openstack" | "directadmin" | "plesk"
     ) {
         errors.insert(
             "kind",
@@ -159,6 +160,11 @@ pub async fn create_integration(
             .is_ok_and(|credentials| {
                 credentials.token_id.contains('!') && !credentials.token_secret.trim().is_empty()
             }),
+        "openstack" => serde_json::from_value::<openstack::Credentials>(input.credentials.clone())
+            .is_ok_and(|credentials| {
+                !credentials.application_credential_id.trim().is_empty()
+                    && !credentials.application_credential_secret.trim().is_empty()
+            }),
         "directadmin" => serde_json::from_value::<directadmin::Credentials>(
             input.credentials.clone(),
         )
@@ -174,6 +180,7 @@ pub async fn create_integration(
             "credentials",
             match input.kind.as_str() {
                 "proxmox" => "Vul het token-ID (gebruiker@realm!naam) en het geheim in.",
+                "openstack" => "Vul het ID en het geheim van de application credential in.",
                 "directadmin" => "Vul de gebruikersnaam en een inlogsleutel van DirectAdmin in.",
                 "plesk" => "Vul een API-sleutel van Plesk in.",
                 _ => "Vul de application- en de client-API-sleutel in.",
@@ -181,7 +188,22 @@ pub async fn create_integration(
             .to_owned(),
         );
     }
-    let settings = if input.kind == "proxmox" {
+    let settings = if input.kind == "openstack" {
+        match serde_json::from_value::<openstack::Settings>(input.settings.clone()) {
+            Ok(settings)
+                if !settings.network_id.trim().is_empty() && !settings.images.is_empty() =>
+            {
+                serde_json::to_value(settings).map_err(anyhow::Error::from)?
+            }
+            _ => {
+                errors.insert(
+                    "settings",
+                    "Vul het netwerk en minstens één image in.".to_owned(),
+                );
+                Value::Null
+            }
+        }
+    } else if input.kind == "proxmox" {
         match serde_json::from_value::<proxmox::Settings>(input.settings) {
             Ok(settings)
                 if settings.ip_from <= settings.ip_to && !settings.node.trim().is_empty() =>
@@ -286,20 +308,22 @@ pub async fn catalog(
     _admin: CurrentAdmin,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Value>> {
+    let failed = |error: anyhow::Error| AppError::field("integration", format!("{error:#}"));
     let driver = integrations::driver(&state, id).await?;
     if let Some(hosting) = webhosting::Hosting::from_driver(&driver) {
-        return Ok(Json(hosting.plans().await.map_err(|error| {
-            AppError::field("integration", format!("{error:#}"))
-        })?));
+        return Ok(Json(hosting.plans().await.map_err(failed)?));
     }
-    let catalog = driver
-        .pterodactyl()?
-        .catalog()
-        .await
-        .map_err(|error| AppError::field("integration", format!("{error:#}")))?;
-    Ok(Json(
-        serde_json::to_value(catalog).map_err(anyhow::Error::from)?,
-    ))
+    match driver {
+        integrations::Driver::OpenStack(client) => {
+            Ok(Json(client.flavors().await.map_err(failed)?))
+        }
+        driver => {
+            let catalog = driver.pterodactyl()?.catalog().await.map_err(failed)?;
+            Ok(Json(
+                serde_json::to_value(catalog).map_err(anyhow::Error::from)?,
+            ))
+        }
+    }
 }
 
 pub async fn products(
@@ -354,13 +378,13 @@ pub async fn create_product(
         }
         None => None,
     };
-    let specs = match input.kind.as_str() {
-        "webhosting" => {
+    let specs = match (input.kind.as_str(), integration_kind.as_deref()) {
+        ("webhosting", kind) => {
             let plan = input.provisioning["plan"]
                 .as_str()
                 .map(str::trim)
                 .unwrap_or_default();
-            if !matches!(integration_kind.as_deref(), Some("directadmin" | "plesk")) {
+            if !matches!(kind, Some("directadmin" | "plesk")) {
                 errors.insert(
                     "integration_id",
                     "Kies een koppeling met DirectAdmin of Plesk.".to_owned(),
@@ -373,19 +397,33 @@ pub async fn create_product(
                 json!({ "plan": plan })
             }
         }
-        "vps" => match serde_json::from_value::<proxmox::ProductConfig>(input.provisioning.clone())
-        {
-            Ok(config) if config.cores >= 1 && config.memory_mb >= 256 && config.disk_gb >= 5 => {
-                proxmox::product_details(&config)
+        ("vps", Some("openstack")) => {
+            match serde_json::from_value::<openstack::ProductConfig>(input.provisioning.clone()) {
+                Ok(config) if !config.flavor_id.trim().is_empty() => {
+                    openstack::product_details(&config)
+                }
+                _ => {
+                    errors.insert("provisioning", "Kies een flavor.".to_owned());
+                    Value::Null
+                }
             }
-            _ => {
-                errors.insert(
-                    "provisioning",
-                    "Geef minstens 1 core, 256 MB geheugen en 5 GB schijf op.".to_owned(),
-                );
-                Value::Null
+        }
+        ("vps", _) => {
+            match serde_json::from_value::<proxmox::ProductConfig>(input.provisioning.clone()) {
+                Ok(config)
+                    if config.cores >= 1 && config.memory_mb >= 256 && config.disk_gb >= 5 =>
+                {
+                    proxmox::product_details(&config)
+                }
+                _ => {
+                    errors.insert(
+                        "provisioning",
+                        "Geef minstens 1 core, 256 MB geheugen en 5 GB schijf op.".to_owned(),
+                    );
+                    Value::Null
+                }
             }
-        },
+        }
         _ => match serde_json::from_value::<pterodactyl::ProductConfig>(input.provisioning.clone())
         {
             Ok(config)

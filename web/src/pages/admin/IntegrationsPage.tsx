@@ -41,6 +41,11 @@ const emptyForm = {
   wh_username: '',
   wh_secret: '',
   wh_ip: '',
+  credential_id: '',
+  credential_secret: '',
+  region: '',
+  network_id: '',
+  os_images: '',
 }
 
 function parseImages(text: string) {
@@ -49,6 +54,14 @@ function parseImages(text: string) {
     .map((line) => line.trim().match(/^(\d+)\s+(.+)$/))
     .filter((match): match is RegExpMatchArray => match !== null)
     .map((match) => ({ template: Number(match[1]), name: match[2].trim() }))
+}
+
+function parseCloudImages(text: string) {
+  return text
+    .split('\n')
+    .map((line) => line.trim().match(/^(\S+)\s+(.+)$/))
+    .filter((match): match is RegExpMatchArray => match !== null)
+    .map((match) => ({ id: match[1], name: match[2].trim() }))
 }
 
 type IntegrationInput = {
@@ -71,6 +84,15 @@ function payload(form: typeof emptyForm): IntegrationInput {
   }
   if (form.kind === 'plesk') {
     return { kind: form.kind, name: form.name, base_url: form.base_url, credentials: { api_key: form.wh_secret.trim() }, settings: { ip: form.wh_ip.trim() } }
+  }
+  if (form.kind === 'openstack') {
+    return {
+      kind: form.kind,
+      name: form.name,
+      base_url: form.base_url,
+      credentials: { application_credential_id: form.credential_id.trim(), application_credential_secret: form.credential_secret.trim() },
+      settings: { region: form.region.trim() || null, network_id: form.network_id.trim(), images: parseCloudImages(form.os_images) },
+    }
   }
   if (form.kind === 'proxmox') {
     return {
@@ -151,9 +173,7 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
               <option value="proxmox">{t('Proxmox VE (VPS)')}</option>
               <option value="directadmin">{t('DirectAdmin (webhosting)')}</option>
               <option value="plesk">{t('Plesk (webhosting)')}</option>
-              <option value="openstack" disabled>
-                {t('{name}, komt eraan', { name: 'OpenStack' })}
-              </option>
+              <option value="openstack">{t('OpenStack (VPS)')}</option>
               <option value="virtfusion" disabled>
                 {t('{name}, komt eraan', { name: 'VirtFusion' })}
               </option>
@@ -163,12 +183,56 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
         <Field label={t('Naam')} description={t('Alleen voor jezelf, bijvoorbeeld Gamenode Amsterdam.')} error={errors.name}>
           {(id) => <Input id={id} value={form.name} invalid={!!errors.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />}
         </Field>
-        <Field label={t('Adres van het panel')} error={errors.base_url}>
+        <Field label={form.kind === 'openstack' ? t('Adres van Keystone') : t('Adres van het panel')} error={errors.base_url}>
           {(id) => (
-            <Input id={id} placeholder={form.kind === 'directadmin' ? 'https://server.jouwbedrijf.nl:2222' : form.kind === 'plesk' ? 'https://server.jouwbedrijf.nl:8443' : t('https://panel.jouwbedrijf.nl')} value={form.base_url} invalid={!!errors.base_url} onChange={(event) => setForm({ ...form, base_url: event.target.value })} />
+            <Input
+              id={id}
+              placeholder={
+                form.kind === 'openstack'
+                  ? 'https://keystone.jouwbedrijf.nl:5000/v3'
+                  : form.kind === 'directadmin'
+                    ? 'https://server.jouwbedrijf.nl:2222'
+                    : form.kind === 'plesk'
+                      ? 'https://server.jouwbedrijf.nl:8443'
+                      : t('https://panel.jouwbedrijf.nl')
+              }
+              value={form.base_url}
+              invalid={!!errors.base_url}
+              onChange={(event) => setForm({ ...form, base_url: event.target.value })}
+            />
           )}
         </Field>
-        {form.kind === 'directadmin' || form.kind === 'plesk' ? (
+        {form.kind === 'openstack' && (
+          <>
+            <Field label={t('Application credential-ID')} description={t('Identity → Application Credentials in Horizon, of openstack application credential create.')} error={errors.credentials}>
+              {(id) => <Input id={id} autoComplete="off" value={form.credential_id} onChange={(event) => setForm({ ...form, credential_id: event.target.value })} />}
+            </Field>
+            <Field label={t('Geheim van de credential')}>
+              {(id) => <Input id={id} type="password" autoComplete="off" value={form.credential_secret} onChange={(event) => setForm({ ...form, credential_secret: event.target.value })} />}
+            </Field>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Field label={t('Regio')} description={t('Leeg laten als er maar één is.')}>
+                {(id) => <Input id={id} placeholder="RegionOne" value={form.region} onChange={(event) => setForm({ ...form, region: event.target.value })} />}
+              </Field>
+              <Field label={t('Netwerk-ID')} error={errors.settings}>
+                {(id) => <Input id={id} value={form.network_id} onChange={(event) => setForm({ ...form, network_id: event.target.value })} />}
+              </Field>
+            </div>
+            <Field label={t('Besturingssystemen')} description={t('Per regel de ID van een image en de naam die klanten zien.')}>
+              {(id) => (
+                <textarea
+                  id={id}
+                  rows={4}
+                  value={form.os_images}
+                  placeholder="0b5c1a2e-... Debian 13"
+                  onChange={(event) => setForm({ ...form, os_images: event.target.value })}
+                  className="block w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-sm text-zinc-700 shadow-xs dark:border-white/10 dark:bg-white/10 dark:text-zinc-300"
+                />
+              )}
+            </Field>
+          </>
+        )}
+        {form.kind === 'openstack' ? null : form.kind === 'directadmin' || form.kind === 'plesk' ? (
           <>
             {form.kind === 'directadmin' && (
               <Field label={t('Gebruikersnaam')} description={t('Een beheerder of reseller in DirectAdmin.')} error={errors.credentials}>

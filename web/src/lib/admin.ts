@@ -15,9 +15,12 @@ export type Integration = {
   created_at: string
 }
 
+export type Flavor = { id: string; name: string; cores: number; memory_mb: number; disk_gb: number }
+
 export type Catalog = {
   locations?: Array<{ id: number; name: string }>
   nests?: Array<{ id: number; name: string; eggs: Array<{ id: number; name: string }> }>
+  flavors?: Flavor[]
   plans?: Array<{ id: string; name: string }>
 }
 
