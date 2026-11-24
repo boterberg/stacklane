@@ -20,7 +20,7 @@ Heb je meer dan één Pterodactyl-koppeling, kies er dan een met `--integration 
 
 Wat er gebeurt:
 
-- Elke gebruiker met een server wordt een klant in Stacklane. Bestaat er al een account met hetzelfde e-mailadres, dan gebruikt de import dat.
+- Elke gebruiker met een server wordt een klant in Stacklane. Bestaat er al een account met hetzelfde e-mailadres, dan gebruikt de import dat, maar alleen als de klant dat adres heeft bevestigd of het account uit een eerdere import komt.
 - Elke server wordt een gameserver bij die klant, meteen gekoppeld. Opgeschorte servers blijven opgeschort.
 - Beheerders zonder eigen servers slaat de import over.
 
@@ -45,7 +45,7 @@ Wat er meekomt:
 | Facturen en factuurregels | Facturen, met hetzelfde nummer en dezelfde status |
 | Tickets en reacties | Tickets met het hele gesprek. Afdelingen die nog niet bestaan, worden aangemaakt. |
 
-Wat de import overslaat, staat aan het eind van de uitvoer: klanten zonder geldig e-mailadres, tickets van gasten zonder account en losse betalingen. Diensten met een cyclus van twee of drie jaar komen binnen als jaarlijks.
+Wat de import overslaat, staat aan het eind van de uitvoer: klanten zonder geldig e-mailadres, klanten van wie het adres al bij een onbevestigd account hoort, tickets van gasten zonder account en losse betalingen. Diensten met een cyclus van twee of drie jaar komen binnen als jaarlijks.
 
 De hele import is één transactie. Gaat er halverwege iets mis, dan verandert er niets.
 

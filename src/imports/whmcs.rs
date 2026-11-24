@@ -201,15 +201,17 @@ async fn clients(
                 .push(format!("Klant {id} heeft geen geldig e-mailadres"));
             continue;
         }
-        if let Some(existing) =
-            sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE email = $1")
-                .bind(&email)
-                .fetch_optional(&mut **pg)
-                .await?
-        {
-            report.existing("Klanten");
-            map.insert(id, existing);
-            continue;
+        match super::matching_account(&mut **pg, &email).await? {
+            super::Account::Usable(existing) => {
+                report.existing("Klanten");
+                map.insert(id, existing);
+                continue;
+            }
+            super::Account::Unconfirmed => {
+                report.unconfirmed(&email);
+                continue;
+            }
+            super::Account::Missing => {}
         }
         let password_hash = match hash.filter(|hash| hash.starts_with("$2")) {
             Some(hash) => hash,
@@ -219,8 +221,8 @@ async fn clients(
         let country = country.trim().to_uppercase();
         sqlx::query(
             "INSERT INTO users (id, email, password_hash, first_name, last_name, company_name, is_business, phone,
-                                country, address_line1, address_line2, city, postal_code, province, role)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'customer')",
+                                country, address_line1, address_line2, city, postal_code, province, role, imported_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'customer', now())",
         )
         .bind(user_id)
         .bind(&email)
@@ -638,12 +640,10 @@ async fn tickets(
         }
         let user_id = match clients.get(&client).copied() {
             Some(user_id) => Some(user_id),
-            None => {
-                sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE email = $1")
-                    .bind(email.trim().to_lowercase())
-                    .fetch_optional(&mut **pg)
-                    .await?
-            }
+            None => match super::matching_account(&mut **pg, &email.trim().to_lowercase()).await? {
+                super::Account::Usable(user_id) => Some(user_id),
+                _ => None,
+            },
         };
         let Some(user_id) = user_id else {
             report
