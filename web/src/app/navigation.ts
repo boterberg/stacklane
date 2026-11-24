@@ -20,6 +20,7 @@ import {
   Cog6ToothIcon,
   AdjustmentsHorizontalIcon,
   DocumentDuplicateIcon,
+  KeyIcon,
 } from '@heroicons/react/24/outline'
 import type { ComponentType, SVGProps } from 'react'
 
@@ -97,6 +98,25 @@ export const adminNavigation: NavGroup = {
     { label: 'Instellingen', to: '/admin/settings', icon: AdjustmentsHorizontalIcon },
     { label: 'Systeem', to: '/admin/system', icon: Cog6ToothIcon },
   ],
+}
+
+export type NavSection = {
+  title: string
+  back: string
+  groups: Array<{ label: string; children: NavLink[] }>
+}
+
+export const vpsSection: NavSection = {
+  title: 'VPS',
+  back: '/',
+  groups: [
+    { label: 'Compute', children: [{ label: 'Servers', to: '/vps/servers', icon: ServerStackIcon }] },
+    { label: 'Toegang', children: [{ label: 'SSH-sleutels', to: '/vps/ssh-keys', icon: KeyIcon }] },
+  ],
+}
+
+export function sectionFor(pathname: string): NavSection | null {
+  return pathname === '/vps' || pathname.startsWith('/vps/') ? vpsSection : null
 }
 
 export function navigationFor(isAdmin: boolean): NavEntry[] {

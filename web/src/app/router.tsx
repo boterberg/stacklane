@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router'
+import { createBrowserRouter, Navigate } from 'react-router'
 
 import { AppShell } from '../components/layout/AppShell'
 import { AuthLayout } from '../pages/auth/AuthLayout'
@@ -56,6 +56,7 @@ export const router = createBrowserRouter([
       { path: '/support/tickets/:number', element: <TicketDetailPage /> },
       { path: '/gameservers/servers', element: <GameServersPage /> },
       { path: '/gameservers/servers/:id', element: <GameServerPage /> },
+      { path: '/vps', element: <Navigate to="/vps/servers" replace /> },
       { path: '/admin/services', element: <ServicesPage /> },
       { path: '/admin/products', element: <ProductsPage /> },
       { path: '/admin/integrations', element: <IntegrationsPage /> },
