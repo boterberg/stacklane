@@ -5,7 +5,7 @@ use anyhow::Context;
 
 use super::{banner, done, exec, fail, require_root, step, wait_until_ready, warn};
 use crate::config::VERSION;
-use crate::updates::{Progress, write_progress};
+use crate::updates::{Progress, UpdateDir};
 
 const BACKUP_DIR: &str = "/var/backups/stacklane";
 
@@ -44,14 +44,17 @@ fn backup() -> anyhow::Result<String> {
 }
 
 struct Panel {
-    dir: PathBuf,
+    dir: Option<UpdateDir>,
     target: String,
 }
 
 impl Panel {
     fn report(&self, state: &str, step: &str, message: Option<String>) {
+        let Some(dir) = &self.dir else {
+            return;
+        };
         let progress = Progress::new(state, step, &self.target, message);
-        if let Err(error) = write_progress(&self.dir, &progress) {
+        if let Err(error) = dir.write_progress(&progress) {
             warn(&format!("Status voor het panel niet opgeslagen: {error}"));
         }
     }
@@ -64,8 +67,11 @@ pub async fn run(args: &[String]) -> anyhow::Result<()> {
     let dir = std::env::var_os("UPDATE_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/var/lib/stacklane/update"));
-    let target = std::fs::read_to_string(dir.join("request")).unwrap_or_default();
-    std::fs::remove_file(dir.join("request")).ok();
+    let dir = UpdateDir::open(&dir).ok();
+    let target = dir
+        .as_ref()
+        .and_then(UpdateDir::take_request)
+        .unwrap_or_default();
     let panel = Panel {
         dir,
         target: target.trim().to_owned(),

@@ -117,6 +117,68 @@ pub fn write_progress(dir: &Path, progress: &Progress) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub struct UpdateDir {
+    dir: std::fs::File,
+}
+
+impl UpdateDir {
+    pub fn open(path: &Path) -> anyhow::Result<Self> {
+        use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+        let dir = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(path)?;
+        anyhow::ensure!(
+            dir.metadata()?.is_dir() && dir.metadata()?.nlink() >= 2,
+            "geen map"
+        );
+        Ok(Self { dir })
+    }
+
+    fn entry(&self, name: &str) -> PathBuf {
+        use std::os::fd::AsRawFd;
+        PathBuf::from(format!("/proc/self/fd/{}/{name}", self.dir.as_raw_fd()))
+    }
+
+    pub fn take_request(&self) -> Option<String> {
+        use std::io::Read;
+        use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+        let mut file = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
+            .open(self.entry("request"))
+            .ok()?;
+        let metadata = file.metadata().ok()?;
+        std::fs::remove_file(self.entry("request")).ok();
+        if !metadata.is_file() || metadata.nlink() != 1 || metadata.len() > 64 {
+            return None;
+        }
+        let mut target = String::new();
+        file.by_ref().take(64).read_to_string(&mut target).ok()?;
+        Some(target)
+    }
+
+    pub fn write_progress(&self, progress: &Progress) -> anyhow::Result<()> {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let temporary = self.entry("status.json.tmp");
+        match std::fs::remove_file(&temporary) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error.into()),
+            _ => {}
+        }
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o644)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(&temporary)?;
+        file.write_all(&serde_json::to_vec(progress)?)?;
+        drop(file);
+        std::fs::rename(&temporary, self.entry("status.json"))?;
+        Ok(())
+    }
+}
+
 pub fn read_progress(dir: &Path) -> Option<Progress> {
     serde_json::from_slice(&std::fs::read(dir.join("status.json")).ok()?).ok()
 }
@@ -200,6 +262,37 @@ impl Updates {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("stacklane-{name}-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn the_update_dir_never_follows_planted_links() {
+        let root = scratch("links");
+        let update = root.join("update");
+        std::fs::create_dir(&update).unwrap();
+        let secret = root.join("secret");
+        std::fs::write(&secret, "root only").unwrap();
+        let victim = root.join("victim");
+        std::fs::write(&victim, "untouched").unwrap();
+        std::os::unix::fs::symlink(&secret, update.join("request")).unwrap();
+        std::os::unix::fs::symlink(&victim, update.join("status.json.tmp")).unwrap();
+
+        let dir = UpdateDir::open(&update).unwrap();
+        assert_eq!(dir.take_request(), None);
+        dir.write_progress(&Progress::new("running", "checking", "1.2.3.4", None))
+            .unwrap();
+        assert_eq!(std::fs::read_to_string(&victim).unwrap(), "untouched");
+        assert!(read_progress(&update).is_some());
+
+        let linked = root.join("linked");
+        std::os::unix::fs::symlink(&update, &linked).unwrap();
+        assert!(UpdateDir::open(&linked).is_err());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn compares_four_part_versions() {
