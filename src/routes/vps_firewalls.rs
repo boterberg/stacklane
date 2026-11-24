@@ -566,7 +566,10 @@ pub async fn destroy(
     owned(&state, &actor, id).await?;
     let problems = sync_all(&state, actor.owner, id, &attached(&state, id).await?, &[]).await;
     if !problems.is_empty() {
-        let servers: Vec<&str> = problems.iter().map(|problem| problem.server.as_str()).collect();
+        let servers: Vec<&str> = problems
+            .iter()
+            .map(|problem| problem.server.as_str())
+            .collect();
         return Err(AppError::field(
             "firewall",
             format!(

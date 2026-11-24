@@ -1159,3 +1159,53 @@ async fn a_restart_frees_work_that_was_cut_off(db: PgPool) {
         .unwrap();
     assert_eq!(status, "failed");
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn terminating_a_service_ends_its_billing(db: PgPool) {
+    use crate::testing::{NewService, make_admin, service};
+    let client = Client::new(db);
+    let (user, _) = client.register("ending@example.test").await;
+    let (admin, _) = client.register("ending-staff@example.test").await;
+    make_admin(&client.state, admin).await;
+    let billing = open_invoice(&client, user).await;
+    let ended = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: Some(billing.subscription),
+            kind: "other",
+            status: "active",
+            integration: None,
+            external_id: None,
+            details: json!({}),
+        },
+    )
+    .await;
+    crate::services::change_state(&client.state, ended, "terminate")
+        .await
+        .unwrap();
+    let db = &client.state.db;
+    let subscription: String = sqlx::query_scalar("SELECT status FROM subscriptions WHERE id = $1")
+        .bind(billing.subscription)
+        .fetch_one(db)
+        .await
+        .unwrap();
+    assert_eq!(subscription, "cancelled");
+    let invoice: String = sqlx::query_scalar("SELECT status FROM invoices WHERE id = $1")
+        .bind(billing.invoice)
+        .fetch_one(db)
+        .await
+        .unwrap();
+    assert_eq!(invoice, "cancelled");
+
+    crate::payments::mark_invoice_paid(&client.state, billing.invoice)
+        .await
+        .unwrap();
+    let flagged: i64 = sqlx::query_scalar("SELECT count(*) FROM notifications WHERE user_id = $1")
+        .bind(admin)
+        .fetch_one(db)
+        .await
+        .unwrap();
+    assert_eq!(flagged, 1);
+}
