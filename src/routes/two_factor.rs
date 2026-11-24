@@ -202,6 +202,8 @@ pub async fn new_recovery_codes(
     Ok(Json(RecoveryCodes { recovery_codes }))
 }
 
+const FREE_ATTEMPTS: i32 = 5;
+
 pub async fn check_login_code(
     state: &AppState,
     user_id: Uuid,
@@ -212,6 +214,57 @@ pub async fn check_login_code(
         .map(str::trim)
         .filter(|code| !code.is_empty())
         .ok_or_else(|| AppError::field("code", "Vul de code uit je authenticator-app in."))?;
+    let attempt: Option<i32> = sqlx::query_scalar(
+        "UPDATE users SET second_factor_failures = second_factor_failures + 1,
+                second_factor_locked_until = CASE WHEN second_factor_failures + 1 >= $2
+                    THEN now() + least(interval '1 minute' * power(2, second_factor_failures + 1 - $2), interval '1 hour')
+                END
+         WHERE id = $1 AND (second_factor_locked_until IS NULL OR second_factor_locked_until <= now())
+         RETURNING second_factor_failures",
+    )
+    .bind(user_id)
+    .bind(FREE_ATTEMPTS)
+    .fetch_optional(&state.db)
+    .await?;
+    let Some(attempt) = attempt else {
+        return Err(AppError::field(
+            "code",
+            "Te veel foute codes. Probeer het over een paar minuten opnieuw.",
+        ));
+    };
+    let result = verify_login_code(state, user_id, sealed, code).await;
+    if result.is_ok() {
+        sqlx::query(
+            "UPDATE users SET second_factor_failures = 0, second_factor_locked_until = NULL WHERE id = $1",
+        )
+        .bind(user_id)
+        .execute(&state.db)
+        .await?;
+    } else if attempt == FREE_ATTEMPTS {
+        crate::renewals::notify(
+            state,
+            user_id,
+            (
+                "Te veel foute 2FA-codes".to_owned(),
+                "Iemand heeft je wachtwoord gebruikt maar vijf keer een foute 2FA-code ingevuld. Was jij dat niet? Wijzig dan meteen je wachtwoord.".to_owned(),
+            ),
+            (
+                "Too many wrong 2FA codes".to_owned(),
+                "Someone used your password but entered a wrong 2FA code five times. If this was not you, change your password right away.".to_owned(),
+            ),
+            "/account/security",
+        )
+        .await?;
+    }
+    result
+}
+
+async fn verify_login_code(
+    state: &AppState,
+    user_id: Uuid,
+    sealed: &str,
+    code: &str,
+) -> AppResult<()> {
     let wrong = || AppError::field("code", "Deze code klopt niet.");
     if code.contains('-') {
         let used = sqlx::query(
@@ -243,10 +296,14 @@ pub async fn check_login_code(
         last_step,
     )
     .ok_or_else(wrong)?;
-    sqlx::query("UPDATE users SET totp_last_step = $2 WHERE id = $1")
-        .bind(user_id)
-        .bind(step)
-        .execute(&state.db)
-        .await?;
-    Ok(())
+    let claimed = sqlx::query(
+        "UPDATE users SET totp_last_step = $2
+         WHERE id = $1 AND (totp_last_step IS NULL OR totp_last_step < $2)",
+    )
+    .bind(user_id)
+    .bind(step)
+    .execute(&state.db)
+    .await?
+    .rows_affected();
+    if claimed == 1 { Ok(()) } else { Err(wrong()) }
 }

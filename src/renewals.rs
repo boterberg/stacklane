@@ -25,7 +25,7 @@ struct Due {
     mandate_id: Option<Uuid>,
 }
 
-async fn notify(
+pub async fn notify(
     state: &AppState,
     user_id: Uuid,
     nl: (String, String),
