@@ -17,8 +17,8 @@ RUST_LOG=stacklane=info,tower_http=info
 | `COOKIE_SECURE` | `true` | Stuurt de sessiecookie alleen over HTTPS. Zet het op `false` als je lokaal zonder HTTPS test. |
 | `STATIC_DIR` | `/usr/share/stacklane/web` | Map met het klantpanel. Laat je hem weg, dan levert de server alleen de API. |
 | `RUST_LOG` | `info` | Hoeveel er gelogd wordt, bijvoorbeeld `stacklane=debug`. |
-| `PUBLIC_URL` | leeg | Het adres van het panel, zoals `https://panel.jouwbedrijf.nl`. Komt in de links in e-mails. `stacklane setup` vult het in. |
-| `SECRET_KEY` | wordt aangemaakt | Sleutel waarmee Stacklane de API-sleutels van je koppelingen versleutelt. Het pakket maakt hem bij de installatie. Raak je hem kwijt, dan moet je die sleutels opnieuw invoeren. |
+| `PUBLIC_URL` | leeg | Het adres van het panel, zoals `https://panel.jouwbedrijf.nl`. Komt in de links in e-mails en is het adres waar Mollie en Stripe naar terugsturen. `stacklane setup` vult het in. |
+| `SECRET_KEY` | wordt aangemaakt | Sleutel waarmee Stacklane de API-sleutels van je koppelingen en betaalproviders versleutelt. Het pakket maakt hem bij de installatie. Raak je hem kwijt, dan moet je die sleutels opnieuw invoeren. |
 | `SMTP_URL` | leeg | Mailserver voor bijvoorbeeld wachtwoordherstel, zoals `smtps://gebruiker:wachtwoord@smtp.jouwbedrijf.nl:465`. Zonder deze instelling verstuurt Stacklane geen e-mail. |
 | `MAIL_FROM` | leeg | Afzender, zoals `Jouw Hosting <noreply@jouwbedrijf.nl>`. |
 | `UPDATE_CHECK_URL` | pakketbron van stacklane.io | Waar Stacklane kijkt of er een nieuwe versie is. Leeg laten zet de controle uit. |

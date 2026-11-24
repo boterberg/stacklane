@@ -119,6 +119,7 @@ export default defineConfig({
           items: [
             { text: 'Tickets', link: '/docs/guides/tickets' },
             { text: 'Gameservers', link: '/docs/guides/gameservers' },
+            { text: 'Facturatie', link: '/docs/guides/billing' },
             { text: 'Importeren', link: '/docs/guides/import' },
             { text: 'Veelgestelde vragen', link: '/docs/guides/faq' },
           ],
