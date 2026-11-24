@@ -8,6 +8,7 @@ Stacklane maakt virtuele servers aan op je eigen Proxmox VE-cluster, in een Open
 - Een **API-token** met rechten op de VM's en de opslag, bijvoorbeeld de rol `PVEVMAdmin` plus `Datastore.AllocateSpace` op je opslag
 - Eén of meer **cloud-init-templates**, bijvoorbeeld van de officiële cloud-images van Debian of Ubuntu
 - Een reeks vrije IPv4-adressen op de bridge waar de servers aan komen
+- De **firewall van het datacenter** aan (*Datacenter → Firewall → Opties*). Zonder die schakelaar werken de firewall en het IP-filter per server niet; de koppelingstest waarschuwt als hij uit staat
 
 Een template maak je zo, hier met Debian 13 als VM 9000:
 
@@ -35,7 +36,7 @@ Onder **Beheer → Producten** kies je als soort **VPS**, de koppeling, en het a
 ## Bestellen en leveren
 
 1. De klant kiest een pakket, een naam, een besturingssysteem en eventueel SSH-sleutels.
-2. Stacklane maakt een factuur. Na betaling kloont Stacklane de template, stelt cloud-init in met het IP-adres, een rootwachtwoord en de sleutels, vergroot de schijf, zet de firewall aan en start de server.
+2. Stacklane maakt een factuur. Na betaling kloont Stacklane de template, stelt cloud-init in met het IP-adres, een rootwachtwoord en de sleutels, vergroot de schijf, zet de firewall aan met een IP-filter op het eigen adres van de server en start de server. Zo kan een klant met root op zijn server niet het IP-adres van een andere klant op dezelfde bridge overnemen.
 3. Een bestelling die na de vervaldatum nog 14 dagen open staat, vervalt vanzelf.
 
 ## Wat klanten kunnen
