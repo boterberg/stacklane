@@ -22,6 +22,14 @@ const copy = {
     all: 'Alle wijzigingen',
     notes: 'Volledige notities',
     kinds: { nieuw: 'Nieuw', verbeterd: 'Verbeterd', opgelost: 'Opgelost' },
+    stats: 'Stacklane in cijfers',
+    downloads: 'Downloads',
+    downloadsHint: 'Pakketten uit de apt-bron',
+    panels: 'Actieve panels',
+    panelsHint: 'Unieke panels op {day}',
+    since: 'Geteld sinds',
+    sinceHint: 'Elke 15 minuten bijgewerkt',
+    statsNote: 'We tellen downloads van het pakket en panels die naar updates zoeken. We bewaren geen IP-adressen: een panel wordt alleen per dag herkend, met een sleutel die elke dag verandert.',
     locale: 'nl-NL',
   },
   en: {
@@ -37,6 +45,14 @@ const copy = {
     all: 'All changes',
     notes: 'Full notes',
     kinds: { nieuw: 'New', verbeterd: 'Improved', opgelost: 'Fixed' },
+    stats: 'Stacklane in numbers',
+    downloads: 'Downloads',
+    downloadsHint: 'Packages from the apt repository',
+    panels: 'Active panels',
+    panelsHint: 'Unique panels on {day}',
+    since: 'Counting since',
+    sinceHint: 'Updated every 15 minutes',
+    statsNote: 'We count package downloads and panels that check for updates. We do not keep IP addresses: a panel is only recognised within one day, with a key that changes daily.',
     locale: 'en-GB',
   },
 }
@@ -52,6 +68,10 @@ function localized(release: Release): Release {
 const releases = computed(() => data.map(localized))
 const latest = computed(() => releases.value[0])
 
+type Stats = { since: string | null; downloads: number; active_panels: number; active_panels_day: string }
+
+const stats = ref<Stats | null>(null)
+
 const kinds: Array<keyof ReleaseChanges> = ['nieuw', 'verbeterd', 'opgelost']
 
 onMounted(() => {
@@ -61,7 +81,19 @@ onMounted(() => {
   } catch {
     language.value = 'nl'
   }
+  fetch(withBase('/stats.json'), { cache: 'no-store' })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((value: Stats | null) => {
+      stats.value = value
+    })
+    .catch(() => {
+      stats.value = null
+    })
 })
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat(text.value.locale).format(value)
+}
 
 function choose(next: Language) {
   language.value = next
@@ -123,6 +155,25 @@ function changeCount(changes: ReleaseChanges) {
         </a>
       </aside>
     </header>
+
+    <section v-if="stats" class="stats" :aria-label="text.stats">
+      <div class="stat">
+        <p class="stat-label">{{ text.downloads }}</p>
+        <p class="stat-value">{{ formatNumber(stats.downloads) }}</p>
+        <p class="stat-hint">{{ text.downloadsHint }}</p>
+      </div>
+      <div class="stat">
+        <p class="stat-label">{{ text.panels }}</p>
+        <p class="stat-value">{{ formatNumber(stats.active_panels) }}</p>
+        <p class="stat-hint">{{ text.panelsHint.replace('{day}', formatDate(stats.active_panels_day)) }}</p>
+      </div>
+      <div class="stat">
+        <p class="stat-label">{{ text.since }}</p>
+        <p class="stat-value stat-date">{{ formatDate(stats.since ?? stats.active_panels_day) }}</p>
+        <p class="stat-hint">{{ text.sinceHint }}</p>
+      </div>
+      <p class="stats-note">{{ text.statsNote }}</p>
+    </section>
 
     <div class="layout">
       <nav class="rail" :aria-label="text.versions">
@@ -270,6 +321,67 @@ h1 {
 
 .feed:hover {
   color: var(--vp-c-brand-1);
+}
+
+.stats {
+  display: grid;
+  gap: 16px;
+  padding: 32px 0;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+@media (min-width: 640px) {
+  .stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.stat {
+  padding: 20px 24px;
+  border: 1px solid var(--sl-border);
+  border-radius: 16px;
+  background: var(--sl-surface);
+}
+
+.stat-label {
+  margin: 0;
+  color: var(--vp-c-text-2);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.stat-value {
+  margin: 8px 0 0;
+  color: var(--vp-c-text-1);
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value.stat-date {
+  font-size: 22px;
+  line-height: 1.45;
+}
+
+.stat-hint {
+  margin: 6px 0 0;
+  color: var(--vp-c-text-3);
+  font-size: 13px;
+}
+
+.stats-note {
+  margin: 0;
+  color: var(--vp-c-text-3);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+@media (min-width: 640px) {
+  .stats-note {
+    grid-column: 1 / -1;
+  }
 }
 
 .latest {
