@@ -82,6 +82,19 @@ fn tagged(rule: &FirewallRule, marker: &str) -> FirewallRule {
     }
 }
 
+pub fn split_ports(rule: &FirewallRule, lists_allowed: bool) -> Vec<FirewallRule> {
+    match rule.dport.as_deref() {
+        Some(ports) if !lists_allowed && ports.contains(',') => ports
+            .split(',')
+            .map(|port| FirewallRule {
+                dport: Some(port.trim().to_owned()),
+                ..rule.clone()
+            })
+            .collect(),
+        _ => vec![rule.clone()],
+    }
+}
+
 pub fn managed_ids(existing: &[FirewallRule], marker: &str) -> Vec<String> {
     let mut ids: Vec<String> = existing
         .iter()
@@ -109,12 +122,17 @@ async fn sync_server(
     if !machine.features().firewall {
         anyhow::bail!("dit platform heeft geen firewall");
     }
+    if !machine.can_block() && rules.iter().any(|rule| rule.action != "ACCEPT") {
+        anyhow::bail!("dit platform kan alleen verkeer toestaan, niet blokkeren");
+    }
     let existing = machine.firewall_rules().await?;
     for id in managed_ids(&existing, marker) {
         machine.delete_firewall_rule(&id).await?;
     }
     for rule in rules.iter().rev() {
-        machine.add_firewall_rule(&tagged(rule, marker)).await?;
+        for part in split_ports(rule, machine.can_block()) {
+            machine.add_firewall_rule(&tagged(&part, marker)).await?;
+        }
     }
     Ok(())
 }
@@ -460,7 +478,7 @@ pub async fn apply_automatic(state: &AppState, service_id: Uuid) -> anyhow::Resu
 
 #[cfg(test)]
 mod tests {
-    use super::{managed_ids, marker, tagged};
+    use super::{managed_ids, marker, split_ports, tagged};
     use crate::integrations::vps::FirewallRule;
     use uuid::Uuid;
 
@@ -497,5 +515,14 @@ mod tests {
             rule("2", Some("[fw:99999999] web")),
         ];
         assert_eq!(managed_ids(&existing, "[fw:1234abcd]"), ["4", "1"]);
+        let mut web = rule("", None);
+        web.dport = Some("80, 443".to_owned());
+        let ports = |list: Vec<FirewallRule>| {
+            list.into_iter()
+                .map(|rule| rule.dport.unwrap_or_default())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ports(split_ports(&web, false)), ["80", "443"]);
+        assert_eq!(ports(split_ports(&web, true)), ["80, 443"]);
     }
 }
