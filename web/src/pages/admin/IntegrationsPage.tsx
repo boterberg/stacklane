@@ -39,7 +39,7 @@ const emptyForm = {
   gateway: '',
   prefix: '24',
   dns: '1.1.1.1',
-  verify_tls: false,
+  verify_tls: true,
   images: '9000 Debian 13',
   wh_username: '',
   wh_secret: '',

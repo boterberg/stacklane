@@ -36,10 +36,14 @@ pub struct Settings {
     pub ip_to: Ipv4Addr,
     #[serde(default = "default_dns")]
     pub dns: String,
-    #[serde(default)]
+    #[serde(default = "default_verify_tls")]
     pub verify_tls: bool,
     #[serde(default)]
     pub images: Vec<Image>,
+}
+
+fn default_verify_tls() -> bool {
+    true
 }
 
 fn default_bridge() -> String {
@@ -931,7 +935,7 @@ mod tests {
         assert_eq!(settings.bridge, "vmbr0");
         assert_eq!(settings.storage, "local");
         assert_eq!(settings.prefix, 24);
-        assert!(!settings.verify_tls);
+        assert!(settings.verify_tls);
     }
 
     #[test]
