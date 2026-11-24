@@ -141,7 +141,7 @@ pub async fn create_integration(
         errors.insert("name", "Geef de koppeling een naam.".to_owned());
     }
     let base_url = input.base_url.trim().trim_end_matches('/').to_owned();
-    if !(base_url.starts_with("https://") || base_url.starts_with("http://")) {
+    if !base_url.starts_with("https://") || base_url.len() <= "https://".len() {
         errors.insert(
             "base_url",
             "Vul een adres in dat met https:// begint.".to_owned(),
