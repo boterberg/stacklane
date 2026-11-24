@@ -89,9 +89,12 @@ fn wanted(query: &str, known: &[ExtensionRow]) -> Option<Vec<(String, ExtensionR
 
 pub async fn search(
     State(state): State<AppState>,
-    _user: CurrentUser,
+    user: CurrentUser,
     Query(query): Query<SearchQuery>,
 ) -> AppResult<Json<Vec<SearchResult>>> {
+    state
+        .limits
+        .check(&crate::limits::DOMAIN_SEARCH, &user.id.to_string())?;
     let known = extensions(&state).await?;
     let Some(list) = wanted(&query.query, &known) else {
         return Err(AppError::field(
