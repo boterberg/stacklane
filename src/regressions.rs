@@ -520,3 +520,227 @@ async fn a_redelivered_webhook_keeps_a_revoked_mandate_revoked(db: PgPool) {
         .unwrap();
     assert_eq!(mode, "manual");
 }
+
+async fn status_of(client: &Client, service: uuid::Uuid) -> (String, Option<String>) {
+    sqlx::query_as("SELECT status, suspension_reason FROM services WHERE id = $1")
+        .bind(service)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap()
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn paying_does_not_lift_an_admin_suspension(db: PgPool) {
+    use crate::testing::{NewService, make_admin, service};
+    let client = Client::new(db);
+    let (user, _) = client.register("paying@example.test").await;
+    let (admin, admin_cookie) = client.register("staff@example.test").await;
+    make_admin(&client.state, admin).await;
+    let billing = open_invoice(&client, user).await;
+    let held = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: Some(billing.subscription),
+            kind: "other",
+            status: "active",
+            integration: None,
+            external_id: None,
+            details: json!({}),
+        },
+    )
+    .await;
+    let unpaid = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: Some(billing.subscription),
+            kind: "other",
+            status: "active",
+            integration: None,
+            external_id: None,
+            details: json!({}),
+        },
+    )
+    .await;
+    let suspended = client
+        .send(
+            Method::POST,
+            &format!("/admin/services/{held}/suspend"),
+            Some(&admin_cookie),
+            None,
+        )
+        .await;
+    assert_eq!(
+        suspended.status,
+        StatusCode::NO_CONTENT,
+        "{}",
+        suspended.body
+    );
+    crate::services::change_state_because(&client.state, unpaid, "suspend", "payment")
+        .await
+        .unwrap();
+
+    crate::payments::mark_invoice_paid(&client.state, billing.invoice)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        status_of(&client, held).await,
+        ("suspended".into(), Some("admin".into()))
+    );
+    assert_eq!(status_of(&client, unpaid).await, ("active".into(), None));
+}
+
+fn flaky_node(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+    use std::sync::atomic::Ordering;
+    match (method, path) {
+        ("POST", path) if path.ends_with("/config") && !NODE_UP.load(Ordering::SeqCst) => {
+            (500, json!({ "message": "node offline" }))
+        }
+        ("GET", path) if path.ends_with("/status/current") => {
+            (200, json!({ "data": { "status": "running" } }))
+        }
+        ("GET", path) if path.ends_with("/config") => (
+            200,
+            json!({ "data": { "scsi0": "local:vm-300-disk-0,size=20G", "scsi1": "local:vm-300-disk-1,size=10G" } }),
+        ),
+        _ => (200, json!({ "data": null })),
+    }
+}
+
+static NODE_UP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn steady_node(method: &str, path: &str, body: &str) -> (u16, serde_json::Value) {
+    if method == "POST" && path.ends_with("/config") {
+        return (200, json!({ "data": null }));
+    }
+    flaky_node(method, path, body)
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_failed_suspension_is_retried_on_the_next_run(db: PgPool) {
+    use crate::testing::{NewService, fake_api, proxmox_integration, service};
+    use std::sync::atomic::Ordering;
+    let client = Client::new(db);
+    let (base, _) = fake_api(flaky_node).await;
+    let integration = proxmox_integration(&client.state, &base).await;
+    let (user, _) = client.register("unpaid@example.test").await;
+    let billing = open_invoice(&client, user).await;
+    sqlx::query("UPDATE subscriptions SET expires_at = now() - interval '60 days' WHERE id = $1")
+        .bind(billing.subscription)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    let vps = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: Some(billing.subscription),
+            kind: "vps",
+            status: "active",
+            integration: Some(integration),
+            external_id: Some("300"),
+            details: json!({}),
+        },
+    )
+    .await;
+
+    NODE_UP.store(false, Ordering::SeqCst);
+    crate::renewals::run_once(&client.state).await.unwrap();
+    assert_eq!(status_of(&client, vps).await.0, "active");
+
+    NODE_UP.store(true, Ordering::SeqCst);
+    crate::renewals::run_once(&client.state).await.unwrap();
+    assert_eq!(
+        status_of(&client, vps).await,
+        ("suspended".into(), Some("payment".into()))
+    );
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_suspended_volume_is_detached_from_its_server(db: PgPool) {
+    use crate::testing::{NewService, fake_api, make_admin, proxmox_integration, service};
+    let client = Client::new(db);
+    let (base, calls) = fake_api(steady_node).await;
+    let integration = proxmox_integration(&client.state, &base).await;
+    let (user, _) = client.register("volume@example.test").await;
+    let (admin, admin_cookie) = client.register("volume-staff@example.test").await;
+    make_admin(&client.state, admin).await;
+    let vps = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "active",
+            integration: Some(integration),
+            external_id: Some("300"),
+            details: json!({}),
+        },
+    )
+    .await;
+    let volume = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: None,
+            kind: "volume",
+            status: "active",
+            integration: Some(integration),
+            external_id: Some("local:vm-300-disk-1"),
+            details: json!({ "host": "300", "server_id": vps.to_string(), "size_gb": 10 }),
+        },
+    )
+    .await;
+
+    let reply = client
+        .send(
+            Method::POST,
+            &format!("/admin/services/{volume}/suspend"),
+            Some(&admin_cookie),
+            None,
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{}", reply.body);
+    assert!(
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|call| call == "POST /api2/json/nodes/pve/qemu/300/config delete=scsi1")
+    );
+    let details: serde_json::Value =
+        sqlx::query_scalar("SELECT details FROM services WHERE id = $1")
+            .bind(volume)
+            .fetch_one(&client.state.db)
+            .await
+            .unwrap();
+    assert!(details.get("server_id").is_none());
+    assert_eq!(details["suspended_from"], vps.to_string());
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn billing_runs_never_overlap(db: PgPool) {
+    let client = Client::new(db);
+    let mut other = client.state.db.acquire().await.unwrap();
+    let taken: bool =
+        sqlx::query_scalar("SELECT pg_try_advisory_lock(hashtext('stacklane billing run'))")
+            .fetch_one(&mut *other)
+            .await
+            .unwrap();
+    assert!(taken);
+    let (user, _) = client.register("renewal@example.test").await;
+    let billing = open_invoice(&client, user).await;
+    sqlx::query("UPDATE subscriptions SET expires_at = now() + interval '1 day' WHERE id = $1")
+        .bind(billing.subscription)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    let run = crate::renewals::run_once(&client.state).await.unwrap();
+    assert_eq!(run.invoices + run.suspended + run.ended + run.expired, 0);
+}

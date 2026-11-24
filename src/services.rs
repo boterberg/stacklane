@@ -623,6 +623,105 @@ pub fn provision_in_background(state: AppState, service_id: Uuid) {
     });
 }
 
+async fn storage_for(
+    state: &AppState,
+    integration_id: Uuid,
+) -> anyhow::Result<integrations::volumes::Storage> {
+    let driver = integrations::driver(state, integration_id)
+        .await
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+    integrations::volumes::Storage::from_driver(driver)
+        .ok_or_else(|| anyhow::anyhow!("deze koppeling kan geen volumes beheren"))
+}
+
+async fn server_reference(state: &AppState, server_id: &str) -> anyhow::Result<Option<String>> {
+    Ok(sqlx::query_scalar(
+        "SELECT external_id FROM services WHERE id = $1::uuid AND kind = 'vps' AND status <> 'terminated'",
+    )
+    .bind(server_id)
+    .fetch_optional(&state.db)
+    .await?
+    .flatten())
+}
+
+async fn suspend_volume(
+    state: &AppState,
+    service_id: Uuid,
+    integration_id: Uuid,
+    external_id: &str,
+    details: &Value,
+) -> anyhow::Result<()> {
+    let Some(server_id) = details["server_id"].as_str() else {
+        return Ok(());
+    };
+    if let Some(server) = server_reference(state, server_id).await? {
+        let volume = integrations::volumes::VolumeRef {
+            host: details["host"].as_str().unwrap_or_default().to_owned(),
+            id: external_id.to_owned(),
+        };
+        storage_for(state, integration_id)
+            .await?
+            .detach(&volume, &server)
+            .await?;
+    }
+    sqlx::query(
+        "UPDATE services SET details = (details - 'server_id') || jsonb_build_object('suspended_from', $2::text)
+         WHERE id = $1",
+    )
+    .bind(service_id)
+    .bind(server_id)
+    .execute(&state.db)
+    .await?;
+    Ok(())
+}
+
+async fn unsuspend_volume(
+    state: &AppState,
+    service_id: Uuid,
+    integration_id: Uuid,
+    external_id: &str,
+    details: &Value,
+) -> anyhow::Result<()> {
+    let Some(server_id) = details["suspended_from"].as_str() else {
+        return Ok(());
+    };
+    let target: Option<(Option<Uuid>, Option<String>)> = sqlx::query_as(
+        "SELECT integration_id, external_id FROM services WHERE id = $1::uuid AND kind = 'vps' AND status = 'active'",
+    )
+    .bind(server_id)
+    .fetch_optional(&state.db)
+    .await?;
+    if let Some((Some(target_integration), Some(server))) = target
+        && target_integration == integration_id
+    {
+        let volume = integrations::volumes::VolumeRef {
+            host: details["host"].as_str().unwrap_or_default().to_owned(),
+            id: external_id.to_owned(),
+        };
+        let moved = storage_for(state, integration_id)
+            .await?
+            .attach(&volume, &server)
+            .await?;
+        sqlx::query(
+            "UPDATE services SET external_id = $2,
+                    details = (details - 'suspended_from') || jsonb_build_object('server_id', $3::text, 'host', $4::text)
+             WHERE id = $1",
+        )
+        .bind(service_id)
+        .bind(&moved.id)
+        .bind(server_id)
+        .bind(&moved.host)
+        .execute(&state.db)
+        .await?;
+    } else {
+        sqlx::query("UPDATE services SET details = details - 'suspended_from' WHERE id = $1")
+            .bind(service_id)
+            .execute(&state.db)
+            .await?;
+    }
+    Ok(())
+}
+
 async fn delete_volume(
     state: &AppState,
     integration_id: Uuid,
@@ -652,6 +751,15 @@ async fn delete_volume(
 }
 
 pub async fn change_state(state: &AppState, service_id: Uuid, action: &str) -> AppResult<()> {
+    change_state_because(state, service_id, action, "admin").await
+}
+
+pub async fn change_state_because(
+    state: &AppState,
+    service_id: Uuid,
+    action: &str,
+    reason: &str,
+) -> AppResult<()> {
     let (integration_id, external_id, status, kind, details): (
         Option<Uuid>,
         Option<String>,
@@ -679,12 +787,18 @@ pub async fn change_state(state: &AppState, service_id: Uuid, action: &str) -> A
     };
 
     if kind == "volume" {
-        if let (Some(integration_id), Some(external_id), "terminate") =
-            (integration_id, external_id.as_deref(), action)
+        if let (Some(integration_id), Some(external_id)) = (integration_id, external_id.as_deref())
         {
-            delete_volume(state, integration_id, external_id, &details)
-                .await
-                .map_err(|error| AppError::field("action", format!("{error:#}")))?;
+            let result = match action {
+                "suspend" => {
+                    suspend_volume(state, service_id, integration_id, external_id, &details).await
+                }
+                "unsuspend" => {
+                    unsuspend_volume(state, service_id, integration_id, external_id, &details).await
+                }
+                _ => delete_volume(state, integration_id, external_id, &details).await,
+            };
+            result.map_err(|error| AppError::field("action", format!("{error:#}")))?;
         }
     } else if let (Some(integration_id), Some(external_id)) =
         (integration_id, external_id.as_deref())
@@ -698,11 +812,16 @@ pub async fn change_state(state: &AppState, service_id: Uuid, action: &str) -> A
         result.map_err(|error| AppError::field("action", format!("{error:#}")))?;
     }
 
-    sqlx::query("UPDATE services SET status = $2, updated_at = now() WHERE id = $1")
-        .bind(service_id)
-        .bind(next)
-        .execute(&state.db)
-        .await?;
+    sqlx::query(
+        "UPDATE services SET status = $2, updated_at = now(),
+                suspension_reason = CASE WHEN $2 = 'suspended' THEN $3 END
+         WHERE id = $1",
+    )
+    .bind(service_id)
+    .bind(next)
+    .bind(reason)
+    .execute(&state.db)
+    .await?;
     if kind == "vps" && action == "terminate" {
         release_volumes(state, service_id, integration_id, external_id.as_deref()).await?;
     }

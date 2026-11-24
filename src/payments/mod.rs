@@ -401,7 +401,11 @@ pub async fn mark_invoice_paid(state: &AppState, invoice_id: i64) -> AppResult<(
         .execute(&state.db)
         .await?;
         let services: Vec<(Uuid, String)> =
-            sqlx::query_as("SELECT id, status FROM services WHERE subscription_id = $1 AND status IN ('suspended', 'pending')")
+            sqlx::query_as(
+                "SELECT id, status FROM services
+                 WHERE subscription_id = $1
+                   AND (status = 'pending' OR (status = 'suspended' AND suspension_reason = 'payment'))",
+            )
                 .bind(subscription_id)
                 .fetch_all(&state.db)
                 .await?;
@@ -409,7 +413,8 @@ pub async fn mark_invoice_paid(state: &AppState, invoice_id: i64) -> AppResult<(
             if service_status == "pending" || status == "pending" {
                 crate::services::provision_in_background(state.clone(), service_id);
             } else if let Err(error) =
-                crate::services::change_state(state, service_id, "unsuspend").await
+                crate::services::change_state_because(state, service_id, "unsuspend", "payment")
+                    .await
             {
                 tracing::warn!(%service_id, ?error, "unsuspending after payment failed");
             }
