@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::error::AppResult;
 use crate::i18n::Locale;
+use crate::invoicing::{self, Line};
 use crate::mail::Email;
 use crate::payments::{self, interval_months, mollie, renewal_end, renewal_start, stripe};
 use crate::settings::{self, Billing};
@@ -22,11 +23,6 @@ struct Due {
     billing_interval: String,
     payment_mode: String,
     mandate_id: Option<Uuid>,
-}
-
-pub fn tax_included(total_cents: i64, rate_basis_points: i32) -> i64 {
-    let rate = i64::from(rate_basis_points);
-    total_cents - (total_cents * 10_000 + (10_000 + rate) / 2) / (10_000 + rate)
 }
 
 async fn notify(
@@ -81,60 +77,26 @@ async fn create_invoice(
     .bind(due.id)
     .fetch_all(&state.db)
     .await?;
-    let months = i64::from(interval_months(&due.billing_interval));
-    let total: i64 = items
-        .iter()
-        .map(|(_, price)| i64::from(*price) * months)
-        .sum();
     if items.is_empty() {
         return Ok(None);
     }
+    let months = i64::from(interval_months(&due.billing_interval));
     let start = renewal_start(due.expires_at);
     let end = renewal_end(due.expires_at, &due.billing_interval);
-    let today = OffsetDateTime::now_utc().date();
-    let due_at = start.max(today);
-    let snapshot: Value = sqlx::query_scalar(
-        "SELECT jsonb_build_object(
-            'name', COALESCE(NULLIF(trim(first_name || ' ' || last_name), ''), email::text),
-            'company_name', company_name, 'address_line1', address_line1, 'address_line2', address_line2,
-            'postal_code', postal_code, 'city', city, 'country', country::text)
-         FROM users WHERE id = $1",
-    )
-    .bind(due.user_id)
-    .fetch_one(&state.db)
-    .await?;
-
-    let mut transaction = state.db.begin().await?;
-    let invoice_id: i64 = sqlx::query_scalar(
-        "INSERT INTO invoices (user_id, status, issued_at, due_at, tax_rate_basis_points, total_cents, tax_cents, billing_snapshot)
-         VALUES ($1, 'open', $2, $3, $4, $5, $6, $7) RETURNING id",
-    )
-    .bind(due.user_id)
-    .bind(today)
-    .bind(due_at)
-    .bind(billing.tax_rate_basis_points)
-    .bind(i32::try_from(total).unwrap_or(i32::MAX))
-    .bind(i32::try_from(tax_included(total, billing.tax_rate_basis_points)).unwrap_or(0))
-    .bind(snapshot)
-    .fetch_one(&mut *transaction)
-    .await?;
-    for (description, price) in &items {
-        sqlx::query(
-            "INSERT INTO invoice_lines (id, invoice_id, subscription_id, description, period_start, period_end, amount_cents)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)",
-        )
-        .bind(Uuid::new_v4())
-        .bind(invoice_id)
-        .bind(due.id)
-        .bind(description)
-        .bind(start)
-        .bind(end)
-        .bind(i32::try_from(i64::from(*price) * months).unwrap_or(i32::MAX))
-        .execute(&mut *transaction)
-        .await?;
-    }
-    transaction.commit().await?;
-    Ok(Some((invoice_id, total)))
+    let lines: Vec<Line> = items
+        .into_iter()
+        .map(|(description, price)| Line {
+            subscription_id: Some(due.id),
+            description,
+            period_start: Some(start),
+            period_end: Some(end),
+            amount_cents: i64::from(price) * months,
+        })
+        .collect();
+    let due_at = start.max(OffsetDateTime::now_utc().date());
+    Ok(Some(
+        invoicing::issue(state, due.user_id, &lines, due_at, billing).await?,
+    ))
 }
 
 async fn charge(state: &AppState, invoice_id: i64, total: i64, mandate_id: Uuid) -> AppResult<()> {
@@ -343,17 +305,4 @@ pub fn spawn(state: AppState) {
             tokio::time::sleep(RUN_EVERY).await;
         }
     });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::tax_included;
-
-    #[test]
-    fn splits_vat_out_of_gross_prices() {
-        assert_eq!(tax_included(650, 2100), 113);
-        assert_eq!(tax_included(1250, 2100), 217);
-        assert_eq!(tax_included(5100, 2100), 885);
-        assert_eq!(tax_included(1000, 0), 0);
-    }
 }

@@ -10,6 +10,7 @@ mod i18n;
 mod imports;
 mod integrations;
 mod invoice_pdf;
+mod invoicing;
 mod mail;
 mod pagination;
 mod payments;
