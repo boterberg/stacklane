@@ -4,45 +4,64 @@ title: Stacklane
 titleTemplate: Klantpanel voor hostingbedrijven
 
 hero:
-  name: Het klantpanel
-  text: voor hostingbedrijven
-  tagline: Geef je klanten één overzichtelijk paneel voor gameservers, VPS, domeinen, webhosting, support en facturen. Snel, licht en op je eigen server.
+  name: Stacklane
+  text: Het klantpanel voor je hostingbedrijf
+  tagline: Klanten loggen in op hun eigen omgeving en stellen daar vragen aan je supportteam. Jij draait het op je eigen server en installeert het met apt.
   actions:
     - theme: brand
-      text: Aan de slag
-      link: /docs/getting-started/introduction
+      text: Installeren
+      link: /docs/installation/install
     - theme: alt
-      text: Live demo
-      link: https://demo.stacklane.io
-    - theme: alt
-      text: Releases
-      link: /releases/
+      text: Bekijk de demo
+      link: https://demo.stacklane.io/login
 
 features:
-  - icon: 🎧
-    title: Support
-    details: Tickets per afdeling met een volledige gespreksgeschiedenis, opmaak in berichten, statussen en filters.
+  - icon:
+      light: /icons/light/life-buoy.svg
+      dark: /icons/dark/life-buoy.svg
+      width: 28
+      height: 28
+    title: Supporttickets
+    details: Een klant kiest een afdeling en schrijft zijn vraag, met opmaak als dat nodig is. Het hele gesprek blijft bij het ticket staan, ook nadat het gesloten is.
     link: /docs/guides/tickets
-    linkText: Over tickets
-  - icon: 🧾
-    title: Facturatie
-    details: Abonnementen, facturen en betaalintervallen per maand, kwartaal, halfjaar of jaar. In ontwikkeling.
-  - icon: 🖥️
-    title: Gameservers en VPS
-    details: Servers, back-ups, volumes, snapshots, netwerken, firewalls en SSH-sleutels in één omgeving. In ontwikkeling.
-  - icon: 🌐
-    title: Domeinen en webhosting
-    details: DNS-records, nameservers, WHOIS-profielen en webhostingpakketten met een eigen domein. In ontwikkeling.
-  - icon: 📦
+    linkText: Zo werken tickets
+  - icon:
+      light: /icons/light/inbox.svg
+      dark: /icons/dark/inbox.svg
+      width: 28
+      height: 28
+    title: Eén inbox voor je team
+    details: Beheerders zien de tickets van alle klanten bij elkaar. Zoek op naam of e-mailadres en zet een ticket op in uitvoering zodra iemand het oppakt.
+  - icon:
+      light: /icons/light/layout-dashboard.svg
+      dark: /icons/dark/layout-dashboard.svg
+      width: 28
+      height: 28
+    title: Dashboard
+    details: Wie inlogt, ziet meteen welke tickets nog openstaan en welke diensten binnenkort verlopen.
+  - icon:
+      light: /icons/light/user-round.svg
+      dark: /icons/dark/user-round.svg
+      width: 28
+      height: 28
+    title: Klantaccounts
+    details: Registreren kost een minuut. Zakelijke klanten geven hun bedrijfsnaam op, en met Ingelogd blijven hoeft niemand elke dag opnieuw in te loggen.
+  - icon:
+      light: /icons/light/search.svg
+      dark: /icons/dark/search.svg
+      width: 28
+      height: 28
+    title: Ctrl+K
+    details: Het zoekvenster brengt je naar elke pagina. Op een telefoon klapt het menu uit vanaf de zijkant.
+  - icon:
+      light: /icons/light/package.svg
+      dark: /icons/dark/package.svg
+      width: 28
+      height: 28
     title: Debian-pakket
-    details: Eén Rust-server met het panel erin. Installeren en updaten met apt, als systemd-service.
-    link: /docs/installation/install
-    linkText: Installeren
-  - icon: 🔓
-    title: Broncode op GitHub
-    details: Alle code is openbaar. Lees mee, meld problemen of bouw mee aan nieuwe onderdelen.
-    link: https://github.com/boterberg/stacklane
-    linkText: Naar GitHub
+    details: Server, panel en migraties zitten in één pakket uit een ondertekende pakketbron. Bijwerken doe je met sudo stacklane update.
+    link: /docs/installation/updating
+    linkText: Bijwerken
 ---
 
-<HomeScreenshot />
+<HomeSections />

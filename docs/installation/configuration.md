@@ -1,25 +1,23 @@
-# Configuratie
+# Instellingen
 
-De service leest zijn instellingen uit `/etc/stacklane/stacklane.env`. Het pakket installeert dit bestand met werkende standaardwaarden en overschrijft je wijzigingen niet bij een update.
+De service leest zijn instellingen uit `/etc/stacklane/stacklane.env`. Bij een update blijven jouw wijzigingen in dat bestand staan.
 
 ```sh
 DATABASE_URL=postgres://stacklane@localhost/stacklane?host=/var/run/postgresql
 BIND_ADDR=127.0.0.1:8080
 COOKIE_SECURE=true
 STATIC_DIR=/usr/share/stacklane/web
-RUST_LOG=stacklane_server=info,tower_http=info
+RUST_LOG=stacklane=info,tower_http=info
 ```
 
-## Instellingen
-
-| Variabele | Standaard | Betekenis |
+| Variabele | Standaard | Wat het doet |
 | --- | --- | --- |
-| `DATABASE_URL` | lokale socket, rol `stacklane` | Verbinding met PostgreSQL. Via de socket logt de systeemgebruiker `stacklane` in zonder wachtwoord. |
-| `BIND_ADDR` | `127.0.0.1:8080` | Adres en poort waarop de server luistert. |
-| `COOKIE_SECURE` | `true` | Stuur de sessiecookie alleen over HTTPS. Zet op `false` als je lokaal zonder HTTPS test. |
-| `STATIC_DIR` | `/usr/share/stacklane/web` | Map met het klantpanel. Laat je hem leeg, dan serveert de server alleen de API. |
-| `RUST_LOG` | `info` | Hoeveel de server logt, bijvoorbeeld `stacklane_server=debug`. |
-| `DEMO_MODE` | uit | Zet de server in demomodus: inloggen met één klik als klant of beheerder, en `stacklane-server demo-reset` mag de gegevens terugzetten. Nooit aanzetten op een server met echte klanten. |
+| `DATABASE_URL` | lokale socket | Verbinding met PostgreSQL. Via de socket logt de systeemgebruiker `stacklane` in zonder wachtwoord. |
+| `BIND_ADDR` | `127.0.0.1:8080` | Adres en poort van de server. |
+| `COOKIE_SECURE` | `true` | Stuurt de sessiecookie alleen over HTTPS. Zet het op `false` als je lokaal zonder HTTPS test. |
+| `STATIC_DIR` | `/usr/share/stacklane/web` | Map met het klantpanel. Laat je hem weg, dan levert de server alleen de API. |
+| `RUST_LOG` | `info` | Hoeveel er gelogd wordt, bijvoorbeeld `stacklane=debug`. |
+| `DEMO_MODE` | uit | Inloggen in één klik als klant of beheerder, en `stacklane demo-reset` mag de database leegmaken. Zet dit nooit aan op een server met echte klanten. |
 
 Na een wijziging:
 
@@ -27,12 +25,10 @@ Na een wijziging:
 sudo systemctl restart stacklane
 ```
 
-## Een externe database
-
-Gebruik een gewone verbindings-URL met wachtwoord:
+## Een database op een andere server
 
 ```sh
-DATABASE_URL=postgres://stacklane:wachtwoord@db.example.com:5432/stacklane?sslmode=require
+DATABASE_URL=postgres://stacklane:wachtwoord@db.jouwbedrijf.nl:5432/stacklane?sslmode=require
 ```
 
 ## Logboek

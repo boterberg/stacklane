@@ -1,50 +1,43 @@
 # Webserver en HTTPS
 
-`stacklane-server` luistert standaard alleen op `127.0.0.1:8080`. Zet er een reverse proxy voor die HTTPS afhandelt. We raden Caddy aan: die haalt automatisch een certificaat op.
+Stacklane luistert op `127.0.0.1:8080` en is dus niet direct van buiten bereikbaar. Een reverse proxy zet het panel op je domein en regelt HTTPS. `sudo stacklane setup` doet dat met Caddy; deze pagina is voor als je het zelf wilt regelen.
 
-## Caddy installeren
+## Caddy
 
-```sh
-sudo apt install caddy
-```
-
-## Configuratie
-
-Vervang `panel.example.com` door je eigen domein en zet dit in `/etc/caddy/Caddyfile`:
+Het setup-commando schrijft `/etc/caddy/stacklane.caddy` en voegt `import stacklane.caddy` toe aan `/etc/caddy/Caddyfile`. Met de hand ziet dat er zo uit:
 
 ```txt
-panel.example.com {
+panel.jouwbedrijf.nl {
 	encode zstd gzip
 	reverse_proxy 127.0.0.1:8080
 }
 ```
-
-Wil je ook deze website hosten, voeg dan toe:
-
-```txt
-example.com {
-	encode zstd gzip
-	root * /usr/share/stacklane/site
-	try_files {path} {path}.html {path}/index.html
-	file_server
-	handle_errors 404 {
-		rewrite * /404.html
-		file_server
-	}
-}
-```
-
-Controleer de configuratie en laad hem opnieuw:
 
 ```sh
 sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
-::: tip Cookies
-Laat `COOKIE_SECURE=true` staan zodra het panel via HTTPS bereikbaar is. Dan stuurt de browser de sessiecookie nooit over een onversleutelde verbinding.
+Caddy vraagt het certificaat zelf aan zodra het domein naar je server wijst.
+
+## Nginx of een andere webserver
+
+Het kan met elke reverse proxy die verzoeken doorstuurt naar `127.0.0.1:8080` en de `Host`-header laat staan. Voor nginx:
+
+```nginx
+server {
+    server_name panel.jouwbedrijf.nl;
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Het certificaat regel je dan zelf, bijvoorbeeld met certbot.
+
+::: tip Cookies over HTTPS
+Laat `COOKIE_SECURE=true` staan zodra het panel via HTTPS bereikbaar is. De browser stuurt de sessiecookie dan nooit over een onversleutelde verbinding.
 :::
-
-## Een andere webserver
-
-Elke reverse proxy werkt, zolang die alle verzoeken doorstuurt naar `127.0.0.1:8080` en de `Host`-header behoudt. Het panel is een single-page app: de server stuurt zelf `index.html` terug voor paden die geen bestand zijn.

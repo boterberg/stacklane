@@ -1,0 +1,8 @@
+Origin: Stacklane
+Label: Stacklane
+Codename: stable
+Suite: stable
+Architectures: amd64
+Components: main
+Description: Stacklane packages
+SignWith: @FINGERPRINT@

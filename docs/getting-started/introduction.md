@@ -1,33 +1,32 @@
 # Introductie
 
-Stacklane is een klantpanel voor hostingbedrijven. Je klanten beheren er hun diensten, stellen vragen aan je supportteam en bekijken hun facturen. Jij installeert het op je eigen server.
+Stacklane is het panel waar de klanten van je hostingbedrijf inloggen. Ze zien er hun overzicht en stellen vragen aan je supportteam. Je draait het zelf, op een server die je al hebt of een nieuwe.
 
-::: warning In ontwikkeling
-Stacklane staat aan het begin. Bekijk de [releases](/releases/) voor wat er per versie bij is gekomen. Gebruik het nog niet voor klanten in productie.
+::: warning Vroege versie
+Stacklane is net begonnen. Kijk bij de [releases](/releases/) wat er in de huidige versie zit, en gebruik het nog niet voor betalende klanten.
 :::
 
-## Wat er nu werkt
+## Wat er nu in zit
 
-| Onderdeel | Status |
+| Onderdeel | Sinds |
 | --- | --- |
-| Account aanmaken, inloggen, wachtwoord vergeten | Beschikbaar |
-| Dashboard met actieve tickets en diensten die verlopen | Beschikbaar |
-| Tickets: aanmaken, reageren, sluiten, zoeken en filteren | Beschikbaar |
-| Beheer: tickets van alle klanten beantwoorden en de status zetten | Beschikbaar |
-| Licht en donker thema, zoeken met <kbd>Ctrl</kbd>+<kbd>K</kbd> | Beschikbaar |
-| Facturatie: abonnementen en facturen | In ontwikkeling |
-| VPS, gameservers, domeinen en webhosting | Gepland |
-| Account- en beveiligingsinstellingen, API-tokens | Gepland |
+| Accounts: registreren, inloggen en uitloggen | 0.0.1.0 |
+| Dashboard met openstaande tickets en diensten die verlopen | 0.0.1.0 |
+| Tickets: aanmaken, reageren, sluiten, zoeken en filteren | 0.0.1.0 |
+| Beheer: tickets van alle klanten beantwoorden | 0.0.1.0 |
+| Het commando `stacklane` met setup, update en status | 0.0.1.0 |
 
-## Zo werkt het
+Facturatie, VPS, gameservers, domeinen en webhosting staan op de [roadmap](/#roadmap).
 
-Stacklane is één programma, `stacklane-server`, geschreven in Rust. Het bevat de API en serveert het klantpanel, een React-app. Alle gegevens staan in PostgreSQL. Voor HTTPS zet je er een reverse proxy voor, zoals Caddy.
+## Hoe het in elkaar zit
+
+Stacklane is één programma, geschreven in Rust. Het levert de API en het klantpanel, een React-app. De gegevens staan in PostgreSQL. Een reverse proxy zoals Caddy zet het panel op je domein.
 
 ```
-browser ── https ──> Caddy ── http ──> stacklane-server ──> PostgreSQL
+browser ── https ──> Caddy ── http ──> stacklane ──> PostgreSQL
 ```
 
-## Probeer het
+## Verder
 
-- Bekijk de [demo](https://demo.stacklane.io) als klant of als beheerder.
-- [Installeer Stacklane](/docs/installation/install) op je eigen server.
+- [Installeren](/docs/installation/install) op je eigen server
+- De [demo](https://demo.stacklane.io/login) bekijken als klant of als beheerder

@@ -1,21 +1,25 @@
 # Veelgestelde vragen
 
-## Kan ik Stacklane al gebruiken voor mijn klanten?
+## Kan ik het al gebruiken voor mijn klanten?
 
-Nog niet. Stacklane is in ontwikkeling en de belangrijkste onderdelen, zoals facturatie en het beheren van servers, komen in de volgende releases.
+Nog niet. Facturatie en het beheren van servers en domeinen ontbreken nog. Die komen eerst.
 
-## Is er een demo?
+## Waar staat de demo?
 
-Ja, op [demo.stacklane.io](https://demo.stacklane.io). Log in met één klik als klant of als beheerder. Alles wat je verandert, wordt elk uur teruggezet.
+Op [demo.stacklane.io](https://demo.stacklane.io/login). Je logt in met één klik als klant of als beheerder. Elk heel uur zetten we alles terug.
 
 ## Welke database heb ik nodig?
 
-PostgreSQL 15 of nieuwer. Andere databases worden niet ondersteund.
+PostgreSQL, versie 15 of nieuwer. MySQL en MariaDB werken niet.
 
-## Draait Stacklane in Docker?
+## Is er een Docker-image?
 
-Er is nog geen officieel image. Het Debian-pakket is de ondersteunde manier om te installeren.
+Nee. Stacklane is gemaakt om als Debian-pakket met systemd te draaien, en daar richten we ons op.
 
-## Waar meld ik een fout?
+## Hoe werk ik bij?
 
-Open een issue op [GitHub](https://github.com/boterberg/stacklane/issues).
+Met `sudo stacklane update`. Het maakt eerst een back-up van je database. Meer bij [Bijwerken](/docs/installation/updating).
+
+## Mag ik het aanpassen?
+
+Ja. Stacklane valt onder de MIT-licentie. De code staat op [GitHub](https://github.com/boterberg/stacklane); daar meld je ook fouten.

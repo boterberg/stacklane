@@ -7,3 +7,4 @@
 /docs/dist
 /docs/.vitepress/cache
 /.claude
+/target-bookworm

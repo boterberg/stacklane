@@ -2,19 +2,20 @@
 import { useData } from 'vitepress'
 import { computed } from 'vue'
 
+import Icon from './Icon.vue'
+
 const { frontmatter } = useData()
-const repository = 'https://github.com/boterberg/stacklane'
 
 const date = computed(() => new Intl.DateTimeFormat('nl-NL', { dateStyle: 'long' }).format(new Date(frontmatter.value.date)))
-const version = computed(() => frontmatter.value.version as string)
-const deb = computed(() => `stacklane_${version.value.replace(/^v/, '')}_amd64.deb`)
 </script>
 
 <template>
   <div class="meta">
     <span>{{ date }}</span>
-    <a :href="`${repository}/releases/tag/${version}`">GitHub-release</a>
-    <a :href="`${repository}/releases/download/${version}/${deb}`">{{ deb }}</a>
+    <span class="command">
+      <Icon name="terminal" :size="14" />
+      <code>sudo stacklane update</code>
+    </span>
   </div>
 </template>
 
@@ -22,9 +23,16 @@ const deb = computed(() => `stacklane_${version.value.replace(/^v/, '')}_amd64.d
 .meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 24px;
+  align-items: center;
+  gap: 8px 20px;
   margin: -8px 0 24px;
-  font-size: 14px;
   color: var(--vp-c-text-2);
+  font-size: 14px;
+}
+
+.command {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 </style>

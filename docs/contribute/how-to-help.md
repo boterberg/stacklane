@@ -1,10 +1,10 @@
-# Meebouwen aan Stacklane
+# Meebouwen
 
-Alle code staat op [GitHub](https://github.com/boterberg/stacklane). Meld fouten en ideeën als issue, of open een pull request.
+De code staat op [GitHub](https://github.com/boterberg/stacklane). Fouten en ideeën kun je daar melden; een pull request is ook welkom.
 
-## Lokaal ontwikkelen
+## Lokaal draaien
 
-Je hebt Rust (stable), Node.js 22 en podman of Docker nodig. Start de database en de server:
+Je hebt Rust, Node.js 22 en podman of Docker nodig. De database start je met een script:
 
 ```sh
 sh scripts/dev-db.sh
@@ -12,7 +12,7 @@ cp .env.example .env
 cargo run
 ```
 
-Start in een tweede terminal het panel:
+Het panel start je in een tweede terminal:
 
 ```sh
 cd web
@@ -20,25 +20,27 @@ npm install
 npm run dev
 ```
 
-Het panel draait op `http://localhost:5173` en stuurt `/api` door naar de server op poort 8080.
+Het panel staat dan op `http://localhost:5173` en praat met de server op poort 8080. Deze website draait met `npm run dev` in de map `docs`.
 
 ## Mappen
 
 | Map | Inhoud |
 | --- | --- |
-| `src/` | Rust-server: API, sessies, demo |
-| `migrations/` | Databasemigraties, worden bij elke start toegepast |
-| `web/` | Klantpanel: React, TypeScript, Tailwind CSS |
-| `docs/` | Deze website en de documentatie, gebouwd met VitePress |
-| `packaging/` | Debian-pakket, systemd-units, installatiescript |
-| `deploy/` | Configuratie van de demo op demo.stacklane.io |
-| `scripts/` | Hulpscripts voor ontwikkeling |
+| `src/` | De Rust-server en het commando `stacklane` |
+| `migrations/` | Databasemigraties |
+| `web/` | Het klantpanel in React en Tailwind CSS |
+| `docs/` | Deze website, gebouwd met VitePress |
+| `packaging/` | Het Debian-pakket en de systemd-units |
+| `deploy/` | De pakketbron en de demo op stacklane.io |
+| `scripts/` | Hulpscripts voor ontwikkelen |
 
-## Voor je een pull request opent
+## Voor je iets instuurt
 
 ```sh
-cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
 cd web && npm run lint && npm run build
 ```
 
-Commitberichten volgen Conventional Commits, in kleine letters: `feat: …`, `fix(support): …`, `docs: …`.
+Commitberichten schrijven we kort en in kleine letters, zoals `feat: …`, `fix(support): …` of `docs: …`.

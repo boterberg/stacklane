@@ -1,68 +1,71 @@
-# Installatie
+# Installeren
 
-Stacklane wordt geleverd als Debian-pakket (`.deb`) voor amd64. Het installatiescript zet de database klaar, installeert de laatste release en start de service.
+Stacklane installeer je uit onze pakketbron op stacklane.io. Daarna zet `sudo stacklane setup` de rest klaar: de database, de webserver en je eerste beheerder.
 
-## Ondersteunde systemen
+## Wat je nodig hebt
 
-| Systeem | Versie | Ondersteund |
-| --- | --- | --- |
-| Ubuntu | 26.04, 24.04 | ✅ |
-| Debian | 13, 12 | ✅ |
-| Andere Linux-distributies | | Alleen met eigen build |
-| Windows | | ❌ |
+- Een server met Debian 12 of nieuwer, of Ubuntu 24.04 of nieuwer, op amd64
+- Minstens 1 vCPU en 1 GB geheugen
+- Een domeinnaam die naar de server wijst, als je HTTPS wilt
 
-## Benodigdheden
+PostgreSQL en Caddy hoef je niet vooraf te installeren. Het setup-commando vraagt of het dat voor je mag doen.
 
-- Een server met minimaal 1 vCPU en 1 GB RAM
-- PostgreSQL 15 of nieuwer (het script installeert het als het ontbreekt)
-- Een domeinnaam die naar de server wijst, voor HTTPS
+## De pakketbron toevoegen
 
-## Installeren met het script
+De pakketten zijn ondertekend. Haal eerst de sleutel op en voeg dan de bron toe:
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/boterberg/stacklane/main/packaging/install.sh
-sudo sh install.sh
+curl -fsSL https://stacklane.io/apt/stacklane.gpg \
+  | sudo tee /usr/share/keyrings/stacklane.gpg > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/stacklane.gpg] \
+  https://stacklane.io/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/stacklane.list
 ```
 
-Het script:
-
-1. installeert PostgreSQL als dat nog niet op de server staat;
-2. maakt de databaserol en de database `stacklane` aan;
-3. downloadt de laatste release en controleert die met `SHA256SUMS`;
-4. installeert het pakket en wacht tot `/readyz` antwoordt.
-
-Een specifieke versie installeer je met `sudo sh install.sh 0.0.1.0`.
-
-## Handmatig installeren
+Controleer de vingerafdruk van de sleutel:
 
 ```sh
-sudo -u postgres createuser stacklane
-sudo -u postgres createdb --owner stacklane stacklane
-
-VERSION=0.0.1.0
-curl -fsSLO https://github.com/boterberg/stacklane/releases/download/v$VERSION/stacklane_${VERSION}_amd64.deb
-curl -fsSLO https://github.com/boterberg/stacklane/releases/download/v$VERSION/SHA256SUMS
-sha256sum --check --ignore-missing SHA256SUMS
-sudo apt install ./stacklane_${VERSION}_amd64.deb
+gpg --show-keys /usr/share/keyrings/stacklane.gpg
 ```
 
-De service maakt bij de eerste start zelf de tabellen aan.
+Die moet `3DE6 4DD4 93CE C7A9 01BC 5B4B 5AAC 95B7 CE6B 5075` zijn.
+
+## Installeren
+
+```sh
+sudo apt update
+sudo apt install stacklane
+```
+
+## Instellen
+
+```sh
+sudo stacklane setup
+```
+
+Het commando loopt stap voor stap door de installatie:
+
+1. Het maakt de PostgreSQL-rol en -database `stacklane` aan en installeert PostgreSQL als het nog ontbreekt.
+2. Het start de service en wacht tot die antwoordt.
+3. Het vraagt op welk domein het panel komt en schrijft de Caddy-configuratie. Caddy haalt zelf een certificaat op.
+4. Het maakt je beheerdersaccount aan.
+
+Daarna open je het panel op je domein en log je in.
 
 ## Controleren
 
 ```sh
-systemctl status stacklane
-curl http://127.0.0.1:8080/readyz
+stacklane status
 ```
 
-`/readyz` geeft `{"status":"ok","version":"…"}` terug zodra de server de database bereikt. Daarna [zet je de webserver op](/docs/installation/webserver).
+Je ziet of de service draait, welke versie het is en of de pakketbron goed staat.
 
-## Wat het pakket installeert
+## Wat er op je server komt
 
-| Pad | Inhoud |
+| Pad | Wat |
 | --- | --- |
-| `/usr/bin/stacklane-server` | De server |
+| `/usr/bin/stacklane` | Het programma: server en commando's |
 | `/usr/share/stacklane/web` | Het klantpanel |
-| `/usr/share/stacklane/site` | Deze website |
-| `/etc/stacklane/stacklane.env` | [Configuratie](/docs/installation/configuration) |
-| `/lib/systemd/system/stacklane.service` | De systemd-service |
+| `/etc/stacklane/stacklane.env` | [Instellingen](/docs/installation/configuration) |
+| `/lib/systemd/system/stacklane.service` | De service |
+| `/etc/caddy/stacklane.caddy` | De webserverconfiguratie, als je Caddy laat instellen |

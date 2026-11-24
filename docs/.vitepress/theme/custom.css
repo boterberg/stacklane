@@ -3,42 +3,78 @@
   --vp-c-brand-1: #4f46e5;
   --vp-c-brand-2: #4338ca;
   --vp-c-brand-3: #4f46e5;
-  --vp-c-brand-soft: rgba(79, 70, 229, 0.12);
-  --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(120deg, #18181b 30%, #4f46e5);
-  --vp-button-brand-bg: #27272a;
-  --vp-button-brand-hover-bg: #18181b;
-  --vp-button-brand-active-bg: #09090b;
+  --vp-c-brand-soft: rgba(79, 70, 229, 0.1);
+  --vp-home-hero-name-color: #18181b;
+  --vp-button-brand-bg: #4f46e5;
+  --vp-button-brand-hover-bg: #4338ca;
+  --vp-button-brand-active-bg: #3730a3;
   --vp-nav-logo-height: 22px;
+  --sl-surface: #fafafa;
+  --sl-border: #e4e4e7;
 }
 
 .dark {
   --vp-c-bg: #18181b;
-  --vp-c-bg-alt: #1f1f23;
+  --vp-c-bg-alt: #1c1c1f;
   --vp-c-bg-elv: #27272a;
-  --vp-c-bg-soft: #27272a;
-  --vp-c-divider: rgba(255, 255, 255, 0.1);
+  --vp-c-bg-soft: #232326;
+  --vp-c-divider: rgba(255, 255, 255, 0.08);
   --vp-c-gutter: #09090b;
   --vp-c-brand-1: #a5b4fc;
   --vp-c-brand-2: #818cf8;
-  --vp-c-brand-3: #6366f1;
-  --vp-c-brand-soft: rgba(99, 102, 241, 0.16);
-  --vp-home-hero-name-background: linear-gradient(120deg, #ffffff 30%, #a5b4fc);
-  --vp-button-brand-bg: #ffffff;
-  --vp-button-brand-text: #27272a;
-  --vp-button-brand-hover-bg: #f4f4f5;
-  --vp-button-brand-hover-text: #18181b;
-  --vp-button-brand-active-bg: #e4e4e7;
-  --vp-button-brand-active-text: #18181b;
+  --vp-c-brand-3: #4f46e5;
+  --vp-c-brand-soft: rgba(129, 140, 248, 0.14);
+  --vp-home-hero-name-color: #fafafa;
+  --vp-button-brand-bg: #4f46e5;
+  --vp-button-brand-hover-bg: #6366f1;
+  --vp-button-brand-active-bg: #4338ca;
+  --sl-surface: #1f1f23;
+  --sl-border: rgba(255, 255, 255, 0.08);
 }
 
-.VPHero .name,
-.VPHero .text {
-  letter-spacing: -0.03em;
+.VPHome .VPHero .container {
+  text-align: center;
 }
 
-.VPFeature .icon {
-  background-color: var(--vp-c-brand-soft);
+.VPHome .VPHero .main {
+  margin: 0 auto;
+  max-width: 760px;
+}
+
+.VPHome .VPHero .name,
+.VPHome .VPHero .text {
+  margin: 0 auto;
+  letter-spacing: -0.035em;
+}
+
+.VPHome .VPHero .text {
+  color: var(--vp-c-text-2);
+}
+
+.VPHome .VPHero .tagline {
+  margin: 20px auto 0;
+  max-width: 620px;
+}
+
+.VPHome .VPHero .actions {
+  justify-content: center;
+}
+
+.VPHome .VPFeatures .item .VPFeature {
+  border: 1px solid var(--sl-border);
+  background: var(--sl-surface);
+}
+
+.VPHome .VPFeature .icon {
+  background: transparent;
+  width: auto;
+  height: auto;
+  margin-bottom: 16px;
+  justify-content: flex-start;
+}
+
+.VPHome .VPFeature .title {
+  font-size: 15px;
 }
 
 .vp-doc table {

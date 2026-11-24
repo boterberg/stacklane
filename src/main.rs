@@ -1,4 +1,5 @@
 mod auth;
+mod cli;
 mod config;
 mod demo;
 mod error;
@@ -10,6 +11,7 @@ mod state;
 use std::sync::Arc;
 
 use anyhow::Context;
+use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
@@ -17,17 +19,64 @@ use tracing_subscriber::EnvFilter;
 use crate::config::Config;
 use crate::state::AppState;
 
+const ENV_FILE: &str = "/etc/stacklane/stacklane.env";
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenvy::dotenv().ok();
+    if dotenvy::dotenv().is_err() {
+        dotenvy::from_path(ENV_FILE).ok();
+    }
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let command = args.first().map(String::as_str).unwrap_or("serve");
+    if command != "serve" {
+        restore_default_sigpipe();
+    }
+
+    match command {
+        "serve" => serve().await,
+        "setup" => cli::setup::run().await,
+        "update" => cli::update::run().await,
+        "status" => cli::status::run().await,
+        "admin" if args.get(1).map(String::as_str) == Some("create") => {
+            cli::admin::create(&args[2..]).await
+        }
+        "demo-reset" => {
+            init_tracing();
+            let config = Config::from_env()?;
+            demo::ensure_demo_mode(config.demo_mode)?;
+            demo::reset(&connect(&config).await?).await
+        }
+        "version" | "--version" | "-V" => {
+            println!("stacklane {}", config::VERSION);
+            Ok(())
+        }
+        "help" | "--help" | "-h" => {
+            cli::print_help();
+            Ok(())
+        }
+        other => {
+            cli::print_help();
+            anyhow::bail!("onbekend commando: {other}")
+        }
+    }
+}
+
+fn restore_default_sigpipe() {
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+
+fn init_tracing() {
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("stacklane_server=info,tower_http=info")),
+                .unwrap_or_else(|_| EnvFilter::new("stacklane=info,tower_http=info")),
         )
         .init();
+}
 
-    let config = Config::from_env()?;
+pub async fn connect(config: &Config) -> anyhow::Result<PgPool> {
     let pool = PgPoolOptions::new()
         .max_connections(10)
         .connect(&config.database_url)
@@ -37,12 +86,13 @@ async fn main() -> anyhow::Result<()> {
         .run(&pool)
         .await
         .context("running migrations")?;
+    Ok(pool)
+}
 
-    if std::env::args().nth(1).as_deref() == Some("demo-reset") {
-        demo::ensure_demo_mode(config.demo_mode)?;
-        return demo::reset(&pool).await;
-    }
-
+async fn serve() -> anyhow::Result<()> {
+    init_tracing();
+    let config = Config::from_env()?;
+    let pool = connect(&config).await?;
     let state = AppState {
         db: pool,
         config: Arc::new(config),
@@ -66,5 +116,16 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn shutdown_signal() {
-    let _ = tokio::signal::ctrl_c().await;
+    let interrupt = tokio::signal::ctrl_c();
+    let mut terminate =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
+    tokio::select! {
+        _ = interrupt => {}
+        _ = async {
+            match terminate.as_mut() {
+                Some(signal) => { signal.recv().await; }
+                None => std::future::pending::<()>().await,
+            }
+        } => {}
+    }
 }

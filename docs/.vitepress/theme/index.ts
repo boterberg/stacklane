@@ -2,18 +2,26 @@ import '@fontsource-variable/inter'
 
 import type { Theme } from 'vitepress'
 import DefaultTheme from 'vitepress/theme'
+import { h } from 'vue'
 
 import './custom.css'
 
-import HomeScreenshot from './components/HomeScreenshot.vue'
-import ReleaseCards from './components/ReleaseCards.vue'
+import HeroBadge from './components/HeroBadge.vue'
+import HomeSections from './components/HomeSections.vue'
 import ReleaseMeta from './components/ReleaseMeta.vue'
+import ReleasesPage from './components/ReleasesPage.vue'
+import SiteFooter from './components/SiteFooter.vue'
 
 export default {
   extends: DefaultTheme,
+  Layout: () =>
+    h(DefaultTheme.Layout, null, {
+      'home-hero-info-before': () => h(HeroBadge),
+      'layout-bottom': () => h(SiteFooter),
+    }),
   enhanceApp({ app }) {
-    app.component('HomeScreenshot', HomeScreenshot)
-    app.component('ReleaseCards', ReleaseCards)
+    app.component('HomeSections', HomeSections)
+    app.component('ReleasesPage', ReleasesPage)
     app.component('ReleaseMeta', ReleaseMeta)
   },
 } satisfies Theme

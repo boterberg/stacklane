@@ -1,0 +1,24 @@
+[Unit]
+Description=Stacklane package upload receiver
+After=network.target
+
+[Service]
+Type=simple
+User=stacklane-repo
+Group=stacklane-repo
+ExecStart=/usr/bin/python3 -I /usr/local/lib/stacklane-repo/receiver.py
+Environment=HOME=/srv/stacklane-apt
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/srv/stacklane-apt
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

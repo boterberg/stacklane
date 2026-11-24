@@ -17,8 +17,6 @@ jobs:
     timeout-minutes: 60
     container: rust:1-bookworm
     environment: release
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -50,39 +48,16 @@ jobs:
         run: cargo build --release --locked
       - name: package
         run: |
-          keyring=""
-          if [ -s packaging/stacklane-release.asc ]; then
-            gpg --dearmor < packaging/stacklane-release.asc > stacklane-release.gpg
-            keyring="--keyring stacklane-release.gpg"
-          fi
+          gpg --dearmor < packaging/stacklane.asc > stacklane.gpg
           sh packaging/build-deb.sh --version "${{ steps.version.outputs.version }}" \
-            --bin target/release/stacklane-server --web web/dist --site docs/dist --out dist $keyring
-          cd dist && sha256sum *.deb > SHA256SUMS && cat SHA256SUMS
-      - name: sign
+            --bin target/release/stacklane --web web/dist --site docs/dist --keyring stacklane.gpg --out dist
+      - name: publish
         env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          SIGNING_FPR: ${{ vars.SIGNING_FPR }}
+          APT_UPLOAD_TOKEN: ${{ secrets.APT_UPLOAD_TOKEN }}
         run: |
-          if [ -z "$GPG_PRIVATE_KEY" ]; then
-            echo "::warning::GPG_PRIVATE_KEY is not set, this release is not signed"
-            exit 0
-          fi
-          export GNUPGHOME="$(mktemp -d)"
-          printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --import
-          if [ -n "$SIGNING_FPR" ]; then
-            gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "fpr" { print $10 }' | grep -qx "$SIGNING_FPR" \
-              || { echo "::error::imported key does not belong to SIGNING_FPR"; exit 1; }
-          fi
-          printf '%s' "$GPG_PASSPHRASE" > "$GNUPGHOME/passphrase"
-          gpg --batch --yes --pinentry-mode loopback --passphrase-file "$GNUPGHOME/passphrase" \
-            --armor --detach-sign --output dist/SHA256SUMS.asc dist/SHA256SUMS
-          gpg --batch --verify dist/SHA256SUMS.asc dist/SHA256SUMS
-          rm -rf "$GNUPGHOME"
-      - name: release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          apt-get update && apt-get install -y --no-install-recommends gh
-          gh release create "$GITHUB_REF_NAME" dist/*.deb dist/SHA256SUMS* \
-            --repo "$GITHUB_REPOSITORY" --title "Stacklane $GITHUB_REF_NAME" --generate-notes
+          test -n "$APT_UPLOAD_TOKEN" || { echo "::error::APT_UPLOAD_TOKEN is not set"; exit 1; }
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $APT_UPLOAD_TOKEN" \
+            -H "Content-Type: application/vnd.debian.binary-package" \
+            --data-binary "@dist/stacklane_${{ steps.version.outputs.version }}_amd64.deb" \
+            https://stacklane.io/apt/upload

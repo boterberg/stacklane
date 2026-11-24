@@ -17,7 +17,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$VERSION" ] && [ -x "$BIN" ] && [ -f "$WEB/index.html" ] && [ -f "$SITE/index.html" ] || {
-  echo "usage: $0 --version X --bin <stacklane-server> --web <web/dist> --site <site/dist> [--keyring <key.gpg>] [--arch amd64] [--out dist]" >&2
+  echo "usage: $0 --version X --bin <stacklane> --web <web/dist> --site <site/dist> [--keyring <key.gpg>] [--arch amd64] [--out dist]" >&2
   exit 1
 }
 echo "$VERSION" | grep -Eq '^[0-9][0-9A-Za-z.+~-]*$' || { echo "invalid version: $VERSION" >&2; exit 1; }
@@ -29,7 +29,7 @@ chmod 0755 "$root"
 install -d -m 0755 "$root/DEBIAN" "$root/usr/bin" "$root/usr/share/stacklane" "$root/usr/share/doc/stacklane" \
   "$root/lib/systemd/system" "$root/etc/stacklane"
 
-install -m 0755 "$BIN" "$root/usr/bin/stacklane-server"
+install -m 0755 "$BIN" "$root/usr/bin/stacklane"
 cp -R "$WEB" "$root/usr/share/stacklane/web"
 cp -R "$SITE" "$root/usr/share/stacklane/site"
 find "$root/usr/share/stacklane" -type d -exec chmod 0755 {} +
@@ -41,9 +41,10 @@ install -m 0644 packaging/systemd/stacklane.service packaging/systemd/stacklane-
   packaging/systemd/stacklane-demo-reset.timer "$root/lib/systemd/system/"
 install -m 0640 packaging/etc/stacklane.env "$root/etc/stacklane/stacklane.env"
 install -m 0644 packaging/Caddyfile.example README.md "$root/usr/share/doc/stacklane/"
+install -m 0644 LICENSE "$root/usr/share/doc/stacklane/copyright"
 if [ -n "$KEYRING" ]; then
   install -d -m 0755 "$root/usr/share/keyrings"
-  install -m 0644 "$KEYRING" "$root/usr/share/keyrings/stacklane-release.gpg"
+  install -m 0644 "$KEYRING" "$root/usr/share/keyrings/stacklane.gpg"
 fi
 
 size=$(du -sk --exclude=DEBIAN "$root" | cut -f1)

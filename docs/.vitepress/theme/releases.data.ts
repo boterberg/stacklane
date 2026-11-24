@@ -1,17 +1,40 @@
 import { createContentLoader } from 'vitepress'
 
+export type ReleaseChanges = {
+  nieuw?: string[]
+  verbeterd?: string[]
+  opgelost?: string[]
+}
+
+export type ReleaseImage = {
+  src: string
+  tab?: string
+  alt: string
+  caption: string
+}
+
+export type ReleaseHighlight = {
+  icon: string
+  title: string
+  text: string
+}
+
 export type Release = {
   version: string
   title: string
+  label: string | null
   summary: string
   date: string
   url: string
+  images: ReleaseImage[]
+  highlights: ReleaseHighlight[]
+  changes: ReleaseChanges
 }
 
 declare const data: Release[]
 export { data }
 
-function versionKey(version: string) {
+export function versionKey(version: string) {
   return version
     .replace(/^v/, '')
     .split('.')
@@ -25,9 +48,13 @@ export default createContentLoader('releases/v*.md', {
       .map((page) => ({
         version: page.frontmatter.version as string,
         title: page.frontmatter.title as string,
+        label: (page.frontmatter.label as string | undefined) ?? null,
         summary: page.frontmatter.summary as string,
         date: page.frontmatter.date as string,
         url: page.url,
+        images: (page.frontmatter.images ?? []) as ReleaseImage[],
+        highlights: (page.frontmatter.highlights ?? []) as ReleaseHighlight[],
+        changes: (page.frontmatter.changes ?? {}) as ReleaseChanges,
       }))
       .sort((left, right) => versionKey(right.version).localeCompare(versionKey(left.version)))
   },

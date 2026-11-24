@@ -1,35 +1,22 @@
-# Packaging and releases
+# Packaging
 
-| What | Where |
+`build-deb.sh` turns a built server, panel and website into `stacklane_<version>_amd64.deb`. The release workflow runs it for every `v0.0.0.0` tag and uploads the result to the package repository on stacklane.io; see `deploy/apt/`.
+
+| File | Ends up as |
 | --- | --- |
-| Build the `.deb` | `packaging/build-deb.sh` |
-| Release on a `v0.0.0.0` tag | `.github/workflows/release.yml` |
-| First install on a server | `packaging/install.sh` |
-| Reverse proxy | `packaging/Caddyfile.example` |
+| `systemd/stacklane.service` | The service, running `stacklane serve` as the `stacklane` user |
+| `systemd/stacklane-demo-reset.*` | Hourly demo reset, only enabled on the demo |
+| `etc/stacklane.env` | `/etc/stacklane/stacklane.env`, kept on upgrades |
+| `stacklane.asc` | `/usr/share/keyrings/stacklane.gpg`, the key the repository is signed with |
+| `debian/` | Maintainer scripts and the control template |
 
-## Signing
-
-Each release publishes `SHA256SUMS`. When the `release` environment has a signing key, the workflow also publishes `SHA256SUMS.asc`, a detached GPG signature. The environment only runs for `v*` tags.
-
-One-time setup, on your own machine:
+Building by hand, on Debian or in a Debian container:
 
 ```sh
-gpg --quick-gen-key "Stacklane releases <releases@stacklane.io>" ed25519 cert never
-FPR=$(gpg --list-keys --with-colons releases@stacklane.io | awk -F: '$1 == "fpr" { print $10; exit }')
-gpg --quick-add-key "$FPR" ed25519 sign 2y
-gpg --armor --export "$FPR" > packaging/stacklane-release.asc
-gpg --armor --export-secret-subkeys "$FPR" | gh secret set GPG_PRIVATE_KEY --env release -R boterberg/stacklane
-gh secret set GPG_PASSPHRASE --env release -R boterberg/stacklane
-gh variable set SIGNING_FPR --body "$FPR" -R boterberg/stacklane
-gpg --armor --export-secret-keys "$FPR" > stacklane-master-OFFLINE.asc
-```
-
-Keep `stacklane-master-OFFLINE.asc` offline and delete it from the machine afterwards. Commit `packaging/stacklane-release.asc`: the package installs it as `/usr/share/keyrings/stacklane-release.gpg`.
-
-Verify a release by hand:
-
-```sh
-gpg --import packaging/stacklane-release.asc
-gpg --verify SHA256SUMS.asc SHA256SUMS
-sha256sum --check --ignore-missing SHA256SUMS
+cargo build --release
+(cd web && npm ci && npm run build)
+(cd docs && npm ci && npm run build)
+gpg --dearmor < packaging/stacklane.asc > stacklane.gpg
+sh packaging/build-deb.sh --version 0.0.1.0 --bin target/release/stacklane \
+  --web web/dist --site docs/dist --keyring stacklane.gpg --out dist
 ```

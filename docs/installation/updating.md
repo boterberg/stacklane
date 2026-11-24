@@ -1,34 +1,34 @@
-# Updaten
-
-Een update is een nieuwere versie van het pakket installeren. De server voert bij het starten zelf de databasemigraties uit.
-
-::: warning Maak eerst een back-up
-```sh
-sudo -u postgres pg_dump --format=custom stacklane > stacklane-$(date +%F).dump
-```
-:::
-
-## Met het script
+# Bijwerken
 
 ```sh
-sudo sh install.sh
+sudo stacklane update
 ```
 
-Zonder versienummer installeert het script de laatste release.
+Dat is alles. Het commando:
 
-## Handmatig
+1. kijkt in de pakketbron of er een nieuwere versie is;
+2. maakt een back-up van de database in `/var/backups/stacklane`;
+3. installeert de nieuwe versie met apt;
+4. wacht tot de server weer antwoordt en toont de nieuwe versie.
+
+De server voert de databasemigraties zelf uit bij het starten. Draai je al de nieuwste versie, dan stopt het commando na stap 1.
+
+## Als er iets misgaat
+
+Start de nieuwe versie niet, dan zegt het commando dat en noemt het de plek van de back-up. Kijk eerst in het logboek:
 
 ```sh
-VERSION=0.0.1.0
-curl -fsSLO https://github.com/boterberg/stacklane/releases/download/v$VERSION/stacklane_${VERSION}_amd64.deb
-curl -fsSLO https://github.com/boterberg/stacklane/releases/download/v$VERSION/SHA256SUMS
-sha256sum --check --ignore-missing SHA256SUMS
-sudo apt install ./stacklane_${VERSION}_amd64.deb
-curl http://127.0.0.1:8080/readyz
+journalctl -u stacklane -n 100
 ```
 
-`/readyz` toont de geïnstalleerde versie.
+Een back-up terugzetten:
+
+```sh
+sudo systemctl stop stacklane
+sudo -u postgres pg_restore --clean --dbname stacklane /var/backups/stacklane/<bestand>.dump
+sudo systemctl start stacklane
+```
 
 ## Versienummers
 
-Stacklane gebruikt vier getallen: `v0.0.1.0`. Wat er per versie verandert, staat bij de [releases](/releases/).
+Een versie heeft vier getallen, zoals `0.0.1.0`. Wat er per versie verandert, staat bij de [releases](/releases/).

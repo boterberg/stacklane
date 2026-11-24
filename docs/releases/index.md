@@ -1,10 +1,8 @@
 ---
 title: Releases
+layout: page
+sidebar: false
 aside: false
 ---
 
-# Releases
-
-Elke release staat als Debian-pakket op [GitHub](https://github.com/boterberg/stacklane/releases). Hieronder lees je per versie wat er veranderd is.
-
-<ReleaseCards />
+<ReleasesPage />
