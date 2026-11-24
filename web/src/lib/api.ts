@@ -18,11 +18,44 @@ type RequestOptions = {
   body?: unknown
 }
 
+const OWNER_KEY = 'stacklane.vps-owner'
+
+function readOwner(): string | null {
+  try {
+    return window.localStorage.getItem(OWNER_KEY)
+  } catch {
+    return null
+  }
+}
+
+let vpsOwner = readOwner()
+
+export function currentVpsOwner() {
+  return vpsOwner
+}
+
+export function setVpsOwner(owner: string | null) {
+  vpsOwner = owner
+  try {
+    if (owner) window.localStorage.setItem(OWNER_KEY, owner)
+    else window.localStorage.removeItem(OWNER_KEY)
+  } catch {
+    return
+  }
+}
+
+function headersFor(path: string, json: boolean): Record<string, string> {
+  const headers: Record<string, string> = { 'accept-language': getLocale() }
+  if (json) headers['content-type'] = 'application/json'
+  if (vpsOwner && (path.startsWith('/vps/') || path.startsWith('/ssh-keys'))) headers['x-vps-owner'] = vpsOwner
+  return headers
+}
+
 export async function api<T>(path: string, { method = 'GET', body }: RequestOptions = {}): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method,
     credentials: 'include',
-    headers: body === undefined ? { 'accept-language': getLocale() } : { 'content-type': 'application/json', 'accept-language': getLocale() },
+    headers: headersFor(path, body !== undefined),
     body: body === undefined ? undefined : JSON.stringify(body),
   })
 
