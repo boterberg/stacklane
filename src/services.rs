@@ -185,6 +185,13 @@ fn hostname(name: &str) -> String {
     }
 }
 
+fn created_for(description: &str, service_id: Uuid) -> bool {
+    description
+        .strip_prefix("Stacklane ")
+        .and_then(|rest| rest.split_whitespace().next())
+        == Some(service_id.to_string().as_str())
+}
+
 fn root_password() -> String {
     const ALPHABET: &[u8] = b"abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     rand::random::<[u8; 20]>()
@@ -216,15 +223,32 @@ async fn provision_vps(
         .ok_or_else(|| anyhow::anyhow!("er staat geen besturingssysteem op deze koppeling"))?
         .clone();
 
-    if let Some(previous) = order.vmid {
-        let _ = client.destroy(previous).await;
-    }
-
     let mut transaction = state.db.begin().await?;
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1::text))")
         .bind(integration_id)
         .execute(&mut *transaction)
         .await?;
+    let recorded: Vec<String> = sqlx::query_scalar(
+        "SELECT id FROM services, LATERAL (VALUES (external_id), (details->>'vmid')) AS ids(id)
+         WHERE integration_id = $1 AND services.id <> $2 AND kind = 'vps'
+           AND status <> 'terminated' AND ids.id IS NOT NULL",
+    )
+    .bind(integration_id)
+    .bind(service_id)
+    .fetch_all(&mut *transaction)
+    .await?;
+    let recorded: Vec<u32> = recorded.iter().filter_map(|id| id.parse().ok()).collect();
+    let mut stale = None;
+    if let Some(previous) = order.vmid {
+        if !recorded.contains(&previous)
+            && client
+                .description(previous)
+                .await
+                .is_some_and(|description| created_for(&description, service_id))
+        {
+            stale = Some(previous);
+        }
+    }
     let taken: Vec<String> = sqlx::query_scalar(
         "SELECT details->>'ipv4' FROM services
          WHERE integration_id = $1 AND id <> $2 AND status <> 'terminated' AND details ? 'ipv4'",
@@ -236,7 +260,10 @@ async fn provision_vps(
     let ipv4 = proxmox::ip_range(settings)
         .find(|ip| !taken.contains(&ip.to_string()))
         .ok_or_else(|| anyhow::anyhow!("alle IP-adressen van deze koppeling zijn in gebruik"))?;
-    let vmid = client.next_vmid().await?;
+    if let Some(previous) = stale {
+        client.destroy(previous).await?;
+    }
+    let vmid = client.free_vmid(&recorded).await?;
     sqlx::query("UPDATE services SET details = details || $2 WHERE id = $1")
         .bind(service_id)
         .bind(json!({ "ipv4": ipv4.to_string(), "vmid": vmid }))
@@ -714,4 +741,25 @@ async fn release_volumes(
     .execute(&state.db)
     .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_claims_its_own_vm() {
+        let service = Uuid::from_u128(1);
+        let other = Uuid::from_u128(2);
+        assert!(created_for(
+            &format!("Stacklane {service} (jan@example.test)"),
+            service
+        ));
+        assert!(!created_for(
+            &format!("Stacklane {other} (piet@example.test)"),
+            service
+        ));
+        assert!(!created_for(&format!("Klant {service}"), service));
+        assert!(!created_for("", service));
+    }
 }
