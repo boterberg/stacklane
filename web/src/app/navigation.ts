@@ -19,6 +19,7 @@ import {
   LifebuoyIcon,
   LinkIcon,
   QuestionMarkCircleIcon,
+  ReceiptPercentIcon,
   ServerStackIcon,
   WindowIcon,
   WrenchScrewdriverIcon,
@@ -94,6 +95,7 @@ export const adminNavigation: NavGroup = {
   children: [
     { label: 'Alle tickets', to: '/admin/tickets', icon: InboxStackIcon },
     { label: 'Alle facturen', to: '/admin/invoices', icon: DocumentDuplicateIcon },
+    { label: 'Btw-overzicht', to: '/admin/vat', icon: ReceiptPercentIcon },
     { label: 'Diensten', to: '/admin/services', icon: ServerStackIcon },
     { label: 'Producten', to: '/admin/products', icon: CubeIcon },
     { label: 'Domeinextensies', to: '/admin/domain-extensions', icon: GlobeAltIcon },

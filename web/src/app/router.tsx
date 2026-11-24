@@ -34,14 +34,13 @@ import { SecurityPage } from '../pages/account/SecurityPage'
 import { IntegrationsPage } from '../pages/admin/IntegrationsPage'
 import { AdminInvoicePage } from '../pages/admin/InvoicePage'
 import { AdminInvoicesPage } from '../pages/admin/InvoicesPage'
+import { VatReportPage } from '../pages/admin/VatReportPage'
 import { SettingsPage } from '../pages/admin/SettingsPage'
 import { ProductsPage } from '../pages/admin/ProductsPage'
 import { ServicesPage } from '../pages/admin/ServicesPage'
 import { SystemPage } from '../pages/admin/SystemPage'
 
-const sections: Array<[string, string]> = [
-  ['/gameservers/backups', 'Back-ups'],
-]
+const sections: Array<[string, string]> = [['/gameservers/backups', 'Back-ups']]
 
 export const router = createBrowserRouter([
   {
@@ -92,6 +91,7 @@ export const router = createBrowserRouter([
       { path: '/account/security/api-tokens', element: <SecurityPage /> },
       { path: '/admin/system', element: <SystemPage /> },
       { path: '/admin/settings', element: <SettingsPage /> },
+      { path: '/admin/vat', element: <VatReportPage /> },
       { path: '/admin/invoices', element: <AdminInvoicesPage /> },
       { path: '/admin/invoices/:id', element: <AdminInvoicePage /> },
       { path: '/admin/tickets', element: <TicketsPage scope="staff" /> },

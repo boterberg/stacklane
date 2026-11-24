@@ -119,8 +119,7 @@ export function useCreateService() {
 export function useServiceAction() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, action }: { id: string; action: 'suspend' | 'unsuspend' | 'terminate' | 'retry' }) =>
-      api<void>(`/admin/services/${id}/${action}`, { method: 'POST' }),
+    mutationFn: ({ id, action }: { id: string; action: 'suspend' | 'unsuspend' | 'terminate' | 'retry' }) => api<void>(`/admin/services/${id}/${action}`, { method: 'POST' }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['admin', 'services'] }),
   })
 }
@@ -271,4 +270,18 @@ export function useDeleteDomainExtension() {
     mutationFn: (id: string) => api<void>(`/admin/domain-extensions/${id}`, { method: 'DELETE' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'domain-extensions'] }),
   })
+}
+
+export type VatRow = {
+  scheme: 'domestic' | 'oss' | 'reverse_charge' | 'outside_eu'
+  country: string | null
+  rate_basis_points: number
+  invoices: number
+  net_cents: number
+  vat_cents: number
+  gross_cents: number
+}
+
+export function useVatReport(year: number, quarter: number) {
+  return useQuery({ queryKey: ['admin', 'vat', year, quarter], queryFn: () => api<VatRow[]>(`/admin/reports/vat?year=${year}&quarter=${quarter}`) })
 }
