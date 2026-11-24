@@ -228,11 +228,25 @@ async fn suspend_overdue(state: &AppState, billing: &Billing) -> AppResult<usize
     .bind(billing.suspend_after_days)
     .fetch_all(&state.db)
     .await?;
+    let mut suspended = 0;
     for (subscription_id, user_id, code) in &overdue {
-        sqlx::query("UPDATE subscriptions SET status = 'suspended', suspended_for_payment = TRUE WHERE id = $1")
-            .bind(subscription_id)
-            .execute(&state.db)
-            .await?;
+        let still_overdue: Option<Uuid> = sqlx::query_scalar(
+            "UPDATE subscriptions s SET status = 'suspended', suspended_for_payment = TRUE
+             WHERE s.id = $1 AND s.status = 'active' AND s.cancelled_at IS NULL
+               AND s.expires_at + make_interval(days => $2) < now()
+               AND EXISTS (
+                   SELECT 1 FROM invoice_lines l JOIN invoices v ON v.id = l.invoice_id
+                   WHERE l.subscription_id = s.id AND v.status = 'open')
+             RETURNING s.id",
+        )
+        .bind(subscription_id)
+        .bind(billing.suspend_after_days)
+        .fetch_optional(&state.db)
+        .await?;
+        if still_overdue.is_none() {
+            continue;
+        }
+        suspended += 1;
         let services: Vec<Uuid> = sqlx::query_scalar(
             "SELECT id FROM services WHERE subscription_id = $1 AND status = 'active'",
         )
@@ -240,7 +254,9 @@ async fn suspend_overdue(state: &AppState, billing: &Billing) -> AppResult<usize
         .fetch_all(&state.db)
         .await?;
         for service_id in services {
-            if let Err(error) = crate::services::change_state(state, service_id, "suspend").await {
+            if let Err(error) =
+                crate::services::change_state_because(state, service_id, "suspend", "payment").await
+            {
                 tracing::warn!(%service_id, ?error, "suspending an unpaid service failed");
             }
         }
@@ -253,7 +269,7 @@ async fn suspend_overdue(state: &AppState, billing: &Billing) -> AppResult<usize
         )
         .await?;
     }
-    Ok(overdue.len())
+    Ok(suspended)
 }
 
 async fn end_cancelled(state: &AppState) -> AppResult<usize> {
@@ -272,7 +288,9 @@ async fn end_cancelled(state: &AppState) -> AppResult<usize> {
         .fetch_all(&state.db)
         .await?;
         for service_id in services {
-            if let Err(error) = crate::services::change_state(state, service_id, "suspend").await {
+            if let Err(error) =
+                crate::services::change_state_because(state, service_id, "suspend", "ended").await
+            {
                 tracing::warn!(%service_id, ?error, "suspending an ended service failed");
             }
         }
@@ -326,14 +344,72 @@ pub struct Run {
     pub expired: usize,
 }
 
+async fn reconcile_suspensions(state: &AppState) -> AppResult<()> {
+    let wrong: Vec<(Uuid, &'static str, &'static str)> = sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT v.id, CASE WHEN s.status = 'cancelled' THEN 'ended' ELSE 'payment' END
+         FROM services v JOIN subscriptions s ON s.id = v.subscription_id
+         WHERE v.status = 'active'
+           AND (s.status = 'cancelled' OR (s.status = 'suspended' AND s.suspended_for_payment))",
+    )
+    .fetch_all(&state.db)
+    .await?
+    .into_iter()
+    .map(|(id, reason)| {
+        let reason = if reason == "ended" { "ended" } else { "payment" };
+        (id, "suspend", reason)
+    })
+    .chain(
+        sqlx::query_scalar::<_, Uuid>(
+            "SELECT v.id FROM services v JOIN subscriptions s ON s.id = v.subscription_id
+             WHERE v.status = 'suspended' AND v.suspension_reason = 'payment' AND s.status = 'active'",
+        )
+        .fetch_all(&state.db)
+        .await?
+        .into_iter()
+        .map(|id| (id, "unsuspend", "payment")),
+    )
+    .collect();
+    for (service_id, action, reason) in wrong {
+        if let Err(error) =
+            crate::services::change_state_because(state, service_id, action, reason).await
+        {
+            tracing::warn!(%service_id, action, ?error, "correcting a service state failed");
+        }
+    }
+    Ok(())
+}
+
 pub async fn run_once(state: &AppState) -> AppResult<Run> {
+    let mut lock = state.db.acquire().await?;
+    let mine: bool =
+        sqlx::query_scalar("SELECT pg_try_advisory_lock(hashtext('stacklane billing run'))")
+            .fetch_one(&mut *lock)
+            .await?;
+    if !mine {
+        return Ok(Run {
+            invoices: 0,
+            suspended: 0,
+            ended: 0,
+            expired: 0,
+        });
+    }
+    let run = run_locked(state).await;
+    sqlx::query("SELECT pg_advisory_unlock(hashtext('stacklane billing run'))")
+        .execute(&mut *lock)
+        .await?;
+    run
+}
+
+async fn run_locked(state: &AppState) -> AppResult<Run> {
     let billing: Billing = settings::get(&state.db, "billing").await?;
-    Ok(Run {
+    let run = Run {
         invoices: issue_renewals(state, &billing).await?,
         suspended: suspend_overdue(state, &billing).await?,
         ended: end_cancelled(state).await?,
         expired: expire_orders(state).await?,
-    })
+    };
+    reconcile_suspensions(state).await?;
+    Ok(run)
 }
 
 pub fn spawn(state: AppState) {

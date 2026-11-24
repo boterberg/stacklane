@@ -294,6 +294,15 @@ pub fn provision_in_background(state: AppState, service_id: Uuid) {
 }
 
 pub async fn change_state(state: &AppState, service_id: Uuid, action: &str) -> AppResult<()> {
+    change_state_because(state, service_id, action, "admin").await
+}
+
+pub async fn change_state_because(
+    state: &AppState,
+    service_id: Uuid,
+    action: &str,
+    reason: &str,
+) -> AppResult<()> {
     let (integration_id, external_id, status): (Option<Uuid>, Option<String>, String) =
         sqlx::query_as("SELECT integration_id, external_id, status FROM services WHERE id = $1")
             .bind(service_id)
@@ -323,11 +332,16 @@ pub async fn change_state(state: &AppState, service_id: Uuid, action: &str) -> A
         result.map_err(|error| AppError::field("action", format!("{error:#}")))?;
     }
 
-    sqlx::query("UPDATE services SET status = $2, updated_at = now() WHERE id = $1")
-        .bind(service_id)
-        .bind(next)
-        .execute(&state.db)
-        .await?;
+    sqlx::query(
+        "UPDATE services SET status = $2, updated_at = now(),
+                suspension_reason = CASE WHEN $2 = 'suspended' THEN $3 END
+         WHERE id = $1",
+    )
+    .bind(service_id)
+    .bind(next)
+    .bind(reason)
+    .execute(&state.db)
+    .await?;
     Ok(())
 }
 

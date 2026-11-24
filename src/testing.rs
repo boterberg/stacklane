@@ -189,3 +189,62 @@ pub async fn fake_api(respond: fn(&str, &str, &str) -> (u16, Value)) -> (String,
     tokio::spawn(async move { axum::serve(listener, app).await });
     (base, calls)
 }
+
+pub async fn proxmox_integration(state: &AppState, base: &str) -> Uuid {
+    let id = Uuid::new_v4();
+    let sealed = crate::integrations::seal_credentials(
+        state,
+        &json!({ "token_id": "t", "token_secret": "s" }),
+    )
+    .expect("seal");
+    sqlx::query(
+        "INSERT INTO integrations (id, kind, name, base_url, credentials, settings)
+         VALUES ($1, 'proxmox', 'Test', $2, $3, $4)",
+    )
+    .bind(id)
+    .bind(base)
+    .bind(sealed)
+    .bind(json!({ "node": "pve", "gateway": "192.0.2.1", "ip_from": "192.0.2.10", "ip_to": "192.0.2.20" }))
+    .execute(&state.db)
+    .await
+    .expect("integration");
+    id
+}
+
+pub struct NewService<'a> {
+    pub user: Uuid,
+    pub subscription: Option<Uuid>,
+    pub kind: &'a str,
+    pub status: &'a str,
+    pub integration: Option<Uuid>,
+    pub external_id: Option<&'a str>,
+    pub details: Value,
+}
+
+pub async fn service(state: &AppState, new: NewService<'_>) -> Uuid {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO services (id, user_id, subscription_id, integration_id, kind, name, status, external_id, details)
+         VALUES ($1, $2, $3, $4, $5, 'Test', $6, $7, $8)",
+    )
+    .bind(id)
+    .bind(new.user)
+    .bind(new.subscription)
+    .bind(new.integration)
+    .bind(new.kind)
+    .bind(new.status)
+    .bind(new.external_id)
+    .bind(new.details)
+    .execute(&state.db)
+    .await
+    .expect("service");
+    id
+}
+
+pub async fn make_admin(state: &AppState, user: Uuid) {
+    sqlx::query("UPDATE users SET role = 'admin' WHERE id = $1")
+        .bind(user)
+        .execute(&state.db)
+        .await
+        .expect("admin");
+}
