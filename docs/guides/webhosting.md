@@ -1,10 +1,18 @@
-# Webhosting met DirectAdmin of Plesk
+# Webhosting met cPanel, DirectAdmin of Plesk
 
 Stacklane verkoopt webhosting op je eigen hostingservers. Na betaling maakt Stacklane het account aan, bij een achterstand schort het het account op, en bij opzeggen heft het het account op. Klanten loggen met één klik in op hun hostingpanel, zonder apart wachtwoord.
 
 ## Een server koppelen
 
 Ga naar **Beheer → Koppelingen** en kies **Koppeling toevoegen**.
+
+### cPanel & WHM
+
+- **Adres**: het adres van WHM, zoals `https://server.jouwbedrijf.nl:2087`
+- **WHM-gebruiker**: `root` of een reseller
+- **API-token**: maak er een aan onder **Development → Manage API Tokens** in WHM
+
+Klanten loggen in via een sessie die WHM aanmaakt (`create_user_session`).
 
 ### DirectAdmin
 
@@ -33,6 +41,6 @@ Onder **Beheer → Producten** maak je een product van de soort **Webhosting**. 
 
 1. Onder **Webhosting → Webhosting bestellen** kiest de klant een pakket en vult het domein van de website in.
 2. Na betaling maakt Stacklane het account aan. De gebruikersnaam volgt uit het domein, zoals `bakker5b` voor `bakkerijdejong.nl`. Het wachtwoord is willekeurig; de klant heeft het niet nodig.
-3. Op de pagina van het pakket staat **Inloggen op DirectAdmin** of **Inloggen op Plesk**.
+3. Op de pagina van het pakket staat **Inloggen op cPanel** (of DirectAdmin, of Plesk).
 
-Het domein zelf regelt de klant apart, bij een domeinprovider naar keuze.
+Het domein zelf regelt de klant apart, bij jou onder **Domeinen** of bij een andere provider.

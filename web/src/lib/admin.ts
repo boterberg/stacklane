@@ -7,7 +7,7 @@ import type { ServiceStatus } from './gameservers'
 
 export type Integration = {
   id: string
-  kind: 'pterodactyl' | 'proxmox' | 'openstack' | 'virtfusion' | 'directadmin' | 'plesk' | 'openprovider'
+  kind: 'pterodactyl' | 'proxmox' | 'openstack' | 'virtfusion' | 'directadmin' | 'plesk' | 'openprovider' | 'cpanel'
   name: string
   base_url: string
   last_checked_at: string | null

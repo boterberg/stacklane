@@ -1,3 +1,4 @@
+pub mod cpanel;
 pub mod directadmin;
 pub mod openprovider;
 pub mod openstack;
@@ -17,7 +18,7 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
-pub const KINDS: [&str; 7] = [
+pub const KINDS: [&str; 8] = [
     "pterodactyl",
     "proxmox",
     "openstack",
@@ -25,6 +26,7 @@ pub const KINDS: [&str; 7] = [
     "directadmin",
     "plesk",
     "openprovider",
+    "cpanel",
 ];
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -46,6 +48,7 @@ pub enum Driver {
     Proxmox(proxmox::Proxmox),
     DirectAdmin(directadmin::DirectAdmin),
     Plesk(plesk::Plesk),
+    Cpanel(cpanel::Cpanel),
     OpenStack(openstack::OpenStack),
     VirtFusion(virtfusion::VirtFusion),
     Openprovider(openprovider::Openprovider),
@@ -82,6 +85,7 @@ impl Driver {
             Self::Proxmox(client) => client.test().await,
             Self::DirectAdmin(client) => client.test().await,
             Self::Plesk(client) => client.test().await,
+            Self::Cpanel(client) => client.test().await,
             Self::OpenStack(client) => client.test().await,
             Self::VirtFusion(client) => client.test().await,
             Self::Openprovider(client) => client.test().await,
@@ -94,6 +98,7 @@ impl Driver {
             Self::Proxmox(client) => client.power(vmid(external_id)?, "stop").await,
             Self::DirectAdmin(client) => client.suspend(external_id).await,
             Self::Plesk(client) => client.suspend(webhosting::plesk_parts(external_id).1).await,
+            Self::Cpanel(client) => client.suspend(external_id).await,
             Self::OpenStack(client) => client.power(external_id, "stop").await,
             Self::VirtFusion(client) => client.suspend(external_id).await,
             Self::Openprovider(_) => Ok(()),
@@ -110,6 +115,7 @@ impl Driver {
                     .unsuspend(webhosting::plesk_parts(external_id).1)
                     .await
             }
+            Self::Cpanel(client) => client.unsuspend(external_id).await,
             Self::OpenStack(client) => client.power(external_id, "start").await,
             Self::VirtFusion(client) => client.unsuspend(external_id).await,
             Self::Openprovider(_) => Ok(()),
@@ -125,6 +131,7 @@ impl Driver {
                 let (username, domain) = webhosting::plesk_parts(external_id);
                 client.terminate(domain, username).await
             }
+            Self::Cpanel(client) => client.terminate(external_id).await,
             Self::OpenStack(client) => client.destroy(external_id).await,
             Self::VirtFusion(client) => client.destroy(external_id).await,
             Self::Openprovider(_) => Ok(()),
@@ -170,6 +177,11 @@ pub fn build(kind: &str, base_url: &str, credentials: &[u8], settings: Value) ->
                 credentials,
                 settings,
             )?))
+        }
+        "cpanel" => {
+            let credentials =
+                serde_json::from_slice(credentials).context("ongeldige WHM-gegevens")?;
+            Ok(Driver::Cpanel(cpanel::Cpanel::new(base_url, credentials)?))
         }
         "plesk" => {
             let credentials =

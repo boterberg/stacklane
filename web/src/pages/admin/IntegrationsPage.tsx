@@ -18,6 +18,7 @@ const kindLabels: Record<string, string> = {
   virtfusion: 'VirtFusion',
   directadmin: 'DirectAdmin',
   plesk: 'Plesk',
+  cpanel: 'cPanel & WHM',
   openprovider: 'Openprovider',
 }
 
@@ -88,6 +89,9 @@ function payload(form: typeof emptyForm): IntegrationInput {
       credentials: { username: form.op_username.trim(), password: form.op_password },
       settings: { nameservers: form.op_nameservers.split(/\s+/).filter(Boolean) },
     }
+  }
+  if (form.kind === 'cpanel') {
+    return { kind: form.kind, name: form.name, base_url: form.base_url, credentials: { username: form.wh_username.trim() || 'root', api_token: form.wh_secret.trim() } }
   }
   if (form.kind === 'directadmin') {
     return {
@@ -196,6 +200,7 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
             <Select id={id} value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value })}>
               <option value="pterodactyl">{t('Pterodactyl (gameservers)')}</option>
               <option value="proxmox">{t('Proxmox VE (VPS)')}</option>
+              <option value="cpanel">{t('cPanel & WHM (webhosting)')}</option>
               <option value="directadmin">{t('DirectAdmin (webhosting)')}</option>
               <option value="plesk">{t('Plesk (webhosting)')}</option>
               <option value="openstack">{t('OpenStack (VPS)')}</option>
@@ -220,11 +225,13 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
                   ? 'https://keystone.jouwbedrijf.nl:5000/v3'
                   : form.kind === 'openprovider'
                     ? 'https://api.openprovider.eu'
-                    : form.kind === 'directadmin'
-                      ? 'https://server.jouwbedrijf.nl:2222'
-                      : form.kind === 'plesk'
-                        ? 'https://server.jouwbedrijf.nl:8443'
-                        : t('https://panel.jouwbedrijf.nl')
+                    : form.kind === 'cpanel'
+                      ? 'https://server.jouwbedrijf.nl:2087'
+                      : form.kind === 'directadmin'
+                        ? 'https://server.jouwbedrijf.nl:2222'
+                        : form.kind === 'plesk'
+                          ? 'https://server.jouwbedrijf.nl:8443'
+                          : t('https://panel.jouwbedrijf.nl')
               }
               value={form.base_url}
               invalid={!!errors.base_url}
@@ -305,27 +312,43 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
             </Field>
           </>
         )}
-        {form.kind === 'openstack' || form.kind === 'virtfusion' || form.kind === 'openprovider' ? null : form.kind === 'directadmin' || form.kind === 'plesk' ? (
+        {form.kind === 'openstack' || form.kind === 'virtfusion' || form.kind === 'openprovider' ? null : form.kind === 'cpanel' || form.kind === 'directadmin' || form.kind === 'plesk' ? (
           <>
-            {form.kind === 'directadmin' && (
-              <Field label={t('Gebruikersnaam')} description={t('Een beheerder of reseller in DirectAdmin.')} error={errors.credentials}>
-                {(id) => <Input id={id} autoComplete="off" placeholder="admin" value={form.wh_username} onChange={(event) => setForm({ ...form, wh_username: event.target.value })} />}
+            {(form.kind === 'cpanel' || form.kind === 'directadmin') && (
+              <Field
+                label={form.kind === 'cpanel' ? t('WHM-gebruiker') : t('Gebruikersnaam')}
+                description={form.kind === 'cpanel' ? t('Meestal root, of een reseller.') : t('Een beheerder of reseller in DirectAdmin.')}
+                error={errors.credentials}
+              >
+                {(id) => (
+                  <Input
+                    id={id}
+                    autoComplete="off"
+                    placeholder={form.kind === 'cpanel' ? 'root' : 'admin'}
+                    value={form.wh_username}
+                    onChange={(event) => setForm({ ...form, wh_username: event.target.value })}
+                  />
+                )}
               </Field>
             )}
             <Field
-              label={form.kind === 'directadmin' ? t('Inlogsleutel') : t('API-sleutel')}
+              label={form.kind === 'cpanel' ? t('API-token') : form.kind === 'directadmin' ? t('Inlogsleutel') : t('API-sleutel')}
               description={
-                form.kind === 'directadmin'
-                  ? t('Login Keys in DirectAdmin. Sta CMD_API_ACCOUNT_USER, CMD_API_SELECT_USERS, CMD_API_PACKAGES_USER en CMD_API_LOGIN_KEYS toe.')
-                  : t('Maak er een aan met plesk bin secret_key -c.')
+                form.kind === 'cpanel'
+                  ? t('Development → Manage API Tokens in WHM.')
+                  : form.kind === 'directadmin'
+                    ? t('Login Keys in DirectAdmin. Sta CMD_API_ACCOUNT_USER, CMD_API_SELECT_USERS, CMD_API_PACKAGES_USER en CMD_API_LOGIN_KEYS toe.')
+                    : t('Maak er een aan met plesk bin secret_key -c.')
               }
               error={form.kind === 'plesk' ? errors.credentials : undefined}
             >
               {(id) => <Input id={id} type="password" autoComplete="off" value={form.wh_secret} onChange={(event) => setForm({ ...form, wh_secret: event.target.value })} />}
             </Field>
-            <Field label={t('IP-adres voor websites')} description={t('Het gedeelde IP-adres waarop nieuwe websites komen.')} error={errors.settings}>
-              {(id) => <Input id={id} placeholder="203.0.113.20" value={form.wh_ip} onChange={(event) => setForm({ ...form, wh_ip: event.target.value })} />}
-            </Field>
+            {form.kind !== 'cpanel' && (
+              <Field label={t('IP-adres voor websites')} description={t('Het gedeelde IP-adres waarop nieuwe websites komen.')} error={errors.settings}>
+                {(id) => <Input id={id} placeholder="203.0.113.20" value={form.wh_ip} onChange={(event) => setForm({ ...form, wh_ip: event.target.value })} />}
+              </Field>
+            )}
           </>
         ) : form.kind === 'proxmox' ? (
           <>

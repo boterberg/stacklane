@@ -180,8 +180,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Op dit moment kun je gameserver-, VPS- en webhostingproducten aanmaken." => {
             "Right now you can create game server, VPS and web hosting products."
         }
-        "Kies een koppeling met DirectAdmin of Plesk." => {
-            "Choose an integration with DirectAdmin or Plesk."
+        "Vul de WHM-gebruiker en een API-token in." => "Enter the WHM user and an API token.",
+        "Kies een koppeling met cPanel, DirectAdmin of Plesk." => {
+            "Choose an integration with cPanel, DirectAdmin or Plesk."
         }
         "Kies een hostingpakket." => "Choose a hosting package.",
         "Dit webhostingpakket is nog niet klaar." => "This web hosting package is not ready yet.",

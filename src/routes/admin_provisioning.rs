@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::auth::CurrentAdmin;
 use crate::error::{AppError, AppResult};
 use crate::integrations::{
-    self, IntegrationSummary, KINDS, directadmin, openprovider, openstack, plesk, proxmox,
+    self, IntegrationSummary, KINDS, cpanel, directadmin, openprovider, openstack, plesk, proxmox,
     pterodactyl, virtfusion, webhosting,
 };
 use crate::services;
@@ -138,6 +138,7 @@ pub async fn create_integration(
             | "directadmin"
             | "plesk"
             | "openprovider"
+            | "cpanel"
     ) {
         errors.insert(
             "kind",
@@ -187,6 +188,10 @@ pub async fn create_integration(
         .is_ok_and(|credentials| {
             !credentials.username.trim().is_empty() && !credentials.login_key.is_empty()
         }),
+        "cpanel" => serde_json::from_value::<cpanel::Credentials>(input.credentials.clone())
+            .is_ok_and(|credentials| {
+                !credentials.username.trim().is_empty() && !credentials.api_token.trim().is_empty()
+            }),
         "plesk" => serde_json::from_value::<plesk::Credentials>(input.credentials.clone())
             .is_ok_and(|credentials| !credentials.api_key.trim().is_empty()),
         _ => true,
@@ -200,6 +205,7 @@ pub async fn create_integration(
                 "virtfusion" => "Vul een API-token van VirtFusion in.",
                 "directadmin" => "Vul de gebruikersnaam en een inlogsleutel van DirectAdmin in.",
                 "plesk" => "Vul een API-sleutel van Plesk in.",
+                "cpanel" => "Vul de WHM-gebruiker en een API-token in.",
                 "openprovider" => "Vul de gebruikersnaam en het wachtwoord van Openprovider in.",
                 _ => "Vul de application- en de client-API-sleutel in.",
             }
@@ -441,10 +447,10 @@ pub async fn create_product(
                 .as_str()
                 .map(str::trim)
                 .unwrap_or_default();
-            if !matches!(kind, Some("directadmin" | "plesk")) {
+            if !matches!(kind, Some("cpanel" | "directadmin" | "plesk")) {
                 errors.insert(
                     "integration_id",
-                    "Kies een koppeling met DirectAdmin of Plesk.".to_owned(),
+                    "Kies een koppeling met cPanel, DirectAdmin of Plesk.".to_owned(),
                 );
                 Value::Null
             } else if plan.is_empty() {

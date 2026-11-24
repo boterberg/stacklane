@@ -150,7 +150,7 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
             <Select id={id} value={form.integration_id} onChange={(event) => update('integration_id', event.target.value)}>
               <option value="">{form.kind === 'vps' ? t('Kies een VPS-koppeling...') : hosting ? t('Kies een hostingserver...') : t('Kies een Pterodactyl-panel...')}</option>
               {integrations
-                .filter((integration) => (form.kind === 'vps' ? ['proxmox', 'openstack', 'virtfusion'] : hosting ? ['directadmin', 'plesk'] : ['pterodactyl']).includes(integration.kind))
+                .filter((integration) => (form.kind === 'vps' ? ['proxmox', 'openstack', 'virtfusion'] : hosting ? ['cpanel', 'directadmin', 'plesk'] : ['pterodactyl']).includes(integration.kind))
                 .map((integration) => (
                   <option key={integration.id} value={integration.id}>
                     {integration.name}
