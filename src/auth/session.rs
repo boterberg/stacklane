@@ -102,7 +102,9 @@ impl FromRequestParts<AppState> for CurrentUser {
             .ok_or(AppError::Unauthenticated)?;
         let token_hash = hash_token(&token);
         let user_id: Option<Uuid> = sqlx::query_scalar(
-            "UPDATE sessions SET last_seen_at = now() WHERE token_hash = $1 AND expires_at > now() RETURNING user_id",
+            "UPDATE sessions s SET last_seen_at = now() FROM users u
+             WHERE s.token_hash = $1 AND s.expires_at > now() AND u.id = s.user_id AND u.deleted_at IS NULL
+             RETURNING s.user_id",
         )
         .bind(&token_hash)
         .fetch_optional(&state.db)
@@ -126,9 +128,10 @@ async fn from_api_token(
     }
     let token_hash = hash_token(token);
     let found: Option<(Uuid, Vec<String>)> = sqlx::query_as(
-        "UPDATE api_tokens SET last_used_at = now()
-         WHERE token_hash = $1 AND (expires_at IS NULL OR expires_at > now())
-         RETURNING user_id, scopes",
+        "UPDATE api_tokens t SET last_used_at = now() FROM users u
+         WHERE t.token_hash = $1 AND (t.expires_at IS NULL OR t.expires_at > now())
+           AND u.id = t.user_id AND u.deleted_at IS NULL
+         RETURNING t.user_id, t.scopes",
     )
     .bind(&token_hash)
     .fetch_optional(&state.db)
