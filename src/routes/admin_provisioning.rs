@@ -12,7 +12,7 @@ use crate::auth::CurrentAdmin;
 use crate::error::{AppError, AppResult};
 use crate::integrations::{
     self, IntegrationSummary, KINDS, directadmin, openstack, plesk, proxmox, pterodactyl,
-    webhosting,
+    virtfusion, webhosting,
 };
 use crate::services;
 use crate::state::AppState;
@@ -131,7 +131,7 @@ pub async fn create_integration(
         errors.insert("kind", "Kies een type.".to_owned());
     } else if !matches!(
         input.kind.as_str(),
-        "pterodactyl" | "proxmox" | "openstack" | "directadmin" | "plesk"
+        "pterodactyl" | "proxmox" | "openstack" | "virtfusion" | "directadmin" | "plesk"
     ) {
         errors.insert(
             "kind",
@@ -160,6 +160,10 @@ pub async fn create_integration(
             .is_ok_and(|credentials| {
                 credentials.token_id.contains('!') && !credentials.token_secret.trim().is_empty()
             }),
+        "virtfusion" => {
+            serde_json::from_value::<virtfusion::Credentials>(input.credentials.clone())
+                .is_ok_and(|credentials| !credentials.api_token.trim().is_empty())
+        }
         "openstack" => serde_json::from_value::<openstack::Credentials>(input.credentials.clone())
             .is_ok_and(|credentials| {
                 !credentials.application_credential_id.trim().is_empty()
@@ -181,6 +185,7 @@ pub async fn create_integration(
             match input.kind.as_str() {
                 "proxmox" => "Vul het token-ID (gebruiker@realm!naam) en het geheim in.",
                 "openstack" => "Vul het ID en het geheim van de application credential in.",
+                "virtfusion" => "Vul een API-token van VirtFusion in.",
                 "directadmin" => "Vul de gebruikersnaam en een inlogsleutel van DirectAdmin in.",
                 "plesk" => "Vul een API-sleutel van Plesk in.",
                 _ => "Vul de application- en de client-API-sleutel in.",
@@ -188,7 +193,20 @@ pub async fn create_integration(
             .to_owned(),
         );
     }
-    let settings = if input.kind == "openstack" {
+    let settings = if input.kind == "virtfusion" {
+        match serde_json::from_value::<virtfusion::Settings>(input.settings.clone()) {
+            Ok(settings) if settings.hypervisor_group_id > 0 && !settings.images.is_empty() => {
+                serde_json::to_value(settings).map_err(anyhow::Error::from)?
+            }
+            _ => {
+                errors.insert(
+                    "settings",
+                    "Vul de hypervisorgroep en minstens één besturingssysteem in.".to_owned(),
+                );
+                Value::Null
+            }
+        }
+    } else if input.kind == "openstack" {
         match serde_json::from_value::<openstack::Settings>(input.settings.clone()) {
             Ok(settings)
                 if !settings.network_id.trim().is_empty() && !settings.images.is_empty() =>
@@ -317,6 +335,9 @@ pub async fn catalog(
         integrations::Driver::OpenStack(client) => {
             Ok(Json(client.flavors().await.map_err(failed)?))
         }
+        integrations::Driver::VirtFusion(client) => {
+            Ok(Json(client.packages().await.map_err(failed)?))
+        }
         driver => {
             let catalog = driver.pterodactyl()?.catalog().await.map_err(failed)?;
             Ok(Json(
@@ -395,6 +416,15 @@ pub async fn create_product(
                 Value::Null
             } else {
                 json!({ "plan": plan })
+            }
+        }
+        ("vps", Some("virtfusion")) => {
+            match serde_json::from_value::<virtfusion::ProductConfig>(input.provisioning.clone()) {
+                Ok(config) if config.package_id > 0 => virtfusion::product_details(&config),
+                _ => {
+                    errors.insert("provisioning", "Kies een pakket van VirtFusion.".to_owned());
+                    Value::Null
+                }
             }
         }
         ("vps", Some("openstack")) => {
