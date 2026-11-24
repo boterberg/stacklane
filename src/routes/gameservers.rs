@@ -19,6 +19,7 @@ pub struct GameServer {
     name: String,
     status: String,
     details: Value,
+    #[serde(serialize_with = "crate::error::public_error")]
     last_error: Option<String>,
     product_name: Option<String>,
     #[serde(with = "time::serde::rfc3339")]
@@ -97,7 +98,7 @@ async fn panel(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<(Pte
 }
 
 fn upstream(error: anyhow::Error) -> AppError {
-    AppError::field("server", format!("{error:#}"))
+    AppError::upstream("server", error)
 }
 
 pub async fn index(

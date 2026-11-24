@@ -253,6 +253,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Je hebt al 20 firewalls. Verwijder er eerst een." => {
             "You already have 20 firewalls. Remove one first."
         }
+        "Er ging iets mis bij het platform. Probeer het later opnieuw of neem contact op met support." => {
+            "Something went wrong at the platform. Try again later or contact support."
+        }
         _ => return None,
     })
 }

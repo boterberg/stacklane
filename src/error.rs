@@ -33,6 +33,41 @@ impl AppError {
     pub fn field(field: &'static str, message: impl Into<String>) -> Self {
         Self::Validation(BTreeMap::from([(field, message.into())]))
     }
+
+    pub fn upstream(field: &'static str, error: anyhow::Error) -> Self {
+        tracing::warn!(error = %format!("{error:#}"), "a platform call failed");
+        Self::field(field, public_message(&error.to_string()))
+    }
+}
+
+const PLATFORM_FAILED: &str =
+    "Er ging iets mis bij het platform. Probeer het later opnieuw of neem contact op met support.";
+
+pub fn public_message(message: &str) -> String {
+    let internal = [
+        "://",
+        "antwoordde",
+        "error sending",
+        "error decoding",
+        "connection",
+        "dns",
+    ];
+    let lower = message.to_lowercase();
+    if internal.iter().any(|marker| lower.contains(marker)) {
+        PLATFORM_FAILED.to_owned()
+    } else {
+        message.to_owned()
+    }
+}
+
+pub fn public_error<S: serde::Serializer>(
+    value: &Option<String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    match value {
+        Some(message) => serializer.serialize_some(&tr(&public_message(message))),
+        None => serializer.serialize_none(),
+    }
 }
 
 impl IntoResponse for AppError {
@@ -87,5 +122,28 @@ impl IntoResponse for AppError {
                     .into_response()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::public_message;
+
+    #[test]
+    fn hides_platform_details_from_customers() {
+        assert_eq!(
+            public_message(
+                "Proxmox antwoordde 500 Internal Server Error: storage 'ceph-int' is not online"
+            ),
+            super::PLATFORM_FAILED
+        );
+        assert_eq!(
+            public_message("error sending request for url (https://10.0.0.5:8006/api2/json/nodes)"),
+            super::PLATFORM_FAILED
+        );
+        assert_eq!(
+            public_message("de schijf staat niet meer bij deze server"),
+            "de schijf staat niet meer bij deze server"
+        );
     }
 }

@@ -77,7 +77,7 @@ async fn machine(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<vp
 }
 
 fn failed(error: anyhow::Error) -> AppError {
-    AppError::field("server", format!("{error:#}"))
+    AppError::upstream("server", error)
 }
 
 pub async fn index(
