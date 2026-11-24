@@ -1,14 +1,15 @@
-import { ArrowPathIcon, CalendarIcon, ClockIcon, CurrencyEuroIcon, HashtagIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, ArrowUturnLeftIcon, CalendarIcon, ClockIcon, CurrencyEuroIcon, HashtagIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { useState, type ReactNode } from 'react'
 import { useParams } from 'react-router'
 
 import { Badge } from '../../components/ui/Badge'
-import { ButtonLink } from '../../components/ui/Button'
+import { Button, ButtonLink } from '../../components/ui/Button'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { RowCard, RowCardList } from '../../components/ui/ResourceList'
 import { Tabs } from '../../components/ui/Tabs'
-import { expiryText, hasExpired, renewalText, useSubscription } from '../../lib/billing'
+import { expiryText, hasExpired, renewalText, useCancelSubscription, usePaymentOptions, useResumeSubscription, useSetPaymentMethod, useSubscription, type SubscriptionDetail } from '../../lib/billing'
 import { formatDate, formatEuro, formatRelative } from '../../lib/format'
 import { t } from '../../lib/i18n'
 import { intervalLabels, invoiceStatusColors, invoiceStatusLabels, subscriptionStatusColors, subscriptionStatusLabels } from '../../lib/labels'
@@ -19,6 +20,70 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
       <dt className="text-sm font-medium text-zinc-800 dark:text-white">{label}</dt>
       <dd className="mt-1 text-sm text-zinc-500 dark:text-white/70">{children}</dd>
     </div>
+  )
+}
+
+function PaymentMethod({ subscription }: { subscription: SubscriptionDetail }) {
+  const { data: options } = usePaymentOptions()
+  const change = useSetPaymentMethod(subscription.code)
+  const mandates = options?.mandates ?? []
+  const description = subscription.mandate
+    ? t('Automatisch met {method} · We schrijven het bedrag af op de vervaldatum.', { method: subscription.mandate })
+    : t('Handmatig · Je krijgt een herinnering om te verlengen.')
+  if (mandates.length === 0 || subscription.cancelled_at) return <>{description}</>
+  return (
+    <div className="space-y-3">
+      <p>{description}</p>
+      <select
+        aria-label={t('Betaalmethode')}
+        value={subscription.mandate_id ?? ''}
+        disabled={change.isPending}
+        onChange={(event) => change.mutate(event.target.value || null)}
+        className="h-8 rounded-md border border-zinc-200 border-b-zinc-300/80 bg-white px-3 text-sm text-zinc-700 shadow-xs dark:border-white/10 dark:bg-white/10 dark:text-zinc-200"
+      >
+        <option value="">{t('Handmatig betalen')}</option>
+        {mandates.map((mandate) => (
+          <option key={mandate.id} value={mandate.id}>
+            {t('Automatisch met {method}', { method: mandate.description })}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+function SubscriptionActions({ subscription }: { subscription: SubscriptionDetail }) {
+  const [confirming, setConfirming] = useState(false)
+  const cancel = useCancelSubscription(subscription.code)
+  const resume = useResumeSubscription(subscription.code)
+  const running = ['active', 'pending', 'suspended'].includes(subscription.status)
+  if (!running || hasExpired(subscription)) return null
+  if (subscription.cancelled_at) {
+    return (
+      <Button size="sm" icon={ArrowUturnLeftIcon} disabled={resume.isPending} onClick={() => resume.mutate(undefined)}>
+        {t('Opzegging intrekken')}
+      </Button>
+    )
+  }
+  return (
+    <>
+      <Button size="sm" icon={XMarkIcon} onClick={() => setConfirming(true)}>
+        {t('Opzeggen')}
+      </Button>
+      <ConfirmDialog
+        open={confirming}
+        title={t('Abonnement opzeggen?')}
+        confirmLabel={t('Opzeggen')}
+        danger
+        pending={cancel.isPending}
+        onClose={() => setConfirming(false)}
+        onConfirm={() => cancel.mutate(undefined, { onSettled: () => setConfirming(false) })}
+      >
+        {t('Je abonnement loopt door tot {date} en wordt daarna niet verlengd. Tot die dag kun je de opzegging nog intrekken.', {
+          date: formatDate(subscription.expires_at),
+        })}
+      </ConfirmDialog>
+    </>
   )
 }
 
@@ -43,33 +108,35 @@ export function SubscriptionDetailPage() {
   }
 
   const expired = hasExpired(subscription)
-  const automatic = subscription.payment_mode === 'automatic'
 
   return (
     <>
-      <div className="mb-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-medium text-zinc-800 dark:text-white">{subscription.name}</h1>
-          <Badge color={subscriptionStatusColors[subscription.status]}>{subscriptionStatusLabels[subscription.status]}</Badge>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-xl font-medium text-zinc-800 dark:text-white">{subscription.name}</h1>
+            <Badge color={subscriptionStatusColors[subscription.status]}>{subscriptionStatusLabels[subscription.status]}</Badge>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-zinc-500 dark:text-white/70">
+            <span className="flex items-center gap-2">
+              <ClockIcon className="size-4 text-zinc-400 dark:text-white/40" aria-hidden />
+              {expiryText(subscription)}
+            </span>
+            <span className="flex items-center gap-2">
+              <CurrencyEuroIcon className="size-4 text-zinc-400 dark:text-white/40" aria-hidden />
+              {t('{price} per maand', { price: formatEuro(subscription.monthly_total_cents).replace('€', '').trim() })}
+            </span>
+            <span className="flex items-center gap-2">
+              <ArrowPathIcon className="size-4 text-zinc-400 dark:text-white/40" aria-hidden />
+              {renewalText(subscription)}
+            </span>
+            <span className="flex items-center gap-2">
+              <HashtagIcon className="size-4 text-zinc-400 dark:text-white/40" aria-hidden />
+              {subscription.code}
+            </span>
+          </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-zinc-500 dark:text-white/70">
-          <span className="flex items-center gap-2">
-            <ClockIcon className="size-4 text-zinc-400 dark:text-white/40" aria-hidden />
-            {expiryText(subscription)}
-          </span>
-          <span className="flex items-center gap-2">
-            <CurrencyEuroIcon className="size-4 text-zinc-400 dark:text-white/40" aria-hidden />
-            {t('{price} per maand', { price: formatEuro(subscription.monthly_total_cents).replace('€', '').trim() })}
-          </span>
-          <span className="flex items-center gap-2">
-            <ArrowPathIcon className="size-4 text-zinc-400 dark:text-white/40" aria-hidden />
-            {renewalText(subscription)}
-          </span>
-          <span className="flex items-center gap-2">
-            <HashtagIcon className="size-4 text-zinc-400 dark:text-white/40" aria-hidden />
-            {subscription.code}
-          </span>
-        </div>
+        <SubscriptionActions subscription={subscription} />
       </div>
 
       <Tabs
@@ -90,7 +157,7 @@ export function SubscriptionDetailPage() {
               </Row>
               <Row label={t('Verlengingsinterval')}>{intervalLabels[subscription.billing_interval]}</Row>
               <Row label={t('Betaalmethode')}>
-                {automatic ? t('Automatisch · We schrijven het bedrag af op de vervaldatum.') : t('Handmatig · Je krijgt een herinnering om te verlengen.')}
+                <PaymentMethod subscription={subscription} />
               </Row>
               <Row label={t('Begonnen op')}>{formatDate(subscription.started_at)}</Row>
             </dl>
