@@ -1,7 +1,7 @@
 import type { BadgeColor } from '../components/ui/Badge'
 import { t } from './i18n'
 
-function translated<T extends string>(labels: Record<T, string>): Record<T, string> {
+export function translated<T extends string>(labels: Record<T, string>): Record<T, string> {
   return new Proxy(labels, {
     get: (target, key) => (typeof key === 'string' && key in target ? t(target[key as T]) : undefined),
   })

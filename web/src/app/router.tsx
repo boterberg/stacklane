@@ -61,6 +61,7 @@ export const router = createBrowserRouter([
       { path: '/admin/integrations', element: <IntegrationsPage /> },
       { path: '/account/security', element: <SecurityPage /> },
       { path: '/account/security/sessions', element: <SecurityPage /> },
+      { path: '/account/security/api-tokens', element: <SecurityPage /> },
       { path: '/admin/system', element: <SystemPage /> },
       { path: '/admin/settings', element: <SettingsPage /> },
       { path: '/admin/invoices', element: <AdminInvoicesPage /> },
