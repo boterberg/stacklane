@@ -5,6 +5,8 @@ use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+const MAX_READ: usize = 2 * 1024 * 1024;
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Credentials {
     pub application_key: String,
@@ -496,7 +498,15 @@ impl Pterodactyl {
             .send()
             .await?;
         let status = response.status();
-        let text = response.text().await?;
+        let mut response = response;
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await? {
+            if bytes.len() + chunk.len() > MAX_READ {
+                anyhow::bail!("dit bestand is te groot om hier te openen");
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        let text = String::from_utf8_lossy(&bytes).into_owned();
         if !status.is_success() {
             return Err(pterodactyl_error(
                 status,
