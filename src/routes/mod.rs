@@ -1,5 +1,6 @@
 mod account;
 mod admin_billing;
+mod admin_domains;
 mod admin_provisioning;
 mod admin_settings;
 mod api_tokens;
@@ -183,6 +184,14 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/admin/integrations/{id}/catalog",
             get(admin_provisioning::catalog),
+        )
+        .route(
+            "/admin/domain-extensions",
+            get(admin_domains::index).post(admin_domains::create),
+        )
+        .route(
+            "/admin/domain-extensions/{id}",
+            put(admin_domains::update).delete(admin_domains::destroy),
         )
         .route(
             "/admin/products",
