@@ -126,6 +126,38 @@ impl FromRequestParts<AppState> for ClientIp {
 mod tests {
     use super::*;
 
+    async fn client_ip(peer: &str, forwarded: Option<&str>) -> String {
+        let mut request = axum::http::Request::builder();
+        if let Some(forwarded) = forwarded {
+            request = request.header("x-forwarded-for", forwarded);
+        }
+        let (mut parts, ()) = request.body(()).unwrap().into_parts();
+        parts
+            .extensions
+            .insert(ConnectInfo(peer.parse::<SocketAddr>().unwrap()));
+        let state = crate::testing::state(
+            sqlx::PgPool::connect_lazy("postgres://unused@127.0.0.1/unused").unwrap(),
+        );
+        ClientIp::from_request_parts(&mut parts, &state)
+            .await
+            .ok()
+            .unwrap()
+            .0
+    }
+
+    #[tokio::test]
+    async fn trusts_forwarded_addresses_only_from_the_local_proxy() {
+        assert_eq!(
+            client_ip("198.51.100.7:4000", Some("203.0.113.9")).await,
+            "198.51.100.7"
+        );
+        assert_eq!(
+            client_ip("127.0.0.1:4000", Some("203.0.113.9, 198.51.100.8")).await,
+            "198.51.100.8"
+        );
+        assert_eq!(client_ip("127.0.0.1:4000", None).await, "127.0.0.1");
+    }
+
     #[test]
     fn refuses_after_the_maximum_until_the_window_ends() {
         let limits = Limits::default();

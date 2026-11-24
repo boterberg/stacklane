@@ -1,6 +1,5 @@
 use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::HeaderMap;
 use serde::Serialize;
 use serde_json::Value;
 use time::OffsetDateTime;
@@ -67,21 +66,10 @@ pub struct PanelLink {
     url: String,
 }
 
-pub fn visitor_ip(headers: &HeaderMap) -> String {
-    headers
-        .get("x-forwarded-for")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.split(',').next())
-        .map(str::trim)
-        .filter(|value| value.parse::<std::net::IpAddr>().is_ok())
-        .unwrap_or("127.0.0.1")
-        .to_owned()
-}
-
 pub async fn panel_login(
     State(state): State<AppState>,
     user: CurrentUser,
-    headers: HeaderMap,
+    crate::limits::ClientIp(ip): crate::limits::ClientIp,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<PanelLink>> {
     if user.via_api_token {
@@ -107,24 +95,8 @@ pub async fn panel_login(
     let driver = integrations::driver(&state, integration_id).await?;
     let hosting = webhosting::Hosting::from_driver(&driver).ok_or(AppError::NotFound)?;
     let url = hosting
-        .login_url(&external_id, &visitor_ip(&headers))
+        .login_url(&external_id, &ip)
         .await
         .map_err(|error| AppError::upstream("website", error))?;
     Ok(Json(PanelLink { url }))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::visitor_ip;
-    use axum::http::HeaderMap;
-
-    #[test]
-    fn reads_the_visitor_address() {
-        let mut headers = HeaderMap::new();
-        assert_eq!(visitor_ip(&headers), "127.0.0.1");
-        headers.insert("x-forwarded-for", "203.0.113.9, 10.0.0.1".parse().unwrap());
-        assert_eq!(visitor_ip(&headers), "203.0.113.9");
-        headers.insert("x-forwarded-for", "nonsense".parse().unwrap());
-        assert_eq!(visitor_ip(&headers), "127.0.0.1");
-    }
 }
