@@ -1,6 +1,6 @@
-# VPS met Proxmox VE
+# VPS met Proxmox VE of OpenStack
 
-Stacklane maakt virtuele servers aan op je eigen Proxmox VE-cluster. Klanten bestellen een server in het panel, betalen de factuur, en binnen een paar minuten draait hij. Daarna zetten ze hem zelf aan en uit, maken ze snapshots en stellen ze de firewall in.
+Stacklane maakt virtuele servers aan op je eigen Proxmox VE-cluster of in een OpenStack-cloud. Klanten bestellen een server in het panel, betalen de factuur, en binnen een paar minuten draait hij. Daarna zetten ze hem zelf aan en uit, maken ze snapshots en stellen ze de firewall in.
 
 ## Wat je nodig hebt
 
@@ -44,6 +44,27 @@ Onder **Beheer → Producten** kies je als soort **VPS**, de koppeling, en het a
 - het rootwachtwoord bekijken
 - tot drie snapshots maken, terugzetten en verwijderen
 - firewallregels toevoegen en verwijderen
+
+## OpenStack
+
+Bij OpenStack regelt de cloud zelf de IP-adressen, de schijf en de firewall. Stacklane praat met Keystone, Nova, Glance en Neutron.
+
+Je hebt nodig:
+
+- een **application credential** van het project waarin de servers komen: `openstack application credential create stacklane`
+- de ID van het netwerk waaraan de servers komen: `openstack network list`
+- de ID's van de images die klanten mogen kiezen: `openstack image list`
+- een of meer flavors
+
+Koppel onder **Beheer → Koppelingen** met als platform **OpenStack**. Vul het adres van Keystone in, bijvoorbeeld `https://keystone.jouwbedrijf.nl:5000/v3`, de credential, eventueel de regio, het netwerk, en per regel een image-ID met de naam die klanten zien. Bij een VPS-product op deze koppeling kies je daarna een flavor; Stacklane haalt de lijst live op.
+
+Verschillen met Proxmox:
+
+- elke server krijgt een eigen security group, die eerst al het inkomende verkeer toestaat
+- in de firewall kunnen klanten alleen regels maken die verkeer toestaan, met één poort of reeks per regel
+- een snapshot is een image in Glance; terugzetten herbouwt de server vanaf dat image
+- het panel toont geen live processor- en geheugengebruik
+- bij opheffen ruimt Stacklane de server, de security group en de snapshots op
 
 ## Lokaal testen
 
