@@ -146,7 +146,7 @@ pub struct OrderPlaced {
     service_id: Uuid,
 }
 
-fn subscription_code() -> String {
+pub(super) fn subscription_code() -> String {
     const ALPHABET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     rand::random::<[u8; 6]>()
         .iter()

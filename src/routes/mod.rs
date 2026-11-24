@@ -7,6 +7,7 @@ mod api_tokens;
 mod auth;
 pub mod billing;
 mod dashboard;
+mod domains;
 mod gameservers;
 mod health;
 pub mod me;
@@ -77,6 +78,8 @@ pub fn router(state: AppState) -> Router {
         .route("/webhosting/{id}", get(webhosting::show))
         .route("/webhosting/{id}/panel", post(webhosting::panel_login))
         .route("/ssh-keys", get(ssh_keys::index).post(ssh_keys::create))
+        .route("/domains/search", get(domains::search))
+        .route("/domains/orders", post(domains::order))
         .route(
             "/whois-profiles",
             get(whois_profiles::index).post(whois_profiles::create),

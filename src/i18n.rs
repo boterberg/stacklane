@@ -247,6 +247,23 @@ fn english(message: &str) -> Option<&'static str> {
         "Vul een prijs van 0 of hoger in." => "Enter a price of 0 or more.",
         "Kies een koppeling met een registrar." => "Choose an integration with a registrar.",
         "Deze extensie staat er al." => "This extension already exists.",
+        "Vul een domeinnaam in, zoals jouwbedrijf of jouwbedrijf.nl." => {
+            "Enter a domain name, such as yourcompany or yourcompany.nl."
+        }
+        "Vul een geldige domeinnaam in." => "Enter a valid domain name.",
+        "Deze extensie kun je niet bestellen." => "This extension cannot be ordered.",
+        "Kies een WHOIS-profiel." => "Choose a WHOIS profile.",
+        "Vul de autorisatiecode van je huidige provider in." => {
+            "Enter the authorisation code from your current provider."
+        }
+        "Dit is een premium domein. Neem contact met ons op voor de prijs." => {
+            "This is a premium domain. Contact us for the price."
+        }
+        "Dit domein is nog vrij. Registreer het in plaats van het te verhuizen." => {
+            "This domain is still available. Register it instead of transferring it."
+        }
+        "Dit domein is al bezet." => "This domain is already taken.",
+        "Dit domein is al besteld." => "This domain has already been ordered.",
         "Kies een flavor." => "Choose a flavor.",
         "Kies TCP, UDP of ICMP." => "Choose TCP, UDP or ICMP.",
         "Vul een poort in, zoals 22, 80,443 of 8000:8100." => {
