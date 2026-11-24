@@ -225,10 +225,15 @@ pub async fn all_snapshots(
     .fetch_all(&state.db)
     .await?;
     let mut snapshots = Vec::new();
+    let mut capable = 0;
     for (server_id, server_name) in &servers {
         let Ok(machine) = machine(&state, &user, *server_id).await else {
             continue;
         };
+        if !machine.features().snapshots {
+            continue;
+        }
+        capable += 1;
         let Ok(found) = machine.snapshots().await else {
             continue;
         };
@@ -241,7 +246,7 @@ pub async fn all_snapshots(
     snapshots.sort_by_key(|item| std::cmp::Reverse(item.snapshot.created_at));
     Ok(Json(SnapshotOverview {
         used: snapshots.len(),
-        limit: servers.len() * MAX_SNAPSHOTS,
+        limit: capable * MAX_SNAPSHOTS,
         snapshots,
     }))
 }
