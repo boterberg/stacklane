@@ -5,7 +5,7 @@
   </a>
 </p>
 <h1 align="center">
-  Stacklane
+  Stacklane Animated Fork
 </h1>
 
 <div align="center">
