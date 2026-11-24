@@ -21,6 +21,7 @@ pub struct Cpanel {
 impl Cpanel {
     pub fn new(base_url: &str, credentials: Credentials) -> anyhow::Result<Self> {
         let http = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
             .timeout(Duration::from_secs(120))
             .user_agent(concat!("stacklane/", env!("CARGO_PKG_VERSION")))
             .build()?;
@@ -51,9 +52,9 @@ impl Cpanel {
     async fn call(&self, function: &str, params: &[(&str, &str)]) -> anyhow::Result<Value> {
         let response = self
             .http
-            .get(format!("{}/json-api/{function}", self.base_url))
+            .post(format!("{}/json-api/{function}", self.base_url))
             .query(&[("api.version", "1")])
-            .query(params)
+            .form(params)
             .header(
                 "Authorization",
                 format!(

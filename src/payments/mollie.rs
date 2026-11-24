@@ -75,7 +75,11 @@ pub fn amount(cents: i64) -> String {
 impl Client {
     pub fn new(api_key: String) -> Self {
         Self {
-            http: reqwest::Client::new(),
+            http: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap_or_default(),
             base_url: std::env::var("MOLLIE_API_URL")
                 .unwrap_or_else(|_| "https://api.mollie.com/v2".into()),
             api_key,

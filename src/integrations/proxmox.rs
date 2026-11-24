@@ -124,6 +124,7 @@ impl Proxmox {
         settings: Settings,
     ) -> anyhow::Result<Self> {
         let http = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
             .timeout(Duration::from_secs(60))
             .danger_accept_invalid_certs(!settings.verify_tls)
             .user_agent(concat!("stacklane/", env!("CARGO_PKG_VERSION")))

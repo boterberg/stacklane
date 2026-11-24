@@ -69,6 +69,7 @@ struct ViesReply {
 
 pub async fn check_vies(code: &str, number: &str) -> anyhow::Result<bool> {
     let reply: ViesReply = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
         .timeout(std::time::Duration::from_secs(15))
         .user_agent(concat!("stacklane/", env!("CARGO_PKG_VERSION")))
         .build()?
