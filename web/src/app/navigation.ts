@@ -117,7 +117,13 @@ export const vpsSection: NavSection = {
   back: '/',
   groups: [
     { label: 'Compute', children: [{ label: 'Servers', to: '/vps/servers', icon: ServerStackIcon }] },
-    { label: 'Opslag', children: [{ label: 'Snapshots', to: '/vps/snapshots', icon: CameraIcon }] },
+    {
+      label: 'Opslag',
+      children: [
+        { label: 'Volumes', to: '/vps/volumes', icon: CircleStackIcon },
+        { label: 'Snapshots', to: '/vps/snapshots', icon: CameraIcon },
+      ],
+    },
     { label: 'Netwerk', children: [{ label: 'Firewalls', to: '/vps/firewalls', icon: ShieldCheckIcon }] },
     { label: 'Toegang', children: [{ label: 'SSH-sleutels', to: '/vps/ssh-keys', icon: KeyIcon }] },
   ],
