@@ -1,4 +1,4 @@
-import { ArrowPathIcon, CameraIcon, EyeIcon, GlobeAltIcon, PlayIcon, PlusIcon, PowerIcon, ServerIcon, StopIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, ArrowTopRightOnSquareIcon, CameraIcon, EyeIcon, GlobeAltIcon, PlayIcon, PlusIcon, PowerIcon, ServerIcon, StopIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { useState } from 'react'
 import { useParams } from 'react-router'
 
@@ -22,9 +22,11 @@ import {
   useFirewall,
   usePower,
   useRollbackSnapshot,
+  usePanelLogin,
   useRootPassword,
   useSnapshots,
   useVpsServer,
+  type Features,
   type FirewallRule,
   type LiveStatus,
   type Snapshot,
@@ -46,7 +48,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   )
 }
 
-function Overview({ server, live }: { server: VpsServer; live: LiveStatus | null }) {
+function Overview({ server, live, features }: { server: VpsServer; live: LiveStatus | null; features: Features | null }) {
   const password = useRootPassword(server.id)
   return (
     <div className="grid max-w-5xl gap-6 lg:grid-cols-2">
@@ -60,7 +62,9 @@ function Overview({ server, live }: { server: VpsServer; live: LiveStatus | null
           </Row>
           <Row label={t('Inloggen')}>
             <span className="block">ssh root@{server.details.ipv4}</span>
-            {password.data ? (
+            {features?.panel ? (
+              <span className="mt-1 block">{t('Het rootwachtwoord en de console vind je in het panel van VirtFusion.')}</span>
+            ) : password.data ? (
               <code className="mt-2 block font-mono text-zinc-800 dark:text-white">{password.data.password ?? t('Niet beschikbaar')}</code>
             ) : (
               <Button size="sm" icon={EyeIcon} className="mt-2" disabled={password.isPending} onClick={() => password.mutate()}>
@@ -77,9 +81,7 @@ function Overview({ server, live }: { server: VpsServer; live: LiveStatus | null
             <Row label={t('Processor')}>
               {live.cpu === null ? t('{cores} vCPU', { cores: live.cpus }) : t('{percent}% van {cores} vCPU', { percent: Math.round(live.cpu * 100), cores: live.cpus })}
             </Row>
-            <Row label={t('Geheugen')}>
-              {live.memory === null ? formatBytes(live.max_memory) : t('{used} van {total}', { used: formatBytes(live.memory), total: formatBytes(live.max_memory) })}
-            </Row>
+            <Row label={t('Geheugen')}>{live.memory === null ? formatBytes(live.max_memory) : t('{used} van {total}', { used: formatBytes(live.memory), total: formatBytes(live.max_memory) })}</Row>
             {live.uptime !== null && <Row label={t('Uptime')}>{live.uptime > 0 ? formatDuration(live.uptime * 1000) : '-'}</Row>}
           </dl>
         ) : (
@@ -110,7 +112,9 @@ function Snapshots({ server }: { server: VpsServer }) {
           }}
         >
           <div className="min-w-48 flex-1">
-            <Field label={t('Omschrijving')}>{(id) => <Input id={id} placeholder={t('Bijvoorbeeld voor de update')} value={description} onChange={(event) => setDescription(event.target.value)} />}</Field>
+            <Field label={t('Omschrijving')}>
+              {(id) => <Input id={id} placeholder={t('Bijvoorbeeld voor de update')} value={description} onChange={(event) => setDescription(event.target.value)} />}
+            </Field>
           </div>
           <Button type="submit" variant="primary" icon={CameraIcon} disabled={create.isPending}>
             {create.isPending ? t('Bezig...') : t('Snapshot maken')}
@@ -154,15 +158,20 @@ function Snapshots({ server }: { server: VpsServer }) {
           else remove.mutate(confirm.snapshot.name, done)
         }}
       >
-        {confirm?.action === 'rollback'
-          ? t('Alles wat na deze snapshot op de server is veranderd, gaat verloren.')
-          : t('De snapshot is daarna weg.')}
+        {confirm?.action === 'rollback' ? t('Alles wat na deze snapshot op de server is veranderd, gaat verloren.') : t('De snapshot is daarna weg.')}
       </ConfirmDialog>
     </div>
   )
 }
 
-const emptyRule: { type: 'in' | 'out'; action: string; proto: string; dport: string; source: string; comment: string } = { type: 'in', action: 'ACCEPT', proto: 'tcp', dport: '', source: '', comment: '' }
+const emptyRule: { type: 'in' | 'out'; action: string; proto: string; dport: string; source: string; comment: string } = {
+  type: 'in',
+  action: 'ACCEPT',
+  proto: 'tcp',
+  dport: '',
+  source: '',
+  comment: '',
+}
 
 function Firewall({ server }: { server: VpsServer }) {
   const { data: rules, isPending } = useFirewall(server.id, true)
@@ -245,6 +254,25 @@ function Firewall({ server }: { server: VpsServer }) {
         </ul>
       )}
     </div>
+  )
+}
+
+function PanelButton({ id }: { id: string }) {
+  const login = usePanelLogin(id)
+  function open() {
+    const tab = window.open('about:blank', '_blank')
+    login.mutate(undefined, {
+      onSuccess: ({ url }) => {
+        if (tab) tab.location.href = url
+        else window.location.assign(url)
+      },
+      onError: () => tab?.close(),
+    })
+  }
+  return (
+    <Button size="sm" icon={ArrowTopRightOnSquareIcon} disabled={login.isPending} onClick={open}>
+      {t('Open in VirtFusion')}
+    </Button>
   )
 }
 
@@ -331,7 +359,10 @@ export function VpsServerPage() {
             )}
           </div>
         </div>
-        <PowerButtons server={server} live={server.live} />
+        <div className="flex flex-wrap gap-2">
+          {server.features?.panel && <PanelButton id={server.id} />}
+          <PowerButtons server={server} live={server.live} />
+        </div>
       </div>
 
       {!ready ? (
@@ -349,14 +380,14 @@ export function VpsServerPage() {
         <>
           <Tabs
             tabs={[
-              { id: 'overview', label: 'Overzicht' },
-              { id: 'snapshots', label: 'Snapshots' },
-              { id: 'firewall', label: 'Firewall' },
+              { id: 'overview' as const, label: 'Overzicht' },
+              ...(server.features?.snapshots === false ? [] : [{ id: 'snapshots' as const, label: 'Snapshots' }]),
+              ...(server.features?.firewall === false ? [] : [{ id: 'firewall' as const, label: 'Firewall' }]),
             ]}
             active={tab}
             onChange={setTab}
           />
-          {tab === 'overview' && <Overview server={server} live={server.live} />}
+          {tab === 'overview' && <Overview server={server} live={server.live} features={server.features} />}
           {tab === 'snapshots' && <Snapshots server={server} />}
           {tab === 'firewall' && <Firewall server={server} />}
         </>

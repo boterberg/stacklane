@@ -27,6 +27,8 @@ export type VpsServer = {
 
 export type LiveStatus = { state: string; cpu: number | null; cpus: number; memory: number | null; max_memory: number; uptime: number | null }
 
+export type Features = { snapshots: boolean; firewall: boolean; panel: boolean }
+
 export type Snapshot = { name: string; description: string; created_at: number | null }
 
 export type FirewallRule = { id: string; type: 'in' | 'out'; action: string; proto?: string | null; dport?: string | null; source?: string | null; comment?: string | null }
@@ -54,7 +56,7 @@ export function useVpsServers() {
 export function useVpsServer(id: string) {
   return useQuery({
     queryKey: ['vps', 'server', id],
-    queryFn: () => api<VpsServer & { live: LiveStatus | null }>(`/vps/servers/${id}`),
+    queryFn: () => api<VpsServer & { live: LiveStatus | null; features: Features | null }>(`/vps/servers/${id}`),
     refetchInterval: (query) => (query.state.data?.status === 'active' ? 10_000 : 5000),
   })
 }
@@ -69,6 +71,10 @@ export function usePower(id: string) {
 
 export function useRootPassword(id: string) {
   return useMutation({ mutationFn: () => api<{ password: string | null }>(`/vps/servers/${id}/password`) })
+}
+
+export function usePanelLogin(id: string) {
+  return useMutation({ mutationFn: () => api<{ url: string }>(`/vps/servers/${id}/panel`, { method: 'POST' }) })
 }
 
 export function useSnapshots(id: string, enabled: boolean) {
