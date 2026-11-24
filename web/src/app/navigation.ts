@@ -35,6 +35,7 @@ export type NavLink = {
   icon: NavIcon
   external?: boolean
   opensSection?: boolean
+  exact?: boolean
 }
 
 export type NavGroup = {
@@ -64,7 +65,7 @@ export const navigation: NavEntry[] = [
     label: 'Domeinnamen',
     icon: GlobeAltIcon,
     children: [
-      { label: 'Domeinen', to: '/domains', icon: GlobeEuropeAfricaIcon },
+      { label: 'Domeinen', to: '/domains', icon: GlobeEuropeAfricaIcon, exact: true },
       { label: 'WHOIS-profielen', to: '/domains/whois-profiles', icon: IdentificationIcon },
     ],
   },

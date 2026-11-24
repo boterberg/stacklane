@@ -23,7 +23,7 @@ function LeafItem({ item, onNavigate }: { item: NavLink; onNavigate?: () => void
     )
   }
   return (
-    <RouterNavLink to={item.to} end={item.to === '/'} onClick={onNavigate} className={({ isActive }) => cn(itemBase, isActive ? itemActive : itemIdle)}>
+    <RouterNavLink to={item.to} end={item.to === '/' || item.exact} onClick={onNavigate} className={({ isActive }) => cn(itemBase, isActive ? itemActive : itemIdle)}>
       <Icon className="size-4 shrink-0" aria-hidden />
       <span className="flex-1 truncate">{t(item.label)}</span>
       {item.opensSection && <ChevronRightIcon className="size-3 shrink-0" strokeWidth={2} aria-hidden />}
