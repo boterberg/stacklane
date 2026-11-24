@@ -107,6 +107,11 @@ async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()>
     .bind(provisioned.details)
     .execute(&state.db)
     .await?;
+    if context.kind == "vps"
+        && let Err(error) = crate::routes::vps_firewalls::apply_automatic(state, service_id).await
+    {
+        tracing::warn!(%service_id, error = %format!("{error:#}"), "applying automatic firewalls failed");
+    }
     Ok(())
 }
 
