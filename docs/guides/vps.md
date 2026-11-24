@@ -73,6 +73,18 @@ Na betaling maakt Stacklane het volume aan en koppelt het aan de server. De klan
 
 Vergroten kan nog niet. Een volume opzeggen gaat via het abonnement.
 
+### ISO's
+
+Een klant kan onder **VPS → ISO's** twee eigen ISO's importeren via een publieke https-link, met BIOS of UEFI. Stacklane haalt de ISO op de achtergrond binnen. Daarna kiest de klant op de serverpagina onder **ISO** welke ISO hij koppelt; de server herstart en start vanaf de ISO. Na het loskoppelen start hij weer van de eigen schijf.
+
+Stacklane weigert links naar privé-adressen, localhost en link-local adressen, zodat niemand via een ISO-import je interne netwerk kan aftasten. ISO's die dertig dagen niet gekoppeld zijn, ruimt Stacklane zelf op.
+
+| Platform | Hoe het werkt |
+| --- | --- |
+| Proxmox VE | De ISO komt op de **opslag voor ISO's** uit de koppeling (standaard `local`, met het inhoudstype ISO-image). Het token heeft daarvoor `Datastore.AllocateTemplate` op die opslag nodig en `Sys.AccessNetwork` op de node (op oudere versies `Sys.Modify` op `/`). Koppelen zet de ISO als cd-rom vooraan in de opstartvolgorde. De firmware van de server volgt de ISO en blijft zo na het loskoppelen, zodat een vanaf de ISO geïnstalleerd systeem opstart. |
+| OpenStack | Een privé-image in Glance, geïmporteerd met *web-download*. Koppelen start de server in rescue-modus met de ISO als cd-rom (Nova API 2.87 of nieuwer); loskoppelen haalt hem uit rescue. |
+| VirtFusion | Geen ISO's. |
+
 ## OpenStack
 
 Bij OpenStack regelt de cloud zelf de IP-adressen, de schijf en de firewall. Stacklane praat met Keystone, Nova, Glance en Neutron.
