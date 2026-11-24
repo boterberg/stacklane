@@ -356,6 +356,9 @@ fn english(message: &str) -> Option<&'static str> {
         "We hebben net een e-mail gestuurd. Probeer het over een minuut opnieuw." => {
             "We just sent an email. Try again in a minute."
         }
+        "Te veel foute codes. Probeer het over een paar minuten opnieuw." => {
+            "Too many wrong codes. Try again in a few minutes."
+        }
         _ => return None,
     })
 }
