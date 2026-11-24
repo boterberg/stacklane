@@ -6,6 +6,10 @@ import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage'
 import { LoginPage } from '../pages/auth/LoginPage'
 import { RegisterPage } from '../pages/auth/RegisterPage'
 import { ResetPasswordPage } from '../pages/auth/ResetPasswordPage'
+import { InvoiceDetailPage } from '../pages/billing/InvoiceDetailPage'
+import { InvoicesPage } from '../pages/billing/InvoicesPage'
+import { SubscriptionDetailPage } from '../pages/billing/SubscriptionDetailPage'
+import { SubscriptionsPage } from '../pages/billing/SubscriptionsPage'
 import { DashboardPage } from '../pages/DashboardPage'
 import { NotFoundPage, SectionPage } from '../pages/SectionPage'
 import { TicketDetailPage } from '../pages/support/TicketDetailPage'
@@ -23,8 +27,6 @@ const sections: Array<[string, string]> = [
   ['/domains', 'Domeinen'],
   ['/domains/whois-profiles', 'WHOIS-profielen'],
   ['/webhosting', 'Webhosting'],
-  ['/billing/subscriptions', 'Abonnementen'],
-  ['/billing/invoices', 'Facturen'],
   ['/account/profile', 'Account'],
   ['/account/security', 'Beveiliging'],
 ]
@@ -44,6 +46,10 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <DashboardPage /> },
       { path: '/support/tickets', element: <TicketsPage /> },
+      { path: '/billing/subscriptions', element: <SubscriptionsPage /> },
+      { path: '/billing/subscriptions/:code', element: <SubscriptionDetailPage /> },
+      { path: '/billing/invoices', element: <InvoicesPage /> },
+      { path: '/billing/invoices/:id', element: <InvoiceDetailPage /> },
       { path: '/support/tickets/:number', element: <TicketDetailPage /> },
       { path: '/gameservers/servers', element: <GameServersPage /> },
       { path: '/gameservers/servers/:id', element: <GameServerPage /> },

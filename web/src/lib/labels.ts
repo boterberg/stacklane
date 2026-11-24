@@ -60,3 +60,42 @@ export const powerStateColors: Record<string, BadgeColor> = {
   stopping: 'amber',
   offline: 'zinc',
 }
+
+export const subscriptionStatuses = ['active', 'pending', 'suspended', 'cancelled', 'expired'] as const
+
+export const subscriptionStatusLabels: Record<string, string> = translated({
+  pending: 'In afwachting',
+  active: 'Actief',
+  suspended: 'Opgeschort',
+  cancelled: 'Geannuleerd',
+  expired: 'Verlopen',
+})
+
+export const subscriptionStatusColors: Record<string, BadgeColor> = {
+  pending: 'sky',
+  active: 'green',
+  suspended: 'amber',
+  cancelled: 'zinc',
+  expired: 'zinc',
+}
+
+export const invoiceStatusLabels: Record<string, string> = translated({
+  open: 'Openstaand',
+  paid: 'Betaald',
+  cancelled: 'Geannuleerd',
+  refunded: 'Terugbetaald',
+})
+
+export const invoiceStatusColors: Record<string, BadgeColor> = {
+  open: 'amber',
+  paid: 'green',
+  cancelled: 'zinc',
+  refunded: 'blue',
+}
+
+export const intervalLabels: Record<string, string> = translated({
+  monthly: 'Maandelijks',
+  quarterly: 'Per kwartaal',
+  half_yearly: 'Per half jaar',
+  yearly: 'Jaarlijks',
+})
