@@ -384,6 +384,21 @@ fn changed(before: &[String], after: &[String]) -> (usize, usize) {
     (added, left.len())
 }
 
+fn kept_order<'a>(from: &'a [String], other: &[String]) -> Vec<&'a String> {
+    let mut pool: Vec<&String> = other.iter().collect();
+    from.iter()
+        .filter(
+            |item| match pool.iter().position(|candidate| candidate == item) {
+                Some(position) => {
+                    pool.remove(position);
+                    true
+                }
+                None => false,
+            },
+        )
+        .collect()
+}
+
 async fn check_rights(
     state: &AppState,
     actor: &VpsActor,
@@ -393,16 +408,32 @@ async fn check_rights(
     if actor.is_owner() {
         return Ok(());
     }
-    let (rules, servers) = match id {
-        Some(id) => (rules_of(state, id).await?, attached(state, id).await?),
-        None => (Vec::new(), Vec::new()),
+    let (rules, servers, auto_assign) = match id {
+        Some(id) => (
+            rules_of(state, id).await?,
+            sqlx::query_scalar(
+                "SELECT s.service_id FROM vps_firewall_servers s JOIN services v ON v.id = s.service_id
+                 WHERE s.firewall_id = $1 AND v.status <> 'terminated'",
+            )
+            .bind(id)
+            .fetch_all(&state.db)
+            .await?,
+            owned(state, actor, id).await?.auto_assign,
+        ),
+        None => (Vec::new(), Vec::new(), false),
     };
     let before: Vec<String> = rules.iter().map(rule_key).collect();
     let after: Vec<String> = input.rules.iter().map(rule_key).collect();
     let (added, removed) = changed(&before, &after);
     let updated = added.min(removed);
-    if updated > 0 {
+    if updated > 0 || kept_order(&before, &after) != kept_order(&after, &before) {
         actor.require("firewalls.rule_update")?;
+    }
+    if input.auto_assign && !auto_assign {
+        actor.require("firewalls.attach")?;
+    }
+    if !input.auto_assign && auto_assign {
+        actor.require("firewalls.detach")?;
     }
     if added > updated {
         actor.require("firewalls.rule_create")?;
@@ -548,7 +579,25 @@ pub async fn apply_automatic(state: &AppState, service_id: Uuid) -> anyhow::Resu
 
 #[cfg(test)]
 mod rights_tests {
-    use super::changed;
+    use super::{changed, kept_order};
+
+    #[test]
+    fn notices_a_new_order_of_the_rules_that_stay() {
+        let list = |items: &[&str]| {
+            items
+                .iter()
+                .map(|item| (*item).to_owned())
+                .collect::<Vec<_>>()
+        };
+        let same = |before: &[&str], after: &[&str]| {
+            let (before, after) = (list(before), list(after));
+            kept_order(&before, &after) == kept_order(&after, &before)
+        };
+        assert!(same(&["a", "b"], &["a", "b", "c"]));
+        assert!(same(&["a", "b", "c"], &["a", "c"]));
+        assert!(!same(&["a", "b"], &["b", "a"]));
+        assert!(!same(&["a", "b"], &["c", "b", "a"]));
+    }
 
     #[test]
     fn counts_added_and_removed_rules() {

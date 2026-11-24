@@ -804,3 +804,100 @@ async fn shared_access_needs_consent_and_ends_with_the_owner(db: PgPool) {
     assert_eq!(deleted.status, StatusCode::NO_CONTENT, "{}", deleted.body);
     assert_eq!(as_member(member_cookie).await, StatusCode::FORBIDDEN);
 }
+
+async fn shared_member(
+    client: &Client,
+    owner_cookie: &str,
+    owner: uuid::Uuid,
+    email: &str,
+    rights: &[&str],
+) -> String {
+    let (_, cookie) = client.register(email).await;
+    let invited = client
+        .send(
+            Method::POST,
+            "/vps/members",
+            Some(owner_cookie),
+            Some(json!({ "email": email, "permissions": rights })),
+        )
+        .await;
+    assert_eq!(invited.status, StatusCode::CREATED, "{}", invited.body);
+    client
+        .send(
+            Method::POST,
+            &format!("/account/shared-access/{owner}/accept"),
+            Some(&cookie),
+            None,
+        )
+        .await;
+    cookie
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_member_needs_the_matching_right_for_every_firewall_change(db: PgPool) {
+    let client = Client::new(db);
+    let (owner, owner_cookie) = client.register("fw-owner@example.test").await;
+    let rules = json!([
+        { "type": "in", "action": "ACCEPT", "proto": "tcp", "dport": "22", "source": "203.0.113.4" },
+        { "type": "in", "action": "DROP", "proto": "tcp", "dport": "22" },
+    ]);
+    let created = client
+        .send(
+            Method::POST,
+            "/vps/firewalls",
+            Some(&owner_cookie),
+            Some(json!({ "name": "ssh-guard", "rules": rules })),
+        )
+        .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    let id = created.body["id"].as_str().unwrap().to_owned();
+    let member = shared_member(
+        &client,
+        &owner_cookie,
+        owner,
+        "fw-member@example.test",
+        &["firewalls.view", "firewalls.update", "firewalls.create"],
+    )
+    .await;
+    let owner_header = owner.to_string();
+    let put = |body: serde_json::Value| {
+        let (client, member, owner_header, id) =
+            (&client, member.clone(), owner_header.clone(), id.clone());
+        async move {
+            client
+                .send_with(
+                    Method::PUT,
+                    &format!("/vps/firewalls/{id}"),
+                    Some(&member),
+                    Some(body),
+                    &[("x-vps-owner", &owner_header)],
+                )
+                .await
+                .status
+        }
+    };
+    let reversed = json!([rules[1], rules[0]]);
+    assert_eq!(
+        put(json!({ "name": "ssh-guard", "rules": reversed })).await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        put(json!({ "name": "ssh-guard", "rules": rules, "auto_assign": true })).await,
+        StatusCode::FORBIDDEN
+    );
+    let empty_auto = client
+        .send_with(
+            Method::POST,
+            "/vps/firewalls",
+            Some(&member),
+            Some(json!({ "name": "auto", "auto_assign": true, "rules": [] })),
+            &[("x-vps-owner", &owner_header)],
+        )
+        .await;
+    assert_eq!(empty_auto.status, StatusCode::FORBIDDEN);
+    assert_eq!(
+        put(json!({ "name": "renamed", "rules": rules })).await,
+        StatusCode::OK
+    );
+}
