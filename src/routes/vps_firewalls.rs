@@ -6,9 +6,9 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use super::vps::{machine_of, validate_rule};
-use crate::auth::CurrentUser;
 use crate::error::{AppError, AppResult};
 use crate::integrations::vps::FirewallRule;
+use crate::routes::vps_access::VpsActor;
 use crate::state::AppState;
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -211,9 +211,9 @@ async fn attached(state: &AppState, firewall_id: Uuid) -> AppResult<Vec<Uuid>> {
     .await?)
 }
 
-async fn owned(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<Firewall> {
+async fn owned(state: &AppState, actor: &VpsActor, id: Uuid) -> AppResult<Firewall> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!("{SELECT} AND f.id = $2")))
-        .bind(user.id)
+        .bind(actor.owner)
         .bind(id)
         .fetch_optional(&state.db)
         .await?
@@ -265,20 +265,21 @@ async fn eligible(state: &AppState, user_id: Uuid) -> AppResult<Vec<AttachedServ
 
 pub async fn servers(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
 ) -> AppResult<Json<Vec<AttachedServer>>> {
-    Ok(Json(eligible(&state, user.id).await?))
+    actor.require("firewalls.view")?;
+    Ok(Json(eligible(&state, actor.owner).await?))
 }
 
 async fn store(
     state: &AppState,
-    user: &CurrentUser,
+    actor: &VpsActor,
     id: Uuid,
     input: &FirewallInput,
 ) -> AppResult<Vec<Uuid>> {
     let wanted: Option<Vec<Uuid>> = match &input.server_ids {
         Some(ids) => {
-            let capable = eligible(state, user.id).await?;
+            let capable = eligible(state, actor.owner).await?;
             if let Some(other) = ids
                 .iter()
                 .find(|id| !capable.iter().any(|server| server.id == **id))
@@ -289,7 +290,7 @@ async fn store(
                         "SELECT EXISTS (SELECT 1 FROM services WHERE id = $1 AND user_id = $2)",
                     )
                     .bind(other)
-                    .bind(user.id)
+                    .bind(actor.owner)
                     .fetch_one(&state.db)
                     .await?
                     {
@@ -309,7 +310,7 @@ async fn store(
          ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, auto_assign = EXCLUDED.auto_assign, updated_at = now()",
     )
     .bind(id)
-    .bind(user.id)
+    .bind(actor.owner)
     .bind(&input.name)
     .bind(input.auto_assign)
     .execute(&mut *transaction)
@@ -358,15 +359,78 @@ async fn store(
     Ok(detached)
 }
 
+fn rule_key(rule: &FirewallRule) -> String {
+    format!(
+        "{}|{}|{}|{}|{}|{}",
+        rule.direction,
+        rule.action,
+        rule.proto.as_deref().unwrap_or_default(),
+        rule.dport.as_deref().unwrap_or_default(),
+        rule.source.as_deref().unwrap_or_default(),
+        rule.comment.as_deref().unwrap_or_default()
+    )
+}
+
+fn changed(before: &[String], after: &[String]) -> (usize, usize) {
+    let mut left: Vec<&String> = before.iter().collect();
+    let mut added = 0;
+    for item in after {
+        if let Some(position) = left.iter().position(|old| *old == item) {
+            left.remove(position);
+        } else {
+            added += 1;
+        }
+    }
+    (added, left.len())
+}
+
+async fn check_rights(
+    state: &AppState,
+    actor: &VpsActor,
+    id: Option<Uuid>,
+    input: &FirewallInput,
+) -> AppResult<()> {
+    if actor.is_owner() {
+        return Ok(());
+    }
+    let (rules, servers) = match id {
+        Some(id) => (rules_of(state, id).await?, attached(state, id).await?),
+        None => (Vec::new(), Vec::new()),
+    };
+    let before: Vec<String> = rules.iter().map(rule_key).collect();
+    let after: Vec<String> = input.rules.iter().map(rule_key).collect();
+    let (added, removed) = changed(&before, &after);
+    let updated = added.min(removed);
+    if updated > 0 {
+        actor.require("firewalls.rule_update")?;
+    }
+    if added > updated {
+        actor.require("firewalls.rule_create")?;
+    }
+    if removed > updated {
+        actor.require("firewalls.rule_delete")?;
+    }
+    if let Some(wanted) = &input.server_ids {
+        if wanted.iter().any(|server| !servers.contains(server)) {
+            actor.require("firewalls.attach")?;
+        }
+        if servers.iter().any(|server| !wanted.contains(server)) {
+            actor.require("firewalls.detach")?;
+        }
+    }
+    Ok(())
+}
+
 pub async fn index(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
 ) -> AppResult<Json<Vec<Firewall>>> {
+    actor.require("firewalls.view")?;
     Ok(Json(
         sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "{SELECT} ORDER BY f.created_at"
         )))
-        .bind(user.id)
+        .bind(actor.owner)
         .fetch_all(&state.db)
         .await?,
     ))
@@ -374,10 +438,11 @@ pub async fn index(
 
 pub async fn show(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<FirewallDetail>> {
-    let firewall = owned(&state, &user, id).await?;
+    actor.require("firewalls.view")?;
+    let firewall = owned(&state, &actor, id).await?;
     let server_list = sqlx::query_as(
         "SELECT v.id, v.name FROM vps_firewall_servers s JOIN services v ON v.id = s.service_id
          WHERE s.firewall_id = $1 AND v.status <> 'terminated' ORDER BY v.name",
@@ -394,15 +459,17 @@ pub async fn show(
 
 pub async fn create(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Json(mut input): Json<FirewallInput>,
 ) -> AppResult<(StatusCode, Json<Saved>)> {
+    actor.require("firewalls.create")?;
     clean(&mut input)?;
+    check_rights(&state, &actor, None, &input).await?;
     let id = Uuid::new_v4();
-    store(&state, &user, id, &input).await?;
+    store(&state, &actor, id, &input).await?;
     let problems = sync_all(
         &state,
-        user.id,
+        actor.owner,
         id,
         &attached(&state, id).await?,
         &input.rules,
@@ -413,18 +480,20 @@ pub async fn create(
 
 pub async fn update(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
     Json(mut input): Json<FirewallInput>,
 ) -> AppResult<Json<Saved>> {
-    owned(&state, &user, id).await?;
+    actor.require("firewalls.update")?;
+    owned(&state, &actor, id).await?;
     clean(&mut input)?;
-    let detached = store(&state, &user, id, &input).await?;
-    let mut problems = sync_all(&state, user.id, id, &detached, &[]).await;
+    check_rights(&state, &actor, Some(id), &input).await?;
+    let detached = store(&state, &actor, id, &input).await?;
+    let mut problems = sync_all(&state, actor.owner, id, &detached, &[]).await;
     problems.extend(
         sync_all(
             &state,
-            user.id,
+            actor.owner,
             id,
             &attached(&state, id).await?,
             &input.rules,
@@ -436,14 +505,15 @@ pub async fn update(
 
 pub async fn destroy(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Saved>> {
-    owned(&state, &user, id).await?;
-    let problems = sync_all(&state, user.id, id, &attached(&state, id).await?, &[]).await;
+    actor.require("firewalls.delete")?;
+    owned(&state, &actor, id).await?;
+    let problems = sync_all(&state, actor.owner, id, &attached(&state, id).await?, &[]).await;
     sqlx::query("DELETE FROM vps_firewalls WHERE id = $1 AND user_id = $2")
         .bind(id)
-        .bind(user.id)
+        .bind(actor.owner)
         .execute(&state.db)
         .await?;
     Ok(Json(Saved { id, problems }))
@@ -474,6 +544,26 @@ pub async fn apply_automatic(state: &AppState, service_id: Uuid) -> anyhow::Resu
         sync_server(state, user_id, service_id, &marker(firewall_id), &rules).await?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod rights_tests {
+    use super::changed;
+
+    #[test]
+    fn counts_added_and_removed_rules() {
+        let list = |items: &[&str]| {
+            items
+                .iter()
+                .map(|item| (*item).to_owned())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(changed(&list(&["a", "b"]), &list(&["a", "b"])), (0, 0));
+        assert_eq!(changed(&list(&["a"]), &list(&["a", "c"])), (1, 0));
+        assert_eq!(changed(&list(&["a", "b"]), &list(&["a"])), (0, 1));
+        assert_eq!(changed(&list(&["a", "b"]), &list(&["a", "x"])), (1, 1));
+        assert_eq!(changed(&list(&["a", "a"]), &list(&["a"])), (0, 1));
+    }
 }
 
 #[cfg(test)]

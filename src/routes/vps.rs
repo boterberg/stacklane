@@ -6,6 +6,7 @@ use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+use super::vps_access::VpsActor;
 use crate::auth::CurrentUser;
 use crate::error::{AppError, AppResult};
 use crate::integrations::{self, vps};
@@ -42,17 +43,17 @@ const SELECT: &str = "SELECT s.id, s.name, s.status, s.details - 'root_password'
      LEFT JOIN subscriptions sub ON sub.id = s.subscription_id
      WHERE s.kind = 'vps' AND s.status <> 'terminated' AND s.user_id = $1";
 
-async fn load(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<Server> {
+async fn load(state: &AppState, owner: Uuid, id: Uuid) -> AppResult<Server> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!("{SELECT} AND s.id = $2")))
-        .bind(user.id)
+        .bind(owner)
         .bind(id)
         .fetch_optional(&state.db)
         .await?
         .ok_or(AppError::NotFound)
 }
 
-async fn machine(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<vps::Machine> {
-    machine_of(state, user.id, id).await
+async fn machine(state: &AppState, owner: Uuid, id: Uuid) -> AppResult<vps::Machine> {
+    machine_of(state, owner, id).await
 }
 
 pub(crate) async fn machine_of(
@@ -95,15 +96,13 @@ fn failed(error: anyhow::Error) -> AppError {
     AppError::field("server", format!("{error:#}"))
 }
 
-pub async fn index(
-    State(state): State<AppState>,
-    user: CurrentUser,
-) -> AppResult<Json<Vec<Server>>> {
+pub async fn index(State(state): State<AppState>, actor: VpsActor) -> AppResult<Json<Vec<Server>>> {
+    actor.require("servers.view")?;
     Ok(Json(
         sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "{SELECT} ORDER BY s.created_at DESC"
         )))
-        .bind(user.id)
+        .bind(actor.owner)
         .fetch_all(&state.db)
         .await?,
     ))
@@ -111,11 +110,12 @@ pub async fn index(
 
 pub async fn show(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<ServerDetail>> {
-    let server = load(&state, &user, id).await?;
-    let (live, features) = match machine(&state, &user, id).await {
+    actor.require("servers.view")?;
+    let server = load(&state, actor.owner, id).await?;
+    let (live, features) = match machine(&state, actor.owner, id).await {
         Ok(machine) => (machine.status().await.ok(), Some(machine.features())),
         Err(_) => (None, None),
     };
@@ -133,7 +133,7 @@ pub struct Power {
 
 pub async fn power(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
     Json(input): Json<Power>,
 ) -> AppResult<StatusCode> {
@@ -143,7 +143,13 @@ pub async fn power(
     ) {
         return Err(AppError::field("action", "Onbekende actie."));
     }
-    let machine = machine(&state, &user, id).await?;
+    if input.action != "stop" && input.action != "shutdown" {
+        actor.require("servers.start")?;
+    }
+    if input.action != "start" {
+        actor.require("servers.stop")?;
+    }
+    let machine = machine(&state, actor.owner, id).await?;
     machine.power(&input.action).await.map_err(failed)?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -187,7 +193,7 @@ pub async fn panel_login(
     if user.via_api_token {
         return Err(AppError::Forbidden);
     }
-    match machine(&state, &user, id).await? {
+    match machine(&state, user.id, id).await? {
         vps::Machine::VirtFusion(client, server) => Ok(Json(PanelLink {
             url: client
                 .login_url(&user.id.to_string(), &server)
@@ -200,10 +206,11 @@ pub async fn panel_login(
 
 pub async fn snapshots(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Vec<vps::Snapshot>>> {
-    let machine = machine(&state, &user, id).await?;
+    actor.require("snapshots.view")?;
+    let machine = machine(&state, actor.owner, id).await?;
     Ok(Json(machine.snapshots().await.map_err(failed)?))
 }
 
@@ -224,18 +231,19 @@ pub struct SnapshotOverview {
 
 pub async fn all_snapshots(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
 ) -> AppResult<Json<SnapshotOverview>> {
+    actor.require("snapshots.view")?;
     let servers: Vec<(Uuid, String)> = sqlx::query_as(
         "SELECT id, name FROM services WHERE kind = 'vps' AND status = 'active' AND user_id = $1 ORDER BY name",
     )
-    .bind(user.id)
+    .bind(actor.owner)
     .fetch_all(&state.db)
     .await?;
     let mut snapshots = Vec::new();
     let mut capable = 0;
     for (server_id, server_name) in &servers {
-        let Ok(machine) = machine(&state, &user, *server_id).await else {
+        let Ok(machine) = machine(&state, actor.owner, *server_id).await else {
             continue;
         };
         if !machine.features().snapshots {
@@ -268,11 +276,12 @@ const MAX_SNAPSHOTS: usize = 3;
 
 pub async fn create_snapshot(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
     Json(input): Json<NewSnapshot>,
 ) -> AppResult<StatusCode> {
-    let machine = machine(&state, &user, id).await?;
+    actor.require("snapshots.create")?;
+    let machine = machine(&state, actor.owner, id).await?;
     if machine.snapshots().await.map_err(failed)?.len() >= MAX_SNAPSHOTS {
         return Err(AppError::field(
             "description",
@@ -306,10 +315,11 @@ fn identifier(name: &str) -> AppResult<&str> {
 
 pub async fn rollback_snapshot(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path((id, name)): Path<(Uuid, String)>,
 ) -> AppResult<StatusCode> {
-    let machine = machine(&state, &user, id).await?;
+    actor.require("servers.restore")?;
+    let machine = machine(&state, actor.owner, id).await?;
     machine
         .rollback_snapshot(identifier(&name)?)
         .await
@@ -319,10 +329,11 @@ pub async fn rollback_snapshot(
 
 pub async fn delete_snapshot(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path((id, name)): Path<(Uuid, String)>,
 ) -> AppResult<StatusCode> {
-    let machine = machine(&state, &user, id).await?;
+    actor.require("snapshots.delete")?;
+    let machine = machine(&state, actor.owner, id).await?;
     machine
         .delete_snapshot(identifier(&name)?)
         .await
@@ -332,10 +343,11 @@ pub async fn delete_snapshot(
 
 pub async fn firewall(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Vec<vps::FirewallRule>>> {
-    let machine = machine(&state, &user, id).await?;
+    actor.require("firewalls.view")?;
+    let machine = machine(&state, actor.owner, id).await?;
     Ok(Json(machine.firewall_rules().await.map_err(failed)?))
 }
 
@@ -402,12 +414,13 @@ pub fn validate_rule(rule: &mut vps::FirewallRule) -> AppResult<()> {
 
 pub async fn add_firewall_rule(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
     Json(mut rule): Json<vps::FirewallRule>,
 ) -> AppResult<StatusCode> {
+    actor.require("firewalls.rule_create")?;
     validate_rule(&mut rule)?;
-    let machine = machine(&state, &user, id).await?;
+    let machine = machine(&state, actor.owner, id).await?;
     if rule.action != "ACCEPT" && !machine.can_block() {
         return Err(AppError::field(
             "action",
@@ -431,10 +444,11 @@ pub async fn add_firewall_rule(
 
 pub async fn delete_firewall_rule(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path((id, rule)): Path<(Uuid, String)>,
 ) -> AppResult<StatusCode> {
-    let machine = machine(&state, &user, id).await?;
+    actor.require("firewalls.rule_delete")?;
+    let machine = machine(&state, actor.owner, id).await?;
     machine
         .delete_firewall_rule(identifier(&rule)?)
         .await
