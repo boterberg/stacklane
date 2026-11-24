@@ -15,6 +15,8 @@ import { NotFoundPage, SectionPage } from '../pages/SectionPage'
 import { TicketDetailPage } from '../pages/support/TicketDetailPage'
 import { TicketsPage } from '../pages/support/TicketsPage'
 import { GameServerPage } from '../pages/gameservers/GameServerPage'
+import { VpsServerPage } from '../pages/vps/ServerPage'
+import { VpsServersPage } from '../pages/vps/ServersPage'
 import { GameServersPage } from '../pages/gameservers/GameServersPage'
 import { AccountPage } from '../pages/account/AccountPage'
 import { SecurityPage } from '../pages/account/SecurityPage'
@@ -28,7 +30,6 @@ import { SystemPage } from '../pages/admin/SystemPage'
 
 const sections: Array<[string, string]> = [
   ['/gameservers/backups', 'Back-ups'],
-  ['/vps/servers', 'Servers'],
   ['/domains', 'Domeinen'],
   ['/domains/whois-profiles', 'WHOIS-profielen'],
   ['/webhosting', 'Webhosting'],
@@ -57,6 +58,8 @@ export const router = createBrowserRouter([
       { path: '/gameservers/servers', element: <GameServersPage /> },
       { path: '/gameservers/servers/:id', element: <GameServerPage /> },
       { path: '/vps', element: <Navigate to="/vps/servers" replace /> },
+      { path: '/vps/servers', element: <VpsServersPage /> },
+      { path: '/vps/servers/:id', element: <VpsServerPage /> },
       { path: '/admin/services', element: <ServicesPage /> },
       { path: '/admin/products', element: <ProductsPage /> },
       { path: '/admin/integrations', element: <IntegrationsPage /> },
