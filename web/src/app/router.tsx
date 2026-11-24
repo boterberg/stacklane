@@ -15,6 +15,7 @@ import { NotFoundPage, SectionPage } from '../pages/SectionPage'
 import { TicketDetailPage } from '../pages/support/TicketDetailPage'
 import { TicketsPage } from '../pages/support/TicketsPage'
 import { GameServerPage } from '../pages/gameservers/GameServerPage'
+import { WhoisProfilesPage } from '../pages/domains/WhoisProfilesPage'
 import { OrderServerPage } from '../pages/vps/OrderServerPage'
 import { VpsServerPage } from '../pages/vps/ServerPage'
 import { VpsServersPage } from '../pages/vps/ServersPage'
@@ -37,7 +38,6 @@ import { SystemPage } from '../pages/admin/SystemPage'
 const sections: Array<[string, string]> = [
   ['/gameservers/backups', 'Back-ups'],
   ['/domains', 'Domeinen'],
-  ['/domains/whois-profiles', 'WHOIS-profielen'],
 ]
 
 export const router = createBrowserRouter([
@@ -62,6 +62,7 @@ export const router = createBrowserRouter([
       { path: '/support/tickets/:number', element: <TicketDetailPage /> },
       { path: '/gameservers/servers', element: <GameServersPage /> },
       { path: '/gameservers/servers/:id', element: <GameServerPage /> },
+      { path: '/domains/whois-profiles', element: <WhoisProfilesPage /> },
       { path: '/vps', element: <Navigate to="/vps/servers" replace /> },
       { path: '/webhosting', element: <WebhostingPage /> },
       { path: '/webhosting/order', element: <OrderWebhostingPage /> },
