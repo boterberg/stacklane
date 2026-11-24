@@ -18,6 +18,7 @@ import { GameServerPage } from '../pages/gameservers/GameServerPage'
 import { OrderServerPage } from '../pages/vps/OrderServerPage'
 import { VpsServerPage } from '../pages/vps/ServerPage'
 import { VpsServersPage } from '../pages/vps/ServersPage'
+import { SnapshotsPage } from '../pages/vps/SnapshotsPage'
 import { OrderWebhostingPage } from '../pages/webhosting/OrderWebhostingPage'
 import { WebhostingPage } from '../pages/webhosting/WebhostingPage'
 import { WebsitePage } from '../pages/webhosting/WebsitePage'
@@ -68,6 +69,7 @@ export const router = createBrowserRouter([
       { path: '/vps/servers', element: <VpsServersPage /> },
       { path: '/vps/servers/order', element: <OrderServerPage /> },
       { path: '/vps/servers/:id', element: <VpsServerPage /> },
+      { path: '/vps/snapshots', element: <SnapshotsPage /> },
       { path: '/vps/ssh-keys', element: <SshKeysPage /> },
       { path: '/admin/services', element: <ServicesPage /> },
       { path: '/admin/products', element: <ProductsPage /> },

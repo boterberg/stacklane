@@ -75,11 +75,11 @@ export function useSnapshots(id: string, enabled: boolean) {
   return useQuery({ queryKey: ['vps', 'snapshots', id], queryFn: () => api<Snapshot[]>(`/vps/servers/${id}/snapshots`), enabled })
 }
 
-function useServerMutation<TInput>(id: string, key: string, request: (input: TInput) => Promise<void>) {
+function useServerMutation<TInput>(_id: string, key: string, request: (input: TInput) => Promise<void>) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: request,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['vps', key, id] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['vps', key] }),
   })
 }
 
@@ -148,4 +148,23 @@ export function usePlaceOrder() {
 export function specsLine(specs: { cores?: number; memory_mb?: number; disk_gb?: number }) {
   const memory = specs.memory_mb ? (specs.memory_mb >= 1024 ? `${specs.memory_mb / 1024} GB` : `${specs.memory_mb} MB`) : null
   return [specs.cores ? `${specs.cores} vCPU` : null, memory ? `${memory} RAM` : null, specs.disk_gb ? `${specs.disk_gb} GB SSD` : null].filter(Boolean).join(' · ')
+}
+
+export type ServerSnapshot = Snapshot & { server_id: string; server_name: string }
+
+export function useAllSnapshots() {
+  return useQuery({ queryKey: ['vps', 'snapshots'], queryFn: () => api<{ snapshots: ServerSnapshot[]; used: number; limit: number }>('/vps/snapshots') })
+}
+
+export function useSnapshotAction() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ serverId, action, name, description }: { serverId: string; action: 'create' | 'rollback' | 'delete'; name?: string; description?: string }) =>
+      action === 'create'
+        ? api<void>(`/vps/servers/${serverId}/snapshots`, { method: 'POST', body: { description } })
+        : action === 'rollback'
+          ? api<void>(`/vps/servers/${serverId}/snapshots/${name}/rollback`, { method: 'POST' })
+          : api<void>(`/vps/servers/${serverId}/snapshots/${name}`, { method: 'DELETE' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['vps', 'snapshots'] }),
+  })
 }
