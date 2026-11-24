@@ -239,15 +239,14 @@ async fn provision_vps(
     .await?;
     let recorded: Vec<u32> = recorded.iter().filter_map(|id| id.parse().ok()).collect();
     let mut stale = None;
-    if let Some(previous) = order.vmid {
-        if !recorded.contains(&previous)
-            && client
-                .description(previous)
-                .await
-                .is_some_and(|description| created_for(&description, service_id))
-        {
-            stale = Some(previous);
-        }
+    if let Some(previous) = order.vmid
+        && !recorded.contains(&previous)
+        && client
+            .description(previous)
+            .await
+            .is_some_and(|description| created_for(&description, service_id))
+    {
+        stale = Some(previous);
     }
     let taken: Vec<String> = sqlx::query_scalar(
         "SELECT details->>'ipv4' FROM services
