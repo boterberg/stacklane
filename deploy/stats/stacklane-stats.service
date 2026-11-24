@@ -1,0 +1,14 @@
+[Unit]
+Description=Stacklane download and panel counts
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/stacklane-stats/stats.py
+Environment=STACKLANE_STATS_IGNORE=127.0.0.1 ::1 5.252.26.94
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ReadWritePaths=/var/lib/stacklane-stats /srv/stacklane-stats
+StateDirectory=stacklane-stats
+StateDirectoryMode=0700
