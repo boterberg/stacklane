@@ -326,8 +326,33 @@ pub struct Run {
     pub expired: usize,
 }
 
+async fn recheck_vat_numbers(state: &AppState) -> AppResult<()> {
+    let pending: Vec<(uuid::Uuid, String, String)> = sqlx::query_as(
+        "SELECT id, tax_id, country::text FROM users
+         WHERE is_business AND tax_id IS NOT NULL AND tax_id_verified_at IS NULL",
+    )
+    .fetch_all(&state.db)
+    .await?;
+    for (user_id, tax_id, country) in pending {
+        let Some((code, number)) = crate::vat::split_vat_number(&tax_id, &country) else {
+            continue;
+        };
+        if let Ok(true) = crate::vat::check_vies(&code, &number).await {
+            sqlx::query(
+                "UPDATE users SET tax_id_verified_at = now() WHERE id = $1 AND tax_id = $2",
+            )
+            .bind(user_id)
+            .bind(&tax_id)
+            .execute(&state.db)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
 pub async fn run_once(state: &AppState) -> AppResult<Run> {
     let billing: Billing = settings::get(&state.db, "billing").await?;
+    recheck_vat_numbers(state).await?;
     Ok(Run {
         invoices: issue_renewals(state, &billing).await?,
         suspended: suspend_overdue(state, &billing).await?,
