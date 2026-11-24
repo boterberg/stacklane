@@ -9,13 +9,7 @@
     <meta name="theme-color" content="#4F46E5" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Stacklane</title>
-    <script>
-      try {
-        var theme = localStorage.getItem('stacklane-theme') || 'system'
-        var dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
-        document.documentElement.classList.toggle('dark', dark)
-      } catch (e) {}
-    </script>
+    <script src="/theme.js"></script>
   </head>
   <body class="h-full">
     <div id="root" class="h-full"></div>
