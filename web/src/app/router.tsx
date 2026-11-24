@@ -16,6 +16,7 @@ import { TicketDetailPage } from '../pages/support/TicketDetailPage'
 import { TicketsPage } from '../pages/support/TicketsPage'
 import { GameServerPage } from '../pages/gameservers/GameServerPage'
 import { GameServersPage } from '../pages/gameservers/GameServersPage'
+import { SecurityPage } from '../pages/account/SecurityPage'
 import { IntegrationsPage } from '../pages/admin/IntegrationsPage'
 import { AdminInvoicePage } from '../pages/admin/InvoicePage'
 import { AdminInvoicesPage } from '../pages/admin/InvoicesPage'
@@ -31,7 +32,6 @@ const sections: Array<[string, string]> = [
   ['/domains/whois-profiles', 'WHOIS-profielen'],
   ['/webhosting', 'Webhosting'],
   ['/account/profile', 'Account'],
-  ['/account/security', 'Beveiliging'],
 ]
 
 export const router = createBrowserRouter([
@@ -59,6 +59,8 @@ export const router = createBrowserRouter([
       { path: '/admin/services', element: <ServicesPage /> },
       { path: '/admin/products', element: <ProductsPage /> },
       { path: '/admin/integrations', element: <IntegrationsPage /> },
+      { path: '/account/security', element: <SecurityPage /> },
+      { path: '/account/security/sessions', element: <SecurityPage /> },
       { path: '/admin/system', element: <SystemPage /> },
       { path: '/admin/settings', element: <SettingsPage /> },
       { path: '/admin/invoices', element: <AdminInvoicesPage /> },

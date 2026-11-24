@@ -7,10 +7,11 @@ type CardProps = {
   description?: ReactNode
   action?: ReactNode
   children: ReactNode
+  footer?: ReactNode
   className?: string
 }
 
-export function Card({ title, description, action, children, className }: CardProps) {
+export function Card({ title, description, action, children, footer, className }: CardProps) {
   return (
     <section className={cn('rounded-xl border border-zinc-200 bg-zinc-50 dark:border-white/7 dark:bg-white/5', className)}>
       <header className={cn('flex min-h-14 items-center gap-4 pl-6', description ? 'py-4' : 'py-3', action ? 'pr-3' : 'pr-6')}>
@@ -21,6 +22,7 @@ export function Card({ title, description, action, children, className }: CardPr
         {action}
       </header>
       <div className="-m-px rounded-xl border border-zinc-200 bg-white p-6 dark:border-white/7 dark:bg-white/4">{children}</div>
+      {footer && <footer className="flex items-center justify-end gap-3 px-3 py-3">{footer}</footer>}
     </section>
   )
 }
