@@ -14,6 +14,7 @@ import { itemBase, itemIdle } from './navStyles'
 import { NotificationsPanel } from './NotificationsPanel'
 import { SearchPalette } from './SearchPalette'
 import { DemoBanner } from './DemoBanner'
+import { EmailBanner } from './EmailBanner'
 import { UserMenu } from './UserMenu'
 
 type SidebarProps = {
@@ -133,6 +134,7 @@ export function AppShell() {
       <main className="lg:py-2 lg:pr-2 lg:pl-64">
         <div className="min-h-[calc(100vh-3.5rem)] bg-white p-6 sm:p-8 lg:min-h-[calc(100vh-1rem)] lg:rounded-xl lg:border lg:border-zinc-200 dark:bg-zinc-800 lg:dark:border-zinc-700">
           <DemoBanner profile={profile} />
+          <EmailBanner profile={profile} />
           <Outlet />
         </div>
       </main>

@@ -232,6 +232,9 @@ fn english(message: &str) -> Option<&'static str> {
             "Choose a VAT rate between 0 and 100 percent."
         }
         "Gebruik een aantal dagen tussen 0 en 365." => "Use a number of days between 0 and 365.",
+        "We hebben net een e-mail gestuurd. Probeer het over een minuut opnieuw." => {
+            "We just sent an email. Try again in a minute."
+        }
         _ => return None,
     })
 }
