@@ -305,8 +305,10 @@ async fn expire_orders(state: &AppState) -> AppResult<usize> {
     let expired: Vec<Uuid> = sqlx::query_scalar(
         "UPDATE subscriptions s SET status = 'expired'
          WHERE s.status = 'pending'
-           AND EXISTS (SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
-                       WHERE l.subscription_id = s.id AND i.status = 'open')
+           AND (EXISTS (SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
+                        WHERE l.subscription_id = s.id AND i.status = 'open')
+                OR (s.started_at < now() - interval '1 day' AND s.import_ref IS NULL
+                    AND NOT EXISTS (SELECT 1 FROM invoice_lines l WHERE l.subscription_id = s.id)))
            AND NOT EXISTS (SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
                            WHERE l.subscription_id = s.id AND (i.status = 'paid' OR i.due_at >= CURRENT_DATE - $1))
          RETURNING s.id",
