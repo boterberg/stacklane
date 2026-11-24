@@ -65,7 +65,7 @@ function useTwoFactorAction<TInput, TResult>(path: string, body: (input: TInput)
 }
 
 export function useEnableTwoFactor() {
-  return useTwoFactorAction<string, { recovery_codes: string[] }>('enable', (code) => ({ code }))
+  return useTwoFactorAction<{ code: string; password: string }, { recovery_codes: string[] }>('enable', (input) => input)
 }
 
 export function useDisableTwoFactor() {

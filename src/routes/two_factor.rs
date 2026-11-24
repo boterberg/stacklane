@@ -33,6 +33,8 @@ pub struct Setup {
 #[derive(Deserialize)]
 pub struct Code {
     code: String,
+    #[serde(default)]
+    password: String,
 }
 
 #[derive(Deserialize)]
@@ -147,6 +149,7 @@ pub async fn enable(
     Json(input): Json<Code>,
 ) -> AppResult<Json<RecoveryCodes>> {
     browser_only(&user)?;
+    check_password(&state, &user, &input.password, "password").await?;
     let pending: Option<String> = sqlx::query_scalar(
         "SELECT totp_pending FROM users WHERE id = $1 AND two_factor_enabled_at IS NULL",
     )
@@ -178,6 +181,26 @@ pub async fn enable(
     .execute(&state.db)
     .await?;
     let recovery_codes = replace_recovery_codes(&state, user.id).await?;
+    sqlx::query("DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2")
+        .bind(user.id)
+        .bind(&user.token_hash)
+        .execute(&state.db)
+        .await?;
+    crate::renewals::notify(
+        &state,
+        user.id,
+        (
+            "2FA staat aan".to_owned(),
+            "Tweestapsverificatie staat nu aan voor je account en andere apparaten zijn uitgelogd. Was jij dit niet? Neem dan meteen contact met ons op.".to_owned(),
+        ),
+        (
+            "2FA is on".to_owned(),
+            "Two-factor authentication is now on for your account and other devices were signed out. If this was not you, contact us right away.".to_owned(),
+        ),
+        "/account/security",
+    )
+    .await
+    .ok();
     Ok(Json(RecoveryCodes { recovery_codes }))
 }
 
