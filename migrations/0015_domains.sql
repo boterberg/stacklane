@@ -1,6 +1,6 @@
 ALTER TABLE integrations DROP CONSTRAINT integrations_kind_check;
 ALTER TABLE integrations ADD CONSTRAINT integrations_kind_check
-    CHECK (kind IN ('pterodactyl', 'proxmox', 'openstack', 'virtfusion', 'openprovider'));
+    CHECK (kind IN ('pterodactyl', 'proxmox', 'openstack', 'virtfusion', 'directadmin', 'plesk', 'openprovider'));
 
 ALTER TABLE subscription_items ADD COLUMN period_price_cents INTEGER;
 
