@@ -159,7 +159,25 @@ pub async fn place(
             "Kies hoe vaak je wilt betalen.",
         ));
     }
-    let name = input.name.trim();
+    let domain = input
+        .name
+        .trim()
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_start_matches("www.")
+        .trim_end_matches('/')
+        .to_lowercase();
+    let name = if product.kind == "webhosting" {
+        domain.as_str()
+    } else {
+        input.name.trim()
+    };
+    if product.kind == "webhosting" && !crate::integrations::webhosting::valid_domain(name) {
+        return Err(AppError::field(
+            "name",
+            "Vul de domeinnaam van je website in, zoals jouwbedrijf.nl.",
+        ));
+    }
     if name.is_empty() || name.chars().count() > 60 {
         return Err(AppError::field(
             "name",

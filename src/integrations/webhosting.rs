@@ -7,6 +7,24 @@ pub struct NewAccount<'a> {
     pub owner: &'a str,
 }
 
+pub fn valid_domain(domain: &str) -> bool {
+    let labels: Vec<&str> = domain.split('.').collect();
+    domain.len() <= 253
+        && labels.len() >= 2
+        && labels.iter().all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric() || character == '-')
+        })
+        && labels
+            .last()
+            .is_some_and(|tld| tld.len() >= 2 && !tld.chars().all(|c| c.is_ascii_digit()))
+}
+
 pub fn username_for(domain: &str, suffix: &str) -> String {
     let letters: String = domain
         .split('.')
@@ -107,7 +125,7 @@ impl Hosting<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{password, username_for};
+    use super::{password, username_for, valid_domain};
 
     #[test]
     fn makes_short_usernames() {
@@ -115,6 +133,12 @@ mod tests {
         assert_eq!(username_for("123-test.nl", "b2"), "testb2");
         assert_eq!(username_for("xn--bcher.de", "c3"), "xnbchec3");
         assert_eq!(username_for("42.nl", "d4"), "sited4");
+        assert!(valid_domain("bakkerijdejong.nl"));
+        assert!(valid_domain("shop.voorbeeld.co.uk"));
+        assert!(!valid_domain("geen domein"));
+        assert!(!valid_domain("localhost"));
+        assert!(!valid_domain("-a.nl"));
+        assert!(!valid_domain("10.0.0.1"));
         let generated = password();
         assert_eq!(generated.len(), 20);
         assert!(generated.chars().any(|c| c.is_ascii_digit()));

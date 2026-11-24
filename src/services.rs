@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
-use crate::integrations::{self, proxmox, pterodactyl};
+use crate::integrations::{self, proxmox, pterodactyl, webhosting};
 use crate::state::AppState;
 
 #[derive(sqlx::FromRow)]
@@ -73,6 +73,11 @@ async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()>
                 .proxmox()
                 .map_err(|error| anyhow::anyhow!("{error}"))?;
             provision_vps(state, service_id, integration_id, client, &context).await?
+        }
+        "webhosting" => {
+            let hosting = webhosting::Hosting::from_driver(&driver)
+                .ok_or_else(|| anyhow::anyhow!("deze koppeling kan geen webhosting maken"))?;
+            provision_webhosting(service_id, &hosting, &context).await?
         }
         other => anyhow::bail!(
             "diensten van het type {other} kunnen nog niet automatisch worden aangemaakt"
@@ -219,6 +224,38 @@ async fn provision_vps(
     Ok(pterodactyl::Provisioned {
         external_id: vmid.to_string(),
         details,
+    })
+}
+
+async fn provision_webhosting(
+    service_id: Uuid,
+    hosting: &webhosting::Hosting<'_>,
+    context: &ProvisionContext,
+) -> anyhow::Result<pterodactyl::Provisioned> {
+    let plan = context.provisioning["plan"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("het product heeft geen hostingpakket"))?;
+    let suffix: String = service_id.simple().to_string().chars().take(2).collect();
+    let username = webhosting::username_for(&context.name, &suffix);
+    let password = webhosting::password();
+    let owner = format!("{} {}", context.first_name, context.last_name);
+    let account = webhosting::NewAccount {
+        username: &username,
+        domain: &context.name,
+        email: &context.email,
+        password: &password,
+        plan,
+        owner: owner.trim(),
+    };
+    let external_id = hosting.create(&account).await?;
+    Ok(pterodactyl::Provisioned {
+        external_id,
+        details: json!({
+            "username": username,
+            "plan": plan,
+            "panel": hosting.panel_name(),
+            "panel_url": hosting.panel_url(),
+        }),
     })
 }
 
