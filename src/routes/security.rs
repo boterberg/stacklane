@@ -13,11 +13,40 @@ use super::auth::MIN_PASSWORD_LENGTH;
 pub struct PasswordChange {
     current_password: String,
     password: String,
+    #[serde(default = "yes")]
+    revoke_tokens: bool,
 }
 
 #[derive(Deserialize)]
 pub struct Confirm {
     password: String,
+    #[serde(default = "yes")]
+    revoke_tokens: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+async fn sign_out_elsewhere(
+    state: &AppState,
+    user: &CurrentUser,
+    revoke_tokens: bool,
+) -> AppResult<()> {
+    let mut transaction = state.db.begin().await?;
+    sqlx::query("DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2")
+        .bind(user.id)
+        .bind(&user.token_hash)
+        .execute(&mut *transaction)
+        .await?;
+    if revoke_tokens {
+        sqlx::query("DELETE FROM api_tokens WHERE user_id = $1")
+            .bind(user.id)
+            .execute(&mut *transaction)
+            .await?;
+    }
+    transaction.commit().await?;
+    Ok(())
 }
 
 pub(super) async fn check_password(
@@ -62,11 +91,11 @@ pub async fn change_password(
         .bind(auth::hash_password(&input.password)?)
         .execute(&state.db)
         .await?;
-    sqlx::query("DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2")
+    sqlx::query("DELETE FROM password_resets WHERE user_id = $1")
         .bind(user.id)
-        .bind(&user.token_hash)
         .execute(&state.db)
         .await?;
+    sign_out_elsewhere(&state, &user, input.revoke_tokens).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -76,10 +105,6 @@ pub async fn logout_other_sessions(
     Json(input): Json<Confirm>,
 ) -> AppResult<StatusCode> {
     check_password(&state, &user, &input.password, "password").await?;
-    sqlx::query("DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2")
-        .bind(user.id)
-        .bind(&user.token_hash)
-        .execute(&state.db)
-        .await?;
+    sign_out_elsewhere(&state, &user, input.revoke_tokens).await?;
     Ok(StatusCode::NO_CONTENT)
 }

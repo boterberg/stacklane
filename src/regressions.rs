@@ -214,3 +214,89 @@ async fn one_two_factor_code_opens_one_session(db: PgPool) {
     }
     assert_eq!(accepted, 1);
 }
+
+async fn api_token(client: &Client, cookie: &str) -> String {
+    let created = client
+        .send(
+            Method::POST,
+            "/account/api-tokens",
+            Some(cookie),
+            Some(json!({ "name": "script", "scopes": ["account:read"], "expires_in_days": null })),
+        )
+        .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    created.body["secret"].as_str().unwrap().to_owned()
+}
+
+async fn token_works(client: &Client, secret: &str) -> bool {
+    let bearer = format!("Bearer {secret}");
+    client
+        .send_with(
+            Method::GET,
+            "/me",
+            None,
+            None,
+            &[("authorization", &bearer)],
+        )
+        .await
+        .status
+        == StatusCode::OK
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_password_reset_revokes_api_tokens(db: PgPool) {
+    let client = Client::new(db);
+    let (user, cookie) = client.register("tokens@example.test").await;
+    let secret = api_token(&client, &cookie).await;
+    assert!(token_works(&client, &secret).await);
+    sqlx::query(
+        "INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES ($1, $2, now() + interval '1 hour')",
+    )
+    .bind(auth::hash_token("reset"))
+    .bind(user)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    let reset = client
+        .send(
+            Method::POST,
+            "/auth/reset-password",
+            None,
+            Some(json!({ "token": "reset", "password": "Another-pass-678" })),
+        )
+        .await;
+    assert_eq!(reset.status, StatusCode::NO_CONTENT);
+    assert!(!token_works(&client, &secret).await);
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_password_change_revokes_api_tokens_and_reset_links(db: PgPool) {
+    let client = Client::new(db);
+    let (user, cookie) = client.register("change@example.test").await;
+    let secret = api_token(&client, &cookie).await;
+    sqlx::query(
+        "INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES ('old', $1, now() + interval '1 hour')",
+    )
+    .bind(user)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    let changed = client
+        .send(
+            Method::PUT,
+            "/account/password",
+            Some(&cookie),
+            Some(json!({ "current_password": PASSWORD, "password": "Another-pass-678" })),
+        )
+        .await;
+    assert_eq!(changed.status, StatusCode::NO_CONTENT);
+    assert!(!token_works(&client, &secret).await);
+    let resets: i64 = sqlx::query_scalar("SELECT count(*) FROM password_resets WHERE user_id = $1")
+        .bind(user)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(resets, 0);
+}

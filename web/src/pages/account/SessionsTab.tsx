@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
-import { Field, Input } from '../../components/ui/Field'
+import { Checkbox, Field, Input } from '../../components/ui/Field'
 import { useLogoutOtherSessions } from '../../lib/account'
 import { ApiError } from '../../lib/api'
 import { t } from '../../lib/i18n'
@@ -10,11 +10,12 @@ import { t } from '../../lib/i18n'
 export function SessionsTab() {
   const logout = useLogoutOtherSessions()
   const [password, setPassword] = useState('')
+  const [revokeTokens, setRevokeTokens] = useState(true)
   const error = logout.error instanceof ApiError ? logout.error.fieldErrors.password : undefined
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    logout.mutate(password, { onSuccess: () => setPassword('') })
+    logout.mutate({ password, revoke_tokens: revokeTokens }, { onSuccess: () => setPassword('') })
   }
 
   return (
@@ -31,9 +32,12 @@ export function SessionsTab() {
           </>
         }
       >
-        <Field label={t('Je wachtwoord')} error={error}>
-          {(id) => <Input id={id} type="password" autoComplete="current-password" invalid={!!error} value={password} onChange={(event) => setPassword(event.target.value)} />}
-        </Field>
+        <div className="space-y-6">
+          <Field label={t('Je wachtwoord')} error={error}>
+            {(id) => <Input id={id} type="password" autoComplete="current-password" invalid={!!error} value={password} onChange={(event) => setPassword(event.target.value)} />}
+          </Field>
+          <Checkbox label={t('Trek ook al je API-tokens in')} checked={revokeTokens} onChange={(event) => setRevokeTokens(event.target.checked)} />
+        </div>
       </Card>
     </form>
   )

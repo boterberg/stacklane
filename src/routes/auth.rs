@@ -298,10 +298,14 @@ pub async fn reset_password(
     .bind(auth::hash_password(&input.password)?)
     .execute(&mut *transaction)
     .await?;
-    sqlx::query("DELETE FROM sessions WHERE user_id = $1")
+    for table in ["sessions", "api_tokens", "password_resets"] {
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "DELETE FROM {table} WHERE user_id = $1"
+        )))
         .bind(user_id)
         .execute(&mut *transaction)
         .await?;
+    }
     transaction.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
