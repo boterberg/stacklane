@@ -5,7 +5,7 @@ BASE=${STACKLANE_PVE_DIR:-$HOME/.local/share/stacklane-pve}
 IMAGE_URL=https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2
 API_PORT=18006
 SSH_PORT=2223
-MEMORY=${STACKLANE_PVE_MEMORY:-3584}
+MEMORY=${STACKLANE_PVE_MEMORY:-2048}
 
 log() {
   printf '  %s\n' "$*"
