@@ -1,0 +1,352 @@
+use axum::Json;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::OffsetDateTime;
+use uuid::Uuid;
+
+use crate::auth::CurrentUser;
+use crate::error::{AppError, AppResult};
+use crate::integrations::{self, proxmox};
+use crate::payments::reveal;
+use crate::state::AppState;
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct Server {
+    id: Uuid,
+    name: String,
+    status: String,
+    details: Value,
+    last_error: Option<String>,
+    product_name: Option<String>,
+    subscription_code: Option<String>,
+    #[serde(with = "time::serde::rfc3339::option")]
+    expires_at: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339")]
+    created_at: OffsetDateTime,
+}
+
+#[derive(Serialize)]
+pub struct ServerDetail {
+    #[serde(flatten)]
+    server: Server,
+    live: Option<proxmox::Status>,
+}
+
+const SELECT: &str = "SELECT s.id, s.name, s.status, s.details - 'root_password' - 'ssh_key_ids' AS details, s.last_error,
+        p.name AS product_name, sub.code AS subscription_code, sub.expires_at, s.created_at
+     FROM services s
+     LEFT JOIN products p ON p.id = s.product_id
+     LEFT JOIN subscriptions sub ON sub.id = s.subscription_id
+     WHERE s.kind = 'vps' AND s.status <> 'terminated' AND s.user_id = $1";
+
+async fn load(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<Server> {
+    sqlx::query_as(sqlx::AssertSqlSafe(format!("{SELECT} AND s.id = $2")))
+        .bind(user.id)
+        .bind(id)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or(AppError::NotFound)
+}
+
+async fn machine(
+    state: &AppState,
+    user: &CurrentUser,
+    id: Uuid,
+) -> AppResult<(proxmox::Proxmox, u32)> {
+    let (integration_id, external_id, status): (Option<Uuid>, Option<String>, String) = sqlx::query_as(
+        "SELECT integration_id, external_id, status FROM services WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
+    )
+    .bind(id)
+    .bind(user.id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    if status != "active" {
+        return Err(AppError::field(
+            "server",
+            "Deze server is nu niet beschikbaar.",
+        ));
+    }
+    let (Some(integration_id), Some(vmid)) =
+        (integration_id, external_id.and_then(|id| id.parse().ok()))
+    else {
+        return Err(AppError::field("server", "Deze server is nog niet klaar."));
+    };
+    match integrations::driver(state, integration_id).await? {
+        integrations::Driver::Proxmox(client) => Ok((client, vmid)),
+        _ => Err(AppError::NotFound),
+    }
+}
+
+fn failed(error: anyhow::Error) -> AppError {
+    AppError::field("server", format!("{error:#}"))
+}
+
+pub async fn index(
+    State(state): State<AppState>,
+    user: CurrentUser,
+) -> AppResult<Json<Vec<Server>>> {
+    Ok(Json(
+        sqlx::query_as(sqlx::AssertSqlSafe(format!(
+            "{SELECT} ORDER BY s.created_at DESC"
+        )))
+        .bind(user.id)
+        .fetch_all(&state.db)
+        .await?,
+    ))
+}
+
+pub async fn show(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<ServerDetail>> {
+    let server = load(&state, &user, id).await?;
+    let live = match machine(&state, &user, id).await {
+        Ok((client, vmid)) => client.status(vmid).await.ok(),
+        Err(_) => None,
+    };
+    Ok(Json(ServerDetail { server, live }))
+}
+
+#[derive(Deserialize)]
+pub struct Power {
+    action: String,
+}
+
+pub async fn power(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(input): Json<Power>,
+) -> AppResult<StatusCode> {
+    if !matches!(
+        input.action.as_str(),
+        "start" | "shutdown" | "stop" | "reboot"
+    ) {
+        return Err(AppError::field("action", "Onbekende actie."));
+    }
+    let (client, vmid) = machine(&state, &user, id).await?;
+    client.power(vmid, &input.action).await.map_err(failed)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize)]
+pub struct Password {
+    password: Option<String>,
+}
+
+pub async fn root_password(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Password>> {
+    if user.via_api_token {
+        return Err(AppError::Forbidden);
+    }
+    let sealed: Option<String> = sqlx::query_scalar(
+        "SELECT details->>'root_password' FROM services WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
+    )
+    .bind(id)
+    .bind(user.id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    Ok(Json(Password {
+        password: reveal(&state, sealed.as_ref()),
+    }))
+}
+
+pub async fn snapshots(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Vec<proxmox::Snapshot>>> {
+    let (client, vmid) = machine(&state, &user, id).await?;
+    Ok(Json(client.snapshots(vmid).await.map_err(failed)?))
+}
+
+#[derive(Deserialize)]
+pub struct NewSnapshot {
+    description: Option<String>,
+}
+
+const MAX_SNAPSHOTS: usize = 3;
+
+pub async fn create_snapshot(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(input): Json<NewSnapshot>,
+) -> AppResult<StatusCode> {
+    let (client, vmid) = machine(&state, &user, id).await?;
+    if client.snapshots(vmid).await.map_err(failed)?.len() >= MAX_SNAPSHOTS {
+        return Err(AppError::field(
+            "description",
+            "Je hebt al 3 snapshots. Verwijder er eerst een.",
+        ));
+    }
+    let name = OffsetDateTime::now_utc()
+        .format(time::macros::format_description!(
+            "snap[year][month][day][hour][minute][second]"
+        ))
+        .map_err(anyhow::Error::from)?;
+    let description = input.description.unwrap_or_default();
+    client
+        .create_snapshot(vmid, &name, description.trim())
+        .await
+        .map_err(failed)?;
+    Ok(StatusCode::CREATED)
+}
+
+fn snapshot_name(name: &str) -> AppResult<&str> {
+    if name.is_empty()
+        || name.len() > 40
+        || !name.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '_' || character == '-'
+        })
+    {
+        return Err(AppError::NotFound);
+    }
+    Ok(name)
+}
+
+pub async fn rollback_snapshot(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path((id, name)): Path<(Uuid, String)>,
+) -> AppResult<StatusCode> {
+    let (client, vmid) = machine(&state, &user, id).await?;
+    client
+        .rollback_snapshot(vmid, snapshot_name(&name)?)
+        .await
+        .map_err(failed)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn delete_snapshot(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path((id, name)): Path<(Uuid, String)>,
+) -> AppResult<StatusCode> {
+    let (client, vmid) = machine(&state, &user, id).await?;
+    client
+        .delete_snapshot(vmid, snapshot_name(&name)?)
+        .await
+        .map_err(failed)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn firewall(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Vec<proxmox::FirewallRule>>> {
+    let (client, vmid) = machine(&state, &user, id).await?;
+    Ok(Json(client.firewall_rules(vmid).await.map_err(failed)?))
+}
+
+fn valid_ports(ports: &str) -> bool {
+    ports.split(',').all(|part| {
+        let mut bounds = part.split(':');
+        let ok = |value: Option<&str>| {
+            value.is_some_and(|value| value.parse::<u16>().is_ok_and(|port| port > 0))
+        };
+        match (bounds.next(), bounds.next(), bounds.next()) {
+            (first, None, None) => ok(first),
+            (first, second, None) => ok(first) && ok(second),
+            _ => false,
+        }
+    })
+}
+
+fn valid_source(source: &str) -> bool {
+    let (address, prefix) = source.split_once('/').unwrap_or((source, "32"));
+    address.parse::<std::net::Ipv4Addr>().is_ok()
+        && prefix.parse::<u8>().is_ok_and(|prefix| prefix <= 32)
+}
+
+pub async fn add_firewall_rule(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(mut rule): Json<proxmox::FirewallRule>,
+) -> AppResult<StatusCode> {
+    rule.direction = rule.direction.to_lowercase();
+    rule.action = rule.action.to_uppercase();
+    if !matches!(rule.direction.as_str(), "in" | "out")
+        || !matches!(rule.action.as_str(), "ACCEPT" | "DROP" | "REJECT")
+    {
+        return Err(AppError::field(
+            "action",
+            "Kies een richting en of het verkeer mag.",
+        ));
+    }
+    if rule
+        .proto
+        .as_deref()
+        .is_some_and(|proto| !proto.is_empty() && !matches!(proto, "tcp" | "udp" | "icmp"))
+    {
+        return Err(AppError::field("proto", "Kies TCP, UDP of ICMP."));
+    }
+    if rule
+        .dport
+        .as_deref()
+        .is_some_and(|ports| !ports.is_empty() && !valid_ports(ports))
+    {
+        return Err(AppError::field(
+            "dport",
+            "Vul een poort in, zoals 22, 80,443 of 8000:8100.",
+        ));
+    }
+    if rule
+        .source
+        .as_deref()
+        .is_some_and(|source| !source.is_empty() && !valid_source(source))
+    {
+        return Err(AppError::field(
+            "source",
+            "Vul een IPv4-adres of -reeks in, zoals 203.0.113.4 of 10.0.0.0/8.",
+        ));
+    }
+    let (client, vmid) = machine(&state, &user, id).await?;
+    client
+        .add_firewall_rule(vmid, &rule)
+        .await
+        .map_err(failed)?;
+    Ok(StatusCode::CREATED)
+}
+
+pub async fn delete_firewall_rule(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path((id, pos)): Path<(Uuid, u32)>,
+) -> AppResult<StatusCode> {
+    let (client, vmid) = machine(&state, &user, id).await?;
+    client
+        .delete_firewall_rule(vmid, pos)
+        .await
+        .map_err(failed)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{valid_ports, valid_source};
+
+    #[test]
+    fn checks_ports_and_sources() {
+        assert!(valid_ports("22"));
+        assert!(valid_ports("80,443"));
+        assert!(valid_ports("8000:8100"));
+        assert!(!valid_ports("0"));
+        assert!(!valid_ports("ssh"));
+        assert!(!valid_ports("1:2:3"));
+        assert!(valid_source("203.0.113.4"));
+        assert!(valid_source("10.0.0.0/8"));
+        assert!(!valid_source("10.0.0.0/40"));
+        assert!(!valid_source("example.com"));
+    }
+}

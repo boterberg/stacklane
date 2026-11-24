@@ -17,6 +17,7 @@ mod ssh_keys;
 mod support;
 mod system;
 mod two_factor;
+mod vps;
 
 use axum::http::StatusCode;
 use axum::routing::{any, delete, get, patch, post, put};
@@ -40,6 +41,30 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/account/payment-defaults",
             get(account::payment_defaults).put(account::update_payment_defaults),
+        )
+        .route("/vps/servers", get(vps::index))
+        .route("/vps/servers/{id}", get(vps::show))
+        .route("/vps/servers/{id}/power", post(vps::power))
+        .route("/vps/servers/{id}/password", get(vps::root_password))
+        .route(
+            "/vps/servers/{id}/snapshots",
+            get(vps::snapshots).post(vps::create_snapshot),
+        )
+        .route(
+            "/vps/servers/{id}/snapshots/{name}",
+            delete(vps::delete_snapshot),
+        )
+        .route(
+            "/vps/servers/{id}/snapshots/{name}/rollback",
+            post(vps::rollback_snapshot),
+        )
+        .route(
+            "/vps/servers/{id}/firewall",
+            get(vps::firewall).post(vps::add_firewall_rule),
+        )
+        .route(
+            "/vps/servers/{id}/firewall/{pos}",
+            delete(vps::delete_firewall_rule),
         )
         .route("/shop/products", get(shop::products))
         .route("/orders", post(shop::place))
