@@ -553,6 +553,7 @@ export const en: Record<string, string> = {
   "Opzeggen": "Cancel",
   "Opzegging intrekken": "Undo cancellation",
   "OSS": "OSS",
+  "OSS-aangifte downloaden": "Download OSS return",
   "OSS-regeling gebruiken": "Use the OSS scheme",
   "Overboeking": "Bank transfer",
   "Overboeking: toon je IBAN op facturen en bij het betalen": "Bank transfer: show your IBAN on invoices and when paying",

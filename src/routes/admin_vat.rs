@@ -70,8 +70,28 @@ pub async fn report(
     .bind(&billing.home_country)
     .fetch_all(&state.db)
     .await?;
-    if period.format.as_deref() != Some("csv") {
-        return Ok(Json(rows).into_response());
+    let oss_only = match period.format.as_deref() {
+        Some("csv") => false,
+        Some("oss") => true,
+        _ => return Ok(Json(rows).into_response()),
+    };
+    if oss_only {
+        let mut csv = String::from(
+            "lidstaat_van_verbruik;soort_tarief;btw_tarief;maatstaf_van_heffing_eur;btw_eur\n",
+        );
+        for row in rows.iter().filter(|row| row.scheme == "oss") {
+            csv.push_str(&format!(
+                "{};standaard;{};{};{}\n",
+                row.country.as_deref().unwrap_or(""),
+                euros(i64::from(row.rate_basis_points)).replace('.', ","),
+                euros(row.net_cents).replace('.', ","),
+                euros(row.vat_cents).replace('.', ","),
+            ));
+        }
+        return Ok(download(
+            csv,
+            format!("oss-aangifte-{}-q{}.csv", period.year, period.quarter),
+        ));
     }
     let mut csv = String::from("scheme,country,vat_rate,invoices,net_eur,vat_eur,gross_eur\n");
     for row in &rows {
@@ -86,21 +106,25 @@ pub async fn report(
             euros(row.gross_cents),
         ));
     }
-    Ok((
+    Ok(download(
+        csv,
+        format!("btw-{}-q{}.csv", period.year, period.quarter),
+    ))
+}
+
+fn download(csv: String, name: String) -> Response {
+    (
         [
             (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_owned()),
             (
                 header::CONTENT_DISPOSITION,
-                format!(
-                    "attachment; filename=\"btw-{}-q{}.csv\"",
-                    period.year, period.quarter
-                ),
+                format!("attachment; filename=\"{name}\""),
             ),
             (header::CACHE_CONTROL, "private, no-store".to_owned()),
         ],
         csv,
     )
-        .into_response())
+        .into_response()
 }
 
 #[cfg(test)]

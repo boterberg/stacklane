@@ -54,13 +54,22 @@ export function VatReportPage() {
           </Select>
         </div>
         <ToolbarSpacer />
-        <a
-          href={`/api/admin/reports/vat?year=${year}&quarter=${quarter}&format=csv`}
-          className="inline-flex h-10 items-center gap-2 rounded-lg border border-zinc-200 border-b-zinc-300/80 bg-white px-4 text-sm font-medium text-zinc-800 shadow-xs hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-700 dark:text-white dark:hover:bg-zinc-600/75"
-        >
-          <ArrowDownTrayIcon className="-ml-0.5 size-4" aria-hidden />
-          {t('CSV downloaden')}
-        </a>
+        <div className="flex gap-2">
+          <a
+            href={`/api/admin/reports/vat?year=${year}&quarter=${quarter}&format=oss`}
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-zinc-200 border-b-zinc-300/80 bg-white px-4 text-sm font-medium text-zinc-800 shadow-xs hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-700 dark:text-white dark:hover:bg-zinc-600/75"
+          >
+            <ArrowDownTrayIcon className="-ml-0.5 size-4" aria-hidden />
+            {t('OSS-aangifte downloaden')}
+          </a>
+          <a
+            href={`/api/admin/reports/vat?year=${year}&quarter=${quarter}&format=csv`}
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-zinc-200 border-b-zinc-300/80 bg-white px-4 text-sm font-medium text-zinc-800 shadow-xs hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-700 dark:text-white dark:hover:bg-zinc-600/75"
+          >
+            <ArrowDownTrayIcon className="-ml-0.5 size-4" aria-hidden />
+            {t('CSV downloaden')}
+          </a>
+        </div>
       </ListToolbar>
       {!isPending && rows.length === 0 ? (
         <EmptyState title={t('Geen facturen')} description={t('In dit kwartaal zijn geen facturen gemaakt.')} />
