@@ -34,9 +34,9 @@ const reasons = [
 ]
 
 const roadmap = [
-  { icon: 'server', title: 'VPS', text: 'Servers, volumes, snapshots en firewalls op Proxmox VE, OpenStack en VirtFusion' },
+  { icon: 'server', title: 'Meer VPS', text: 'Servers, volumes en snapshots op OpenStack en VirtFusion' },
   { icon: 'globe', title: 'Domeinen', text: 'Registreren, DNS-records en nameservers via Openprovider' },
-  { icon: 'app-window', title: 'Webhosting', text: 'Pakketten met inloggen in DirectAdmin, Plesk of cPanel' },
+  { icon: 'app-window', title: 'cPanel', text: 'Webhosting op cPanel & WHM, naast DirectAdmin en Plesk' },
   { icon: 'receipt-text', title: 'Meer facturatie', text: 'Pro rata bij upgrades en mislukte betalingen opnieuw proberen' },
 ]
 </script>
