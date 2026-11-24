@@ -1,6 +1,7 @@
 mod password;
 mod session;
 pub mod tokens;
+pub mod totp;
 
 pub use password::{hash_password, needs_rehash, verify_password};
 pub use session::{
