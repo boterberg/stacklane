@@ -33,6 +33,7 @@ const emptyForm = {
   node: 'pve',
   bridge: 'vmbr0',
   storage: 'local',
+  iso_storage: 'local',
   ip_from: '',
   ip_to: '',
   gateway: '',
@@ -136,6 +137,7 @@ function payload(form: typeof emptyForm): IntegrationInput {
         node: form.node.trim(),
         bridge: form.bridge.trim(),
         storage: form.storage.trim(),
+        iso_storage: form.iso_storage.trim(),
         ip_from: form.ip_from.trim(),
         ip_to: form.ip_to.trim(),
         gateway: form.gateway.trim(),
@@ -363,6 +365,9 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
               <Field label={t('Bridge')}>{(id) => <Input id={id} value={form.bridge} onChange={(event) => setForm({ ...form, bridge: event.target.value })} />}</Field>
               <Field label={t('Opslag')}>{(id) => <Input id={id} value={form.storage} onChange={(event) => setForm({ ...form, storage: event.target.value })} />}</Field>
             </div>
+            <Field label={t("Opslag voor ISO's")} description={t('Een opslag met het type ISO-image, zoals local.')}>
+              {(id) => <Input id={id} value={form.iso_storage} onChange={(event) => setForm({ ...form, iso_storage: event.target.value })} />}
+            </Field>
             <div className="grid gap-6 sm:grid-cols-2">
               <Field label={t('Eerste IP-adres')} error={errors.settings}>
                 {(id) => <Input id={id} placeholder="203.0.113.10" value={form.ip_from} onChange={(event) => setForm({ ...form, ip_from: event.target.value })} />}
