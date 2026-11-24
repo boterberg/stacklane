@@ -21,7 +21,7 @@ mod system;
 mod two_factor;
 mod vps;
 mod webhosting;
-mod whois_profiles;
+pub mod whois_profiles;
 
 use axum::http::StatusCode;
 use axum::routing::{any, delete, get, patch, post, put};
@@ -80,6 +80,11 @@ pub fn router(state: AppState) -> Router {
         .route("/ssh-keys", get(ssh_keys::index).post(ssh_keys::create))
         .route("/domains/search", get(domains::search))
         .route("/domains/orders", post(domains::order))
+        .route("/domains", get(domains::index))
+        .route("/domains/{id}", get(domains::show))
+        .route("/domains/{id}/nameservers", put(domains::set_nameservers))
+        .route("/domains/{id}/auth-code", post(domains::auth_code))
+        .route("/domains/{id}/lock", put(domains::set_lock))
         .route(
             "/whois-profiles",
             get(whois_profiles::index).post(whois_profiles::create),

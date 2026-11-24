@@ -300,6 +300,174 @@ pub async fn order(
     ))
 }
 
+#[derive(Serialize, sqlx::FromRow)]
+pub struct OwnedDomain {
+    id: Uuid,
+    name: String,
+    status: String,
+    details: Value,
+    last_error: Option<String>,
+    subscription_code: Option<String>,
+    #[serde(with = "time::serde::rfc3339::option")]
+    expires_at: Option<OffsetDateTime>,
+    cancelled: bool,
+    #[serde(with = "time::serde::rfc3339")]
+    created_at: OffsetDateTime,
+}
+
+#[derive(Serialize)]
+pub struct DomainDetail {
+    #[serde(flatten)]
+    domain: OwnedDomain,
+    registry: Option<openprovider::Domain>,
+}
+
+const SELECT: &str = "SELECT s.id, s.name, s.status, s.details - 'auth_code' AS details, s.last_error,
+        sub.code AS subscription_code, sub.expires_at, sub.cancelled_at IS NOT NULL AS cancelled, s.created_at
+     FROM services s LEFT JOIN subscriptions sub ON sub.id = s.subscription_id
+     WHERE s.kind = 'domain' AND s.status <> 'terminated' AND s.user_id = $1";
+
+pub async fn index(
+    State(state): State<AppState>,
+    user: CurrentUser,
+) -> AppResult<Json<Vec<OwnedDomain>>> {
+    Ok(Json(
+        sqlx::query_as(sqlx::AssertSqlSafe(format!("{SELECT} ORDER BY s.name")))
+            .bind(user.id)
+            .fetch_all(&state.db)
+            .await?,
+    ))
+}
+
+async fn registrar(
+    state: &AppState,
+    user: &CurrentUser,
+    id: Uuid,
+) -> AppResult<(openprovider::Openprovider, String)> {
+    let (integration_id, external_id, status): (Option<Uuid>, Option<String>, String) =
+        sqlx::query_as(
+            "SELECT integration_id, external_id, status FROM services WHERE id = $1 AND user_id = $2 AND kind = 'domain'",
+        )
+        .bind(id)
+        .bind(user.id)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    let (Some(integration_id), Some(external_id), "active") =
+        (integration_id, external_id, status.as_str())
+    else {
+        return Err(AppError::field("domain", "Dit domein is nog niet klaar."));
+    };
+    match integrations::driver(state, integration_id).await? {
+        integrations::Driver::Openprovider(client) => Ok((client, external_id)),
+        _ => Err(AppError::NotFound),
+    }
+}
+
+fn failed(error: anyhow::Error) -> AppError {
+    AppError::field("domain", format!("{error:#}"))
+}
+
+pub async fn show(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<DomainDetail>> {
+    let domain: OwnedDomain =
+        sqlx::query_as(sqlx::AssertSqlSafe(format!("{SELECT} AND s.id = $2")))
+            .bind(user.id)
+            .bind(id)
+            .fetch_optional(&state.db)
+            .await?
+            .ok_or(AppError::NotFound)?;
+    let registry = match registrar(&state, &user, id).await {
+        Ok((client, external_id)) => client.domain(&external_id).await.ok(),
+        Err(_) => None,
+    };
+    Ok(Json(DomainDetail { domain, registry }))
+}
+
+#[derive(Deserialize)]
+pub struct Nameservers {
+    nameservers: Vec<String>,
+}
+
+pub async fn set_nameservers(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(input): Json<Nameservers>,
+) -> AppResult<StatusCode> {
+    let names: Vec<String> = input
+        .nameservers
+        .iter()
+        .map(|name| name.trim().trim_end_matches('.').to_lowercase())
+        .filter(|name| !name.is_empty())
+        .collect();
+    if names.len() < 2
+        || names.len() > 6
+        || names
+            .iter()
+            .any(|name| openprovider::split_domain(name).is_none())
+    {
+        return Err(AppError::field(
+            "nameservers",
+            "Vul twee tot zes geldige nameservers in.",
+        ));
+    }
+    let (client, external_id) = registrar(&state, &user, id).await?;
+    client
+        .set_nameservers(&external_id, &names)
+        .await
+        .map_err(failed)?;
+    sqlx::query(
+        "UPDATE services SET details = jsonb_set(details, '{nameservers}', $2), updated_at = now() WHERE id = $1",
+    )
+    .bind(id)
+    .bind(json!(names))
+    .execute(&state.db)
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize)]
+pub struct AuthCode {
+    auth_code: String,
+}
+
+pub async fn auth_code(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<AuthCode>> {
+    if user.via_api_token {
+        return Err(AppError::Forbidden);
+    }
+    let (client, external_id) = registrar(&state, &user, id).await?;
+    Ok(Json(AuthCode {
+        auth_code: client.auth_code(&external_id).await.map_err(failed)?,
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct Lock {
+    locked: bool,
+}
+
+pub async fn set_lock(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(input): Json<Lock>,
+) -> AppResult<StatusCode> {
+    let (client, external_id) = registrar(&state, &user, id).await?;
+    client
+        .set_locked(&external_id, input.locked)
+        .await
+        .map_err(failed)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{ExtensionRow, wanted};

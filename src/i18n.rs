@@ -264,6 +264,8 @@ fn english(message: &str) -> Option<&'static str> {
         }
         "Dit domein is al bezet." => "This domain is already taken.",
         "Dit domein is al besteld." => "This domain has already been ordered.",
+        "Dit domein is nog niet klaar." => "This domain is not ready yet.",
+        "Vul twee tot zes geldige nameservers in." => "Enter two to six valid name servers.",
         "Kies een flavor." => "Choose a flavor.",
         "Kies TCP, UDP of ICMP." => "Choose TCP, UDP or ICMP.",
         "Vul een poort in, zoals 22, 80,443 of 8000:8100." => {
