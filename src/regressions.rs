@@ -377,3 +377,146 @@ async fn password_hashing_does_not_stall_other_requests(db: PgPool) {
         "meta {meta_took:?}, logins {logins_took:?}"
     );
 }
+
+pub struct Billing {
+    pub subscription: uuid::Uuid,
+    pub invoice: i64,
+    pub payment: uuid::Uuid,
+}
+
+async fn open_invoice(client: &Client, user: uuid::Uuid) -> Billing {
+    let db = &client.state.db;
+    let subscription = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO subscriptions (id, code, user_id, status, billing_interval, expires_at)
+         VALUES ($1, $2, $3, 'active', 'monthly', now() + interval '1 month')",
+    )
+    .bind(subscription)
+    .bind(format!("T{}", &subscription.simple().to_string()[..8]))
+    .bind(user)
+    .execute(db)
+    .await
+    .unwrap();
+    let invoice: i64 = sqlx::query_scalar(
+        "INSERT INTO invoices (user_id, status, total_cents, tax_cents) VALUES ($1, 'open', 1210, 210) RETURNING id",
+    )
+    .bind(user)
+    .fetch_one(db)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO invoice_lines (id, invoice_id, subscription_id, description, amount_cents)
+         VALUES ($1, $2, $3, 'Test', 1000)",
+    )
+    .bind(uuid::Uuid::new_v4())
+    .bind(invoice)
+    .bind(subscription)
+    .execute(db)
+    .await
+    .unwrap();
+    let payment = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO payments (id, invoice_id, provider, external_id, status, amount_cents, save_mandate)
+         VALUES ($1, $2, 'mollie', $3, 'open', 1210, true)",
+    )
+    .bind(payment)
+    .bind(invoice)
+    .bind(format!("tr_{}", payment.simple()))
+    .execute(db)
+    .await
+    .unwrap();
+    Billing {
+        subscription,
+        invoice,
+        payment,
+    }
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_redelivered_webhook_keeps_a_revoked_mandate_revoked(db: PgPool) {
+    let client = Client::new(db);
+    let (user, cookie) = client.register("mandate@example.test").await;
+    let billing = open_invoice(&client, user).await;
+    let state = &client.state;
+    crate::payments::record_mandate(
+        state,
+        billing.payment,
+        user,
+        "mollie",
+        "cst_1",
+        "mdt_1",
+        "iDEAL",
+    )
+    .await
+    .unwrap();
+    crate::payments::update_payment(state, billing.payment, "paid", Some("iDEAL"))
+        .await
+        .unwrap();
+    let mandate: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM payment_mandates WHERE mandate_ref = 'mdt_1'")
+            .fetch_one(&state.db)
+            .await
+            .unwrap();
+    let revoked = client
+        .send(
+            Method::DELETE,
+            &format!("/billing/mandates/{mandate}"),
+            Some(&cookie),
+            None,
+        )
+        .await;
+    assert_eq!(revoked.status, StatusCode::NO_CONTENT);
+
+    crate::payments::record_mandate(
+        state,
+        billing.payment,
+        user,
+        "mollie",
+        "cst_1",
+        "mdt_1",
+        "iDEAL",
+    )
+    .await
+    .unwrap();
+    let next = open_invoice(&client, user).await;
+    crate::payments::record_mandate(
+        state,
+        next.payment,
+        user,
+        "mollie",
+        "cst_1",
+        "mdt_1",
+        "iDEAL",
+    )
+    .await
+    .unwrap();
+
+    let still_revoked: bool =
+        sqlx::query_scalar("SELECT revoked_at IS NOT NULL FROM payment_mandates WHERE id = $1")
+            .bind(mandate)
+            .fetch_one(&state.db)
+            .await
+            .unwrap();
+    assert!(still_revoked);
+    let automatic: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM subscriptions WHERE user_id = $1 AND payment_mode = 'automatic'",
+    )
+    .bind(user)
+    .fetch_one(&state.db)
+    .await
+    .unwrap();
+    assert_eq!(automatic, 0);
+    let paid: String = sqlx::query_scalar("SELECT status FROM invoices WHERE id = $1")
+        .bind(billing.invoice)
+        .fetch_one(&state.db)
+        .await
+        .unwrap();
+    assert_eq!(paid, "paid");
+    let mode: String = sqlx::query_scalar("SELECT payment_mode FROM subscriptions WHERE id = $1")
+        .bind(billing.subscription)
+        .fetch_one(&state.db)
+        .await
+        .unwrap();
+    assert_eq!(mode, "manual");
+}

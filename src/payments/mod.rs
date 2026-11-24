@@ -246,17 +246,27 @@ pub async fn start_checkout(
 
 pub async fn record_mandate(
     state: &AppState,
+    payment_id: Uuid,
     user_id: Uuid,
     provider: &str,
     customer: &str,
     mandate: &str,
     description: &str,
-) -> AppResult<Uuid> {
-    let id: Uuid = sqlx::query_scalar(
+) -> AppResult<()> {
+    let mut transaction = state.db.begin().await?;
+    let status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM payments WHERE id = $1 FOR UPDATE")
+            .bind(payment_id)
+            .fetch_optional(&mut *transaction)
+            .await?;
+    if status.is_none_or(|status| status == "paid") {
+        return Ok(());
+    }
+    let (id, revoked): (Uuid, bool) = sqlx::query_as(
         "INSERT INTO payment_mandates (id, user_id, provider, customer_ref, mandate_ref, description)
          VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (provider, mandate_ref) DO UPDATE SET revoked_at = NULL, description = EXCLUDED.description
-         RETURNING id",
+         ON CONFLICT (provider, mandate_ref) DO UPDATE SET description = EXCLUDED.description
+         RETURNING id, revoked_at IS NOT NULL",
     )
     .bind(Uuid::new_v4())
     .bind(user_id)
@@ -264,20 +274,23 @@ pub async fn record_mandate(
     .bind(customer)
     .bind(mandate)
     .bind(description)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *transaction)
     .await?;
-    sqlx::query(
-        "UPDATE subscriptions s SET mandate_id = $2, payment_mode = 'automatic'
-         WHERE s.user_id = $1 AND s.status IN ('active', 'pending', 'suspended') AND s.cancelled_at IS NULL
-           AND EXISTS (SELECT 1 FROM invoice_lines l JOIN payments p ON p.invoice_id = l.invoice_id
-                       WHERE l.subscription_id = s.id AND p.save_mandate AND p.provider = $3)",
-    )
-    .bind(user_id)
-    .bind(id)
-    .bind(provider)
-    .execute(&state.db)
-    .await?;
-    Ok(id)
+    if !revoked {
+        sqlx::query(
+            "UPDATE subscriptions s SET mandate_id = $2, payment_mode = 'automatic'
+             WHERE s.user_id = $1 AND s.status IN ('active', 'pending', 'suspended') AND s.cancelled_at IS NULL
+               AND EXISTS (SELECT 1 FROM invoice_lines l JOIN payments p ON p.invoice_id = l.invoice_id
+                           WHERE l.subscription_id = s.id AND p.id = $3 AND p.save_mandate)",
+        )
+        .bind(user_id)
+        .bind(id)
+        .bind(payment_id)
+        .execute(&mut *transaction)
+        .await?;
+    }
+    transaction.commit().await?;
+    Ok(())
 }
 
 pub async fn update_payment(
