@@ -207,6 +207,30 @@ impl Proxmox {
             .context("Proxmox gaf geen vrij VM-nummer")
     }
 
+    pub async fn free_vmid(&self, taken: &[u32]) -> anyhow::Result<u32> {
+        let mut vmid = self.next_vmid().await?;
+        for _ in 0..1000 {
+            if !taken.contains(&vmid)
+                && self
+                    .request(Method::GET, &format!("/cluster/nextid?vmid={vmid}"), None)
+                    .await
+                    .is_ok()
+            {
+                return Ok(vmid);
+            }
+            vmid += 1;
+        }
+        bail!("Proxmox gaf geen vrij VM-nummer")
+    }
+
+    pub async fn description(&self, vmid: u32) -> Option<String> {
+        let config = self
+            .request(Method::GET, &format!("{}/config", self.vm_path(vmid)), None)
+            .await
+            .ok()?;
+        config["description"].as_str().map(str::to_owned)
+    }
+
     pub async fn create(
         &self,
         server: &NewServer<'_>,
