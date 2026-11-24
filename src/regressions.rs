@@ -1028,3 +1028,31 @@ async fn turning_off_two_factor_needs_a_code(db: PgPool) {
         .await;
     assert_eq!(with.status, StatusCode::NO_CONTENT, "{}", with.body);
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn only_local_checks_see_the_version(db: PgPool) {
+    use axum::extract::ConnectInfo;
+    let client = Client::new(db);
+    let ask = |peer: &str, forwarded: bool| {
+        let mut request = axum::http::Request::builder().uri("/readyz");
+        if forwarded {
+            request = request.header("x-forwarded-for", "203.0.113.9");
+        }
+        let mut request = request.body(axum::body::Body::empty()).unwrap();
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(peer.parse::<std::net::SocketAddr>().unwrap()));
+        let app = client.app.clone();
+        async move {
+            let response = app.oneshot(request).await.unwrap();
+            let bytes = axum::body::to_bytes(response.into_body(), 1 << 16)
+                .await
+                .unwrap();
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()
+        }
+    };
+    assert!(ask("127.0.0.1:9000", false).await["version"].is_string());
+    assert!(ask("127.0.0.1:9000", true).await["version"].is_null());
+    assert!(ask("198.51.100.7:9000", false).await["version"].is_null());
+}

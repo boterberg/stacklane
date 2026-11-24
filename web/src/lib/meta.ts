@@ -13,7 +13,6 @@ export type Company = {
 }
 
 export type Meta = {
-  version: string
   demo: boolean
   next_reset_at: string | null
   company: Company | null
