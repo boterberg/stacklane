@@ -38,6 +38,23 @@ pub struct Code {
 #[derive(Deserialize)]
 pub struct Password {
     password: String,
+    #[serde(default)]
+    code: Option<String>,
+}
+
+async fn check_second_factor(
+    state: &AppState,
+    user: &CurrentUser,
+    code: Option<&str>,
+) -> AppResult<()> {
+    let sealed: Option<String> = sqlx::query_scalar("SELECT totp_secret FROM users WHERE id = $1")
+        .bind(user.id)
+        .fetch_one(&state.db)
+        .await?;
+    match sealed {
+        Some(sealed) => check_login_code(state, user.id, &sealed, code).await,
+        None => Ok(()),
+    }
 }
 
 #[derive(Serialize)]
@@ -170,6 +187,7 @@ pub async fn disable(
     Json(input): Json<Password>,
 ) -> AppResult<StatusCode> {
     check_password(&state, &user, &input.password, "password").await?;
+    check_second_factor(&state, &user, input.code.as_deref()).await?;
     sqlx::query(
         "UPDATE users SET totp_secret = NULL, totp_pending = NULL, totp_last_step = NULL, two_factor_enabled_at = NULL
          WHERE id = $1",
@@ -190,6 +208,7 @@ pub async fn new_recovery_codes(
     Json(input): Json<Password>,
 ) -> AppResult<Json<RecoveryCodes>> {
     check_password(&state, &user, &input.password, "password").await?;
+    check_second_factor(&state, &user, input.code.as_deref()).await?;
     let enabled: bool =
         sqlx::query_scalar("SELECT two_factor_enabled_at IS NOT NULL FROM users WHERE id = $1")
             .bind(user.id)

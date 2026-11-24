@@ -727,3 +727,38 @@ async fn pages_cannot_be_framed(db: PgPool) {
     assert!(csp.contains("frame-ancestors 'none'"));
     assert_eq!(response.headers()["x-frame-options"], "DENY");
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn turning_off_two_factor_needs_a_code(db: PgPool) {
+    let client = Client::new(db);
+    let (user, cookie) = client.register("off@example.test").await;
+    let secret = enable_two_factor(&client, user).await;
+    let without = client
+        .send(
+            Method::POST,
+            "/account/two-factor/disable",
+            Some(&cookie),
+            Some(json!({ "password": PASSWORD })),
+        )
+        .await;
+    assert_eq!(without.status, StatusCode::UNPROCESSABLE_ENTITY);
+    let renew = client
+        .send(
+            Method::POST,
+            "/account/two-factor/recovery-codes",
+            Some(&cookie),
+            Some(json!({ "password": PASSWORD, "code": "000000" })),
+        )
+        .await;
+    assert_eq!(renew.status, StatusCode::UNPROCESSABLE_ENTITY);
+    let with = client
+        .send(
+            Method::POST,
+            "/account/two-factor/disable",
+            Some(&cookie),
+            Some(json!({ "password": PASSWORD, "code": current_code(&secret) })),
+        )
+        .await;
+    assert_eq!(with.status, StatusCode::NO_CONTENT, "{}", with.body);
+}

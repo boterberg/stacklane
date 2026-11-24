@@ -130,6 +130,7 @@ export const en: Record<string, string> = {
   "Client API-sleutel": "Client API key",
   "Code": "Code",
   "Code uit de app": "Code from the app",
+  "Code uit de app of een herstelcode": "Code from the app or a recovery code",
   "Code uit je authenticator-app": "Code from your authenticator app",
   "Compute": "Compute",
   "Console": "Console",
