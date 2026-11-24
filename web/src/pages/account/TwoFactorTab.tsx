@@ -52,12 +52,13 @@ function Setup({ onCancel, onEnabled }: { onCancel: () => void; onEnabled: (code
   const setup = useTwoFactorSetup()
   const enable = useEnableTwoFactor()
   const [code, setCode] = useState('')
+  const [password, setPassword] = useState('')
   const start = setup.mutate
   useEffect(() => start(), [start])
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    enable.mutate(code, { onSuccess: (result) => onEnabled(result.recovery_codes) })
+    enable.mutate({ code, password }, { onSuccess: (result) => onEnabled(result.recovery_codes) })
   }
 
   const setupError = fieldError(setup.error, 'code')
@@ -71,7 +72,7 @@ function Setup({ onCancel, onEnabled }: { onCancel: () => void; onEnabled: (code
             <Button variant="ghost" onClick={onCancel}>
               {t('Annuleren')}
             </Button>
-            <Button type="submit" variant="primary" disabled={!setup.data || enable.isPending || !code.trim()}>
+            <Button type="submit" variant="primary" disabled={!setup.data || enable.isPending || !code.trim() || !password}>
               {t('Aanzetten')}
             </Button>
           </>
@@ -90,8 +91,11 @@ function Setup({ onCancel, onEnabled }: { onCancel: () => void; onEnabled: (code
                 <p className="mt-1 text-sm text-zinc-500 dark:text-white/70">{t('Vul deze sleutel dan met de hand in:')}</p>
                 <code className="mt-2 block font-mono text-sm break-all text-zinc-800 dark:text-white">{setup.data?.secret.match(/.{1,4}/g)?.join(' ')}</code>
               </div>
-              <Field label={t('Code uit de app')} error={fieldError(enable.error, 'code')}>
-                {(id) => <Input id={id} inputMode="numeric" autoComplete="one-time-code" invalid={!!enable.error} value={code} onChange={(event) => setCode(event.target.value)} />}
+              <Field label={t('Code uit de app')} error={codeError(enable.error)}>
+                {(id) => <Input id={id} inputMode="numeric" autoComplete="one-time-code" invalid={!!codeError(enable.error)} value={code} onChange={(event) => setCode(event.target.value)} />}
+              </Field>
+              <Field label={t('Je wachtwoord')} error={enable.error instanceof ApiError ? enable.error.fieldErrors.password : undefined}>
+                {(id) => <Input id={id} type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />}
               </Field>
             </div>
           </div>
