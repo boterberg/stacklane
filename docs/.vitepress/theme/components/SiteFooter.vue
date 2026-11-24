@@ -26,7 +26,7 @@ const columns = [
     links: [
       { text: 'Merk', href: '/brand' },
       { text: 'Broncode', href: 'https://github.com/boterberg/stacklane' },
-      { text: 'MIT-licentie', href: 'https://github.com/boterberg/stacklane/blob/main/LICENSE' },
+      { text: 'MIT-licentie', href: 'https://github.com/boterberg/stacklane/blob/v1-stable/LICENSE' },
     ],
   },
 ]
