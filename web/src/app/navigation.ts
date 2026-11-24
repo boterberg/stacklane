@@ -96,6 +96,7 @@ export const adminNavigation: NavGroup = {
     { label: 'Alle facturen', to: '/admin/invoices', icon: DocumentDuplicateIcon },
     { label: 'Diensten', to: '/admin/services', icon: ServerStackIcon },
     { label: 'Producten', to: '/admin/products', icon: CubeIcon },
+    { label: 'Domeinextensies', to: '/admin/domain-extensions', icon: GlobeAltIcon },
     { label: 'Koppelingen', to: '/admin/integrations', icon: LinkIcon },
     { label: 'Instellingen', to: '/admin/settings', icon: AdjustmentsHorizontalIcon },
     { label: 'Systeem', to: '/admin/system', icon: Cog6ToothIcon },

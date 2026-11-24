@@ -7,7 +7,7 @@ import type { ServiceStatus } from './gameservers'
 
 export type Integration = {
   id: string
-  kind: 'pterodactyl' | 'proxmox' | 'openstack' | 'virtfusion' | 'directadmin' | 'plesk'
+  kind: 'pterodactyl' | 'proxmox' | 'openstack' | 'virtfusion' | 'directadmin' | 'plesk' | 'openprovider'
   name: string
   base_url: string
   last_checked_at: string | null
@@ -233,5 +233,40 @@ export function useSavePaymentSettings() {
   return useMutation({
     mutationFn: (input: PaymentSettingsUpdate) => api<PaymentSettings>('/admin/payment-settings', { method: 'PUT', body: input }),
     onSuccess: (settings) => queryClient.setQueryData(['admin', 'payment-settings'], settings),
+  })
+}
+
+export type DomainExtension = {
+  id: string
+  integration_id: string
+  integration_name: string
+  extension: string
+  register_cents: number
+  renew_cents: number
+  transfer_cents: number
+  is_active: boolean
+  domains: number
+}
+
+export type DomainExtensionInput = Omit<DomainExtension, 'id' | 'integration_name' | 'domains'>
+
+export function useDomainExtensions() {
+  return useQuery({ queryKey: ['admin', 'domain-extensions'], queryFn: () => api<DomainExtension[]>('/admin/domain-extensions') })
+}
+
+export function useSaveDomainExtension() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...input }: DomainExtensionInput & { id?: string }) =>
+      api<void>(id ? `/admin/domain-extensions/${id}` : '/admin/domain-extensions', { method: id ? 'PUT' : 'POST', body: input }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'domain-extensions'] }),
+  })
+}
+
+export function useDeleteDomainExtension() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api<void>(`/admin/domain-extensions/${id}`, { method: 'DELETE' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'domain-extensions'] }),
   })
 }
