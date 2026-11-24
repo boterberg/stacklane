@@ -85,6 +85,17 @@ Stacklane weigert links naar privé-adressen, localhost en link-local adressen, 
 | OpenStack | Een privé-image in Glance, geïmporteerd met *web-download*. Koppelen start de server in rescue-modus met de ISO als cd-rom (Nova API 2.87 of nieuwer); loskoppelen haalt hem uit rescue. |
 | VirtFusion | Geen ISO's. |
 
+### Gebruikers
+
+Een klant kan onder **VPS → Gebruikers** anderen toegang geven tot zijn VPS-omgeving, bijvoorbeeld een collega of een beheerder. Die persoon heeft een eigen Stacklane-account nodig; de klant vult het e-mailadres in en kiest de rechten. Er zijn 49 rechten in negen groepen, van *Servers → Start* tot *Firewalls → Regels verwijderen*.
+
+De gebruiker krijgt een melding en vindt de omgeving onder **Gedeelde toegang**. Met **Openen** werkt hij in de omgeving van de eigenaar; het menu toont dan alleen wat hij mag. Stacklane controleert elk recht op de server, niet alleen in het scherm.
+
+- Bestellen, betalen en het rootwachtwoord blijven bij de eigenaar.
+- Iemand met het recht *Gebruikers beheren* kan anderen alleen rechten geven die hij zelf heeft.
+- Een klant geeft hoogstens 25 mensen toegang. Intrekken werkt meteen, en de gebruiker kan zelf zijn toegang opgeven.
+- Via de API werkt het ook: stuur de header `X-Vps-Owner` met het ID van de eigenaar mee bij aanroepen onder `/api/vps` en `/api/ssh-keys`.
+
 ## OpenStack
 
 Bij OpenStack regelt de cloud zelf de IP-adressen, de schijf en de firewall. Stacklane praat met Keystone, Nova, Glance en Neutron.
