@@ -7,6 +7,7 @@ use time::{Date, Month};
 
 use crate::auth::CurrentAdmin;
 use crate::error::{AppError, AppResult};
+use crate::settings::{self, Billing};
 use crate::state::AppState;
 
 #[derive(Deserialize)]
@@ -54,17 +55,19 @@ pub async fn report(
             "Kies een kwartaal van 1 tot en met 4.",
         ));
     };
+    let billing: Billing = settings::get(&state.db, "billing").await?;
     let rows: Vec<Row> = sqlx::query_as(
-        "SELECT vat_scheme AS scheme, vat_country::text AS country, tax_rate_basis_points AS rate_basis_points,
+        "SELECT vat_scheme AS scheme, COALESCE(vat_country::text, $3) AS country, tax_rate_basis_points AS rate_basis_points,
                 count(*) AS invoices, sum(total_cents - tax_cents)::bigint AS net_cents,
                 sum(tax_cents)::bigint AS vat_cents, sum(total_cents)::bigint AS gross_cents
          FROM invoices
          WHERE status <> 'cancelled' AND issued_at >= $1 AND issued_at < $2
-         GROUP BY vat_scheme, vat_country, tax_rate_basis_points
-         ORDER BY vat_scheme, vat_country, tax_rate_basis_points",
+         GROUP BY 1, 2, 3
+         ORDER BY 1, 2, 3",
     )
     .bind(start)
     .bind(end)
+    .bind(&billing.home_country)
     .fetch_all(&state.db)
     .await?;
     if period.format.as_deref() != Some("csv") {

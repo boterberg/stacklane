@@ -9,7 +9,7 @@ import { DataTable } from '../../components/ui/ResourceList'
 import { useVatReport, type VatRow } from '../../lib/admin'
 import { countries } from '../../lib/countries'
 import { formatEuro } from '../../lib/format'
-import { t } from '../../lib/i18n'
+import { intlLocale, t } from '../../lib/i18n'
 
 function schemeLabel(scheme: VatRow['scheme']) {
   return { domestic: t('Binnenland'), oss: t('OSS'), reverse_charge: t('Btw verlegd'), outside_eu: t('Buiten de EU') }[scheme]
@@ -35,20 +35,24 @@ export function VatReportPage() {
     <>
       <PageHeader title={t('Btw-overzicht')} description={t('Omzet en btw per regeling en land, op factuurdatum. De regels met OSS gaan in je OSS-aangifte.')} />
       <ListToolbar>
-        <Select aria-label={t('Jaar')} value={year} onChange={(event) => setYear(Number(event.target.value))}>
-          {years.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </Select>
-        <Select aria-label={t('Kwartaal')} value={quarter} onChange={(event) => setQuarter(Number(event.target.value))}>
-          {[1, 2, 3, 4].map((option) => (
-            <option key={option} value={option}>
-              {t('Kwartaal {number}', { number: option })}
-            </option>
-          ))}
-        </Select>
+        <div className="w-32">
+          <Select aria-label={t('Jaar')} value={year} onChange={(event) => setYear(Number(event.target.value))}>
+            {years.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="w-40">
+          <Select aria-label={t('Kwartaal')} value={quarter} onChange={(event) => setQuarter(Number(event.target.value))}>
+            {[1, 2, 3, 4].map((option) => (
+              <option key={option} value={option}>
+                {t('Kwartaal {number}', { number: option })}
+              </option>
+            ))}
+          </Select>
+        </div>
         <ToolbarSpacer />
         <a
           href={`/api/admin/reports/vat?year=${year}&quarter=${quarter}&format=csv`}
@@ -68,7 +72,7 @@ export function VatReportPage() {
             columns={[
               { header: t('Regeling'), cell: (row) => schemeLabel(row.scheme) },
               { header: t('Land'), cell: (row) => (row.country ? (names.get(row.country) ?? row.country) : '-') },
-              { header: t('Tarief'), cell: (row) => `${row.rate_basis_points / 100}%` },
+              { header: t('Tarief'), cell: (row) => `${(row.rate_basis_points / 100).toLocaleString(intlLocale())}%` },
               { header: t('Facturen'), cell: (row) => row.invoices },
               { header: t('Zonder btw'), cell: (row) => formatEuro(row.net_cents) },
               { header: t('Btw'), cell: (row) => formatEuro(row.vat_cents) },
