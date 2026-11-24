@@ -1,6 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from './api'
+import type { InvoiceDetail } from './billing'
+import type { Paginated } from './pagination'
 import type { ServiceStatus } from './gameservers'
 
 export type Integration = {
@@ -122,5 +124,109 @@ export function useCustomerSearch(query: string) {
   return useQuery({
     queryKey: ['admin', 'customers', query],
     queryFn: () => api<Array<{ id: string; email: string; name: string }>>(`/admin/customers?q=${encodeURIComponent(query)}`),
+  })
+}
+
+export type AdminInvoice = {
+  id: number
+  status: 'open' | 'paid' | 'cancelled' | 'refunded'
+  issued_at: string
+  due_at: string
+  total_cents: number
+  customer_name: string
+  customer_email: string
+}
+
+export type AdminInvoiceDetail = InvoiceDetail & {
+  customer_email: string
+  payments: Array<{ provider: string; status: string; amount_cents: number; method: string | null; created_at: string }>
+}
+
+export function useAdminInvoices({ q, statuses, page, perPage }: { q: string; statuses: string[]; page: number; perPage: number }) {
+  const params = new URLSearchParams({ status: statuses.join(','), page: String(page), per_page: String(perPage) })
+  if (q.trim()) params.set('q', q.trim())
+  return useQuery({
+    queryKey: ['admin', 'invoices', params.toString()],
+    queryFn: () => api<Paginated<AdminInvoice>>(`/admin/invoices?${params}`),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useAdminInvoice(id: string) {
+  return useQuery({ queryKey: ['admin', 'invoice', id], queryFn: () => api<AdminInvoiceDetail>(`/admin/invoices/${id}`) })
+}
+
+export function useInvoiceAction(id: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (action: 'mark-paid' | 'cancel') => api<AdminInvoiceDetail>(`/admin/invoices/${id}/${action}`, { method: 'POST' }),
+    onSuccess: (invoice) => {
+      queryClient.setQueryData(['admin', 'invoice', String(id)], invoice)
+      queryClient.invalidateQueries({ queryKey: ['admin', 'invoices'] })
+    },
+  })
+}
+
+export type Company = {
+  name: string
+  address: string | null
+  email: string | null
+  website: string | null
+  coc_number: string | null
+  vat_number: string | null
+  iban: string | null
+  bic: string | null
+}
+
+export type BillingSettings = {
+  tax_rate_basis_points: number
+  payment_term_days: number
+  renewal_notice_days: number
+  suspend_after_days: number
+}
+
+export type PaymentSettings = {
+  mollie_enabled: boolean
+  mollie_configured: boolean
+  stripe_enabled: boolean
+  stripe_configured: boolean
+  stripe_webhook_configured: boolean
+  bank_transfer_enabled: boolean
+  webhook_urls: { mollie: string; stripe: string }
+}
+
+export type PaymentSettingsUpdate = {
+  mollie_enabled: boolean
+  mollie_key?: string
+  stripe_enabled: boolean
+  stripe_secret_key?: string
+  stripe_webhook_secret?: string
+  bank_transfer_enabled: boolean
+}
+
+export function useSettings() {
+  return useQuery({ queryKey: ['admin', 'settings'], queryFn: () => api<{ company: Company; billing: BillingSettings }>('/admin/settings') })
+}
+
+export function useSaveSettings() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { company?: Company; billing?: BillingSettings }) => api<{ company: Company; billing: BillingSettings }>('/admin/settings', { method: 'PUT', body: input }),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['admin', 'settings'], settings)
+      queryClient.invalidateQueries({ queryKey: ['meta'] })
+    },
+  })
+}
+
+export function usePaymentSettings() {
+  return useQuery({ queryKey: ['admin', 'payment-settings'], queryFn: () => api<PaymentSettings>('/admin/payment-settings') })
+}
+
+export function useSavePaymentSettings() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: PaymentSettingsUpdate) => api<PaymentSettings>('/admin/payment-settings', { method: 'PUT', body: input }),
+    onSuccess: (settings) => queryClient.setQueryData(['admin', 'payment-settings'], settings),
   })
 }

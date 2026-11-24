@@ -17,6 +17,8 @@ import { TicketsPage } from '../pages/support/TicketsPage'
 import { GameServerPage } from '../pages/gameservers/GameServerPage'
 import { GameServersPage } from '../pages/gameservers/GameServersPage'
 import { IntegrationsPage } from '../pages/admin/IntegrationsPage'
+import { AdminInvoicePage } from '../pages/admin/InvoicePage'
+import { AdminInvoicesPage } from '../pages/admin/InvoicesPage'
 import { ProductsPage } from '../pages/admin/ProductsPage'
 import { ServicesPage } from '../pages/admin/ServicesPage'
 import { SystemPage } from '../pages/admin/SystemPage'
@@ -57,6 +59,8 @@ export const router = createBrowserRouter([
       { path: '/admin/products', element: <ProductsPage /> },
       { path: '/admin/integrations', element: <IntegrationsPage /> },
       { path: '/admin/system', element: <SystemPage /> },
+      { path: '/admin/invoices', element: <AdminInvoicesPage /> },
+      { path: '/admin/invoices/:id', element: <AdminInvoicePage /> },
       { path: '/admin/tickets', element: <TicketsPage scope="staff" /> },
       { path: '/admin/tickets/:number', element: <TicketDetailPage scope="staff" /> },
       ...sections.map(([path, title]) => ({ path, element: <SectionPage title={title} /> })),

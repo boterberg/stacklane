@@ -13,7 +13,7 @@ function files(directory) {
   })
 }
 
-const labelFiles = ['app/navigation.ts', 'app/router.tsx', 'lib/labels.ts', 'components/admin/UpdatePanel.tsx']
+const labelFiles = ['app/navigation.ts', 'app/router.tsx', 'lib/labels.ts', 'components/admin/UpdatePanel.tsx', 'pages/admin/InvoicePage.tsx']
 const missing = new Map()
 
 for (const file of files(root)) {

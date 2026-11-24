@@ -18,6 +18,7 @@ import {
   LinkIcon,
   WrenchScrewdriverIcon,
   Cog6ToothIcon,
+  DocumentDuplicateIcon,
 } from '@heroicons/react/24/outline'
 import type { ComponentType, SVGProps } from 'react'
 
@@ -88,6 +89,7 @@ export const adminNavigation: NavGroup = {
   icon: WrenchScrewdriverIcon,
   children: [
     { label: 'Alle tickets', to: '/admin/tickets', icon: InboxStackIcon },
+    { label: 'Alle facturen', to: '/admin/invoices', icon: DocumentDuplicateIcon },
     { label: 'Diensten', to: '/admin/services', icon: ServerStackIcon },
     { label: 'Producten', to: '/admin/products', icon: CubeIcon },
     { label: 'Koppelingen', to: '/admin/integrations', icon: LinkIcon },
