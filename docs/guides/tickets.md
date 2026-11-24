@@ -27,3 +27,7 @@ Reageert de klant op een gesloten ticket, dan gaat het weer open.
 ## Zoeken en filteren
 
 De lijst toont standaard alle tickets behalve gesloten tickets. De klant zoekt op onderwerp of ticketnummer, filtert op status en kiest tussen kaarten en een tabel.
+
+## Voor beheerders
+
+Beheerders zien onder **Beheer → Alle tickets** de tickets van alle klanten, met de naam van de klant erbij. Ze zoeken ook op e-mailadres. Op een ticket reageren ze als support: het ticket gaat dan naar **Beantwoord**. De status zetten ze zelf met de keuzelijst bovenaan het ticket.

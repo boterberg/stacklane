@@ -6,7 +6,7 @@ Nog niet. Stacklane is in ontwikkeling en de belangrijkste onderdelen, zoals fac
 
 ## Is er een demo?
 
-Ja, op [demo.stacklane.io](https://demo.stacklane.io). Maak er een account aan om rond te kijken.
+Ja, op [demo.stacklane.io](https://demo.stacklane.io). Log in met één klik als klant of als beheerder. Alles wat je verandert, wordt elk uur teruggezet.
 
 ## Welke database heb ik nodig?
 

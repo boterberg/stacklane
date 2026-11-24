@@ -13,6 +13,7 @@ Stacklane staat aan het begin. Bekijk de [releases](/releases/) voor wat er per 
 | Account aanmaken, inloggen, wachtwoord vergeten | Beschikbaar |
 | Dashboard met actieve tickets en diensten die verlopen | Beschikbaar |
 | Tickets: aanmaken, reageren, sluiten, zoeken en filteren | Beschikbaar |
+| Beheer: tickets van alle klanten beantwoorden en de status zetten | Beschikbaar |
 | Licht en donker thema, zoeken met <kbd>Ctrl</kbd>+<kbd>K</kbd> | Beschikbaar |
 | Facturatie: abonnementen en facturen | In ontwikkeling |
 | VPS, gameservers, domeinen en webhosting | Gepland |
@@ -28,5 +29,5 @@ browser ── https ──> Caddy ── http ──> stacklane-server ──> 
 
 ## Probeer het
 
-- Bekijk de [demo](https://demo.stacklane.io) en maak daar een account aan.
+- Bekijk de [demo](https://demo.stacklane.io) als klant of als beheerder.
 - [Installeer Stacklane](/docs/installation/install) op je eigen server.

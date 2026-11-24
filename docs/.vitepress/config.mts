@@ -9,6 +9,12 @@ export default defineConfig({
   cleanUrls: true,
   lastUpdated: true,
   outDir: 'dist',
+  rewrites: {
+    'getting-started/:page': 'docs/getting-started/:page',
+    'installation/:page': 'docs/installation/:page',
+    'guides/:page': 'docs/guides/:page',
+    'contribute/:page': 'docs/contribute/:page',
+  },
   head: [
     ['link', { rel: 'icon', href: '/favicon.ico', sizes: 'any' }],
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
@@ -61,7 +67,7 @@ export default defineConfig({
       ],
     },
     outline: { level: [2, 3], label: 'Op deze pagina' },
-    editLink: { pattern: `${repository}/edit/main/site/:path`, text: 'Deze pagina bewerken op GitHub' },
+    editLink: { pattern: `${repository}/edit/main/docs/:path`, text: 'Deze pagina bewerken op GitHub' },
     lastUpdated: { text: 'Laatst bijgewerkt', formatOptions: { dateStyle: 'medium' } },
     docFooter: { prev: 'Vorige', next: 'Volgende' },
     darkModeSwitchLabel: 'Thema',

@@ -19,6 +19,7 @@ RUST_LOG=stacklane_server=info,tower_http=info
 | `COOKIE_SECURE` | `true` | Stuur de sessiecookie alleen over HTTPS. Zet op `false` als je lokaal zonder HTTPS test. |
 | `STATIC_DIR` | `/usr/share/stacklane/web` | Map met het klantpanel. Laat je hem leeg, dan serveert de server alleen de API. |
 | `RUST_LOG` | `info` | Hoeveel de server logt, bijvoorbeeld `stacklane_server=debug`. |
+| `DEMO_MODE` | uit | Zet de server in demomodus: inloggen met één klik als klant of beheerder, en `stacklane-server demo-reset` mag de gegevens terugzetten. Nooit aanzetten op een server met echte klanten. |
 
 Na een wijziging:
 

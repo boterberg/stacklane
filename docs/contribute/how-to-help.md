@@ -4,18 +4,15 @@ Alle code staat op [GitHub](https://github.com/boterberg/stacklane). Meld fouten
 
 ## Lokaal ontwikkelen
 
-Je hebt Rust (stable), Node.js 22 en PostgreSQL nodig. Met podman of Docker start je de database zo:
+Je hebt Rust (stable), Node.js 22 en podman of Docker nodig. Start de database en de server:
 
 ```sh
-podman compose up -d db
+sh scripts/dev-db.sh
+cp .env.example .env
+cargo run
 ```
 
-Start daarna de server en het panel:
-
-```sh
-cp server/.env.example server/.env
-cd server && cargo run
-```
+Start in een tweede terminal het panel:
 
 ```sh
 cd web
@@ -29,15 +26,18 @@ Het panel draait op `http://localhost:5173` en stuurt `/api` door naar de server
 
 | Map | Inhoud |
 | --- | --- |
-| `server/` | Rust-server: API, migraties, sessies |
+| `src/` | Rust-server: API, sessies, demo |
+| `migrations/` | Databasemigraties, worden bij elke start toegepast |
 | `web/` | Klantpanel: React, TypeScript, Tailwind CSS |
-| `site/` | Deze website en de documentatie, gebouwd met VitePress |
-| `packaging/` | Debian-pakket, systemd-service, installatiescript |
+| `docs/` | Deze website en de documentatie, gebouwd met VitePress |
+| `packaging/` | Debian-pakket, systemd-units, installatiescript |
+| `deploy/` | Configuratie van de demo op demo.stacklane.io |
+| `scripts/` | Hulpscripts voor ontwikkeling |
 
 ## Voor je een pull request opent
 
 ```sh
-cd server && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 cd web && npm run lint && npm run build
 ```
 
