@@ -14,6 +14,8 @@ import {
   WindowIcon,
   GlobeEuropeAfricaIcon,
   InboxStackIcon,
+  CubeIcon,
+  LinkIcon,
   WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline'
 import type { ComponentType, SVGProps } from 'react'
@@ -83,7 +85,12 @@ export const navigation: NavEntry[] = [
 export const adminNavigation: NavGroup = {
   label: 'Beheer',
   icon: WrenchScrewdriverIcon,
-  children: [{ label: 'Alle tickets', to: '/admin/tickets', icon: InboxStackIcon }],
+  children: [
+    { label: 'Alle tickets', to: '/admin/tickets', icon: InboxStackIcon },
+    { label: 'Diensten', to: '/admin/services', icon: ServerStackIcon },
+    { label: 'Producten', to: '/admin/products', icon: CubeIcon },
+    { label: 'Koppelingen', to: '/admin/integrations', icon: LinkIcon },
+  ],
 }
 
 export function navigationFor(isAdmin: boolean): NavEntry[] {

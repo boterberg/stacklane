@@ -21,3 +21,35 @@ export const ticketStatusColors: Record<TicketStatus, BadgeColor> = {
   in_progress: 'sky',
   closed: 'zinc',
 }
+
+export const serviceStatusLabels: Record<string, string> = {
+  pending: 'In de wachtrij',
+  provisioning: 'Wordt aangemaakt',
+  active: 'Actief',
+  suspended: 'Opgeschort',
+  terminated: 'Opgeheven',
+  failed: 'Mislukt',
+}
+
+export const serviceStatusColors: Record<string, BadgeColor> = {
+  pending: 'zinc',
+  provisioning: 'sky',
+  active: 'green',
+  suspended: 'amber',
+  terminated: 'zinc',
+  failed: 'red',
+}
+
+export const powerStateLabels: Record<string, string> = {
+  running: 'Online',
+  starting: 'Start op',
+  stopping: 'Stopt',
+  offline: 'Offline',
+}
+
+export const powerStateColors: Record<string, BadgeColor> = {
+  running: 'green',
+  starting: 'sky',
+  stopping: 'amber',
+  offline: 'zinc',
+}

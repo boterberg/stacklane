@@ -9,6 +9,10 @@ if [ "$1" = "configure" ]; then
     adduser --system --ingroup stacklane --home /var/lib/stacklane --no-create-home --shell /usr/sbin/nologin --gecos Stacklane stacklane >/dev/null
   fi
   install -d -m 0750 -o stacklane -g stacklane /var/lib/stacklane
+  if ! grep -q '^SECRET_KEY=..*' /etc/stacklane/stacklane.env; then
+    sed -i '/^SECRET_KEY=/d' /etc/stacklane/stacklane.env
+    echo "SECRET_KEY=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> /etc/stacklane/stacklane.env
+  fi
   chown root:stacklane /etc/stacklane /etc/stacklane/stacklane.env
   chmod 0750 /etc/stacklane
   chmod 0640 /etc/stacklane/stacklane.env

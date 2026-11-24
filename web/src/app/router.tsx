@@ -9,9 +9,13 @@ import { DashboardPage } from '../pages/DashboardPage'
 import { NotFoundPage, SectionPage } from '../pages/SectionPage'
 import { TicketDetailPage } from '../pages/support/TicketDetailPage'
 import { TicketsPage } from '../pages/support/TicketsPage'
+import { GameServerPage } from '../pages/gameservers/GameServerPage'
+import { GameServersPage } from '../pages/gameservers/GameServersPage'
+import { IntegrationsPage } from '../pages/admin/IntegrationsPage'
+import { ProductsPage } from '../pages/admin/ProductsPage'
+import { ServicesPage } from '../pages/admin/ServicesPage'
 
 const sections: Array<[string, string]> = [
-  ['/gameservers/servers', 'Servers'],
   ['/gameservers/backups', 'Back-ups'],
   ['/vps/servers', 'Servers'],
   ['/domains', 'Domeinen'],
@@ -38,6 +42,11 @@ export const router = createBrowserRouter([
       { path: '/', element: <DashboardPage /> },
       { path: '/support/tickets', element: <TicketsPage /> },
       { path: '/support/tickets/:number', element: <TicketDetailPage /> },
+      { path: '/gameservers/servers', element: <GameServersPage /> },
+      { path: '/gameservers/servers/:id', element: <GameServerPage /> },
+      { path: '/admin/services', element: <ServicesPage /> },
+      { path: '/admin/products', element: <ProductsPage /> },
+      { path: '/admin/integrations', element: <IntegrationsPage /> },
       { path: '/admin/tickets', element: <TicketsPage scope="staff" /> },
       { path: '/admin/tickets/:number', element: <TicketDetailPage scope="staff" /> },
       ...sections.map(([path, title]) => ({ path, element: <SectionPage title={title} /> })),
