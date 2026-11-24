@@ -111,8 +111,20 @@ pub fn require_root() -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn clean(command: &mut Command) -> &mut Command {
+    let kept: Vec<(String, String)> = ["PATH", "LANG", "LC_ALL", "TERM", "DEBIAN_FRONTEND"]
+        .into_iter()
+        .filter_map(|name| {
+            std::env::var(name)
+                .ok()
+                .map(|value| (name.to_owned(), value))
+        })
+        .collect();
+    command.env_clear().envs(kept)
+}
+
 pub fn exec(program: &str, args: &[&str]) -> anyhow::Result<String> {
-    let output = Command::new(program)
+    let output = clean(&mut Command::new(program))
         .args(args)
         .stdin(Stdio::null())
         .output()
