@@ -1,0 +1,22 @@
+import { ArrowUpRightIcon } from '@heroicons/react/16/solid'
+
+type LinkCardProps = {
+  href: string
+  title: string
+  description: string
+}
+
+export function LinkCard({ href, title, description }: LinkCardProps) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="group relative block rounded-lg border border-zinc-200 bg-white p-4 transition-colors hover:bg-zinc-50 dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15"
+    >
+      <ArrowUpRightIcon className="absolute top-4 right-4 size-4 text-zinc-400 transition-colors group-hover:text-zinc-800 dark:text-white/50 dark:group-hover:text-white" aria-hidden />
+      <h3 className="pr-6 text-sm leading-6 font-medium text-zinc-800 dark:text-white">{title}</h3>
+      <p className="mt-1 text-sm text-zinc-500 dark:text-white/70">{description}</p>
+    </a>
+  )
+}
