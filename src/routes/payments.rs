@@ -101,6 +101,14 @@ pub async fn revoke_mandate(
     .bind(id)
     .execute(&state.db)
     .await?;
+    sqlx::query(
+        "UPDATE users SET default_mandate_id = NULL, default_payment_mode = 'manual'
+         WHERE id = $1 AND default_mandate_id = $2",
+    )
+    .bind(user.id)
+    .bind(id)
+    .execute(&state.db)
+    .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -142,7 +150,10 @@ async fn handle_mollie(state: &AppState, external_id: &str) -> AppResult<()> {
         && save_mandate
         && let (Some(customer), Some(mandate)) = (&payment.customer_id, &payment.mandate_id)
     {
-        payments::record_mandate(state, user_id, "mollie", customer, mandate, &method).await?;
+        payments::record_mandate(
+            state, payment_id, user_id, "mollie", customer, mandate, &method,
+        )
+        .await?;
     }
     payments::update_payment(state, payment_id, status, Some(&method)).await
 }
@@ -227,6 +238,7 @@ async fn handle_stripe(
             {
                 payments::record_mandate(
                     state,
+                    payment_id,
                     user_id,
                     "stripe",
                     customer,
