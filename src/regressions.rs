@@ -1083,3 +1083,49 @@ async fn password_checks_stop_after_ten_tries(db: PgPool) {
         .await;
     assert_eq!(reply.status, StatusCode::TOO_MANY_REQUESTS);
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_delegate_cannot_remove_a_stronger_member(db: PgPool) {
+    let client = Client::new(db);
+    let (owner, owner_cookie) = client.register("rank-owner@example.test").await;
+    let delegate = shared_member(
+        &client,
+        &owner_cookie,
+        owner,
+        "rank-delegate@example.test",
+        &["access.users", "servers.view"],
+    )
+    .await;
+    shared_member(
+        &client,
+        &owner_cookie,
+        owner,
+        "rank-admin@example.test",
+        &["access.users", "servers.view", "servers.rebuild"],
+    )
+    .await;
+    let members = client
+        .send(Method::GET, "/vps/members", Some(&owner_cookie), None)
+        .await;
+    let stronger = members
+        .body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|member| member["email"] == "rank-admin@example.test")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let removed = client
+        .send_with(
+            Method::DELETE,
+            &format!("/vps/members/{stronger}"),
+            Some(&delegate),
+            None,
+            &[("x-vps-owner", &owner.to_string())],
+        )
+        .await;
+    assert_eq!(removed.status, StatusCode::UNPROCESSABLE_ENTITY);
+}

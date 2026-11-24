@@ -379,6 +379,9 @@ fn english(message: &str) -> Option<&'static str> {
             "Something went wrong at the platform. Try again later or contact support."
         }
         "In de demo kun je dit niet wijzigen." => "You cannot change this in the demo.",
+        "Deze gebruiker heeft rechten die jij niet hebt. Vraag de eigenaar om dit aan te passen." => {
+            "This user has rights you do not have. Ask the owner to change this."
+        }
         _ => return None,
     })
 }

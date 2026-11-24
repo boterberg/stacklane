@@ -72,6 +72,7 @@ fn known(permission: &str) -> bool {
 pub struct VpsActor {
     pub owner: Uuid,
     permissions: Option<BTreeSet<String>>,
+    via_api_token: bool,
 }
 
 impl VpsActor {
@@ -91,6 +92,13 @@ impl VpsActor {
         } else {
             Err(AppError::Forbidden)
         }
+    }
+
+    fn manage_members(&self) -> AppResult<()> {
+        if self.via_api_token {
+            return Err(AppError::Forbidden);
+        }
+        self.require("access.users")
     }
 
     pub fn require_owner(&self) -> AppResult<()> {
@@ -124,6 +132,7 @@ impl FromRequestParts<AppState> for VpsActor {
             return Ok(Self {
                 owner: user.id,
                 permissions: None,
+                via_api_token: user.via_api_token,
             });
         };
         let permissions: Vec<String> = sqlx::query_scalar(
@@ -139,6 +148,7 @@ impl FromRequestParts<AppState> for VpsActor {
         Ok(Self {
             owner,
             permissions: Some(permissions.into_iter().collect()),
+            via_api_token: user.via_api_token,
         })
     }
 }
@@ -209,6 +219,24 @@ fn clean(actor: &VpsActor, permissions: Vec<String>) -> AppResult<Vec<String>> {
     Ok(set.into_iter().collect())
 }
 
+async fn outranks(state: &AppState, actor: &VpsActor, id: Uuid) -> AppResult<()> {
+    let current: Vec<String> =
+        sqlx::query_scalar("SELECT permissions FROM vps_members WHERE id = $1 AND owner_id = $2")
+            .bind(id)
+            .bind(actor.owner)
+            .fetch_optional(&state.db)
+            .await?
+            .ok_or(AppError::NotFound)?;
+    if current.iter().all(|permission| actor.can(permission)) {
+        Ok(())
+    } else {
+        Err(AppError::field(
+            "permissions",
+            "Deze gebruiker heeft rechten die jij niet hebt. Vraag de eigenaar om dit aan te passen.",
+        ))
+    }
+}
+
 pub async fn me(State(state): State<AppState>, actor: VpsActor) -> AppResult<Json<Me>> {
     let owner_name: String = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         "SELECT {NAME} FROM users u WHERE u.id = $1"
@@ -256,7 +284,7 @@ pub async fn create(
     actor: VpsActor,
     Json(input): Json<NewMember>,
 ) -> AppResult<StatusCode> {
-    actor.require("access.users")?;
+    actor.manage_members()?;
     state
         .limits
         .check(&crate::limits::INVITE, &actor.owner.to_string())?;
@@ -265,10 +293,11 @@ pub async fn create(
     if email.is_empty() {
         return Err(AppError::field("email", "Vul een e-mailadres in."));
     }
-    let user: Option<Uuid> = sqlx::query_scalar("SELECT id FROM users WHERE email = $1")
-        .bind(email)
-        .fetch_optional(&state.db)
-        .await?;
+    let user: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL")
+            .bind(email)
+            .fetch_optional(&state.db)
+            .await?;
     let Some(user) = user else {
         return Err(AppError::field(
             "email",
@@ -281,9 +310,14 @@ pub async fn create(
             "Dit is de eigenaar van deze omgeving.",
         ));
     }
+    let mut transaction = state.db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1::text))")
+        .bind(format!("members {}", actor.owner))
+        .execute(&mut *transaction)
+        .await?;
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM vps_members WHERE owner_id = $1")
         .bind(actor.owner)
-        .fetch_one(&state.db)
+        .fetch_one(&mut *transaction)
         .await?;
     if count >= MAX_MEMBERS {
         return Err(AppError::field(
@@ -299,11 +333,12 @@ pub async fn create(
     .bind(actor.owner)
     .bind(user)
     .bind(&permissions)
-    .execute(&state.db)
+    .execute(&mut *transaction)
     .await?;
     if inserted.rows_affected() == 0 {
         return Err(AppError::field("email", "Deze gebruiker heeft al toegang."));
     }
+    transaction.commit().await?;
     let owner: String = sqlx::query_scalar("SELECT email::text FROM users WHERE id = $1")
         .bind(actor.owner)
         .fetch_one(&state.db)
@@ -331,8 +366,9 @@ pub async fn update(
     Path(id): Path<Uuid>,
     Json(input): Json<Rights>,
 ) -> AppResult<StatusCode> {
-    actor.require("access.users")?;
+    actor.manage_members()?;
     let permissions = clean(&actor, input.permissions)?;
+    outranks(&state, &actor, id).await?;
     let updated = sqlx::query(
         "UPDATE vps_members SET permissions = $3, updated_at = now() WHERE id = $1 AND owner_id = $2",
     )
@@ -352,7 +388,8 @@ pub async fn destroy(
     actor: VpsActor,
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
-    actor.require("access.users")?;
+    actor.manage_members()?;
+    outranks(&state, &actor, id).await?;
     let deleted = sqlx::query("DELETE FROM vps_members WHERE id = $1 AND owner_id = $2")
         .bind(id)
         .bind(actor.owner)
