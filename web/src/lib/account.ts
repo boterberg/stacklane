@@ -36,13 +36,13 @@ export function useDeleteApiToken() {
 
 export function useChangePassword() {
   return useMutation({
-    mutationFn: (input: { current_password: string; password: string }) => api<void>('/account/password', { method: 'PUT', body: input }),
+    mutationFn: (input: { current_password: string; password: string; revoke_tokens: boolean }) => api<void>('/account/password', { method: 'PUT', body: input }),
   })
 }
 
 export function useLogoutOtherSessions() {
   return useMutation({
-    mutationFn: (password: string) => api<void>('/account/sessions/logout-others', { method: 'POST', body: { password } }),
+    mutationFn: (input: { password: string; revoke_tokens: boolean }) => api<void>('/account/sessions/logout-others', { method: 'POST', body: input }),
   })
 }
 

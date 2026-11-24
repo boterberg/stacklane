@@ -813,6 +813,7 @@ export const en: Record<string, string> = {
   "Toont {from} tot {to} van {total} resultaten": "Showing {from} to {to} of {total} results",
   "Totaal": "Total",
   "Totaal per maand": "Total per month",
+  "Trek ook al je API-tokens in": "Also revoke all your API tokens",
   "Tussen 10 en 2000 GB.": "Between 10 and 2000 GB.",
   "Tweestapsverificatie": "Two-factor authentication",
   "Typ een commando, bijvoorbeeld list": "Type a command, for example list",

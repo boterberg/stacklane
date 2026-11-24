@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
-import { Field, Input } from '../../components/ui/Field'
+import { Checkbox, Field, Input } from '../../components/ui/Field'
 import { useChangePassword } from '../../lib/account'
 import { ApiError } from '../../lib/api'
 import { t } from '../../lib/i18n'
@@ -11,6 +11,7 @@ export function PasswordTab() {
   const change = useChangePassword()
   const [form, setForm] = useState({ current: '', password: '', confirm: '' })
   const [mismatch, setMismatch] = useState(false)
+  const [revokeTokens, setRevokeTokens] = useState(true)
   const errors = change.error instanceof ApiError ? change.error.fieldErrors : {}
 
   function submit(event: FormEvent) {
@@ -18,7 +19,7 @@ export function PasswordTab() {
     const differs = form.password !== form.confirm
     setMismatch(differs)
     if (differs) return
-    change.mutate({ current_password: form.current, password: form.password }, { onSuccess: () => setForm({ current: '', password: '', confirm: '' }) })
+    change.mutate({ current_password: form.current, password: form.password, revoke_tokens: revokeTokens }, { onSuccess: () => setForm({ current: '', password: '', confirm: '' }) })
   }
 
   return (
@@ -52,6 +53,7 @@ export function PasswordTab() {
           <Field label={t('Nieuw wachtwoord bevestigen')} error={mismatch ? t('De wachtwoorden zijn niet hetzelfde.') : undefined}>
             {(id) => <Input id={id} type="password" autoComplete="new-password" invalid={mismatch} value={form.confirm} onChange={(event) => setForm({ ...form, confirm: event.target.value })} />}
           </Field>
+          <Checkbox label={t('Trek ook al je API-tokens in')} checked={revokeTokens} onChange={(event) => setRevokeTokens(event.target.checked)} />
         </div>
       </Card>
     </form>
