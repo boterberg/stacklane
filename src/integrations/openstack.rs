@@ -64,6 +64,7 @@ enum Service {
     Compute,
     Image,
     Network,
+    Volume,
 }
 
 struct Session {
@@ -71,6 +72,7 @@ struct Session {
     compute: String,
     image: String,
     network: String,
+    volume: Option<String>,
 }
 
 pub struct OpenStack {
@@ -82,6 +84,7 @@ pub struct OpenStack {
 }
 
 const COMPUTE_VERSION: &str = "compute 2.47";
+const VOLUME_VERSION: &str = "volume 3.42";
 
 fn error_message(body: &Value) -> Option<String> {
     let nested = body
@@ -192,6 +195,9 @@ impl OpenStack {
             compute: endpoint("compute")?,
             image: endpoint("image")?,
             network: endpoint("network")?,
+            volume: endpoint("block-storage")
+                .or_else(|_| endpoint("volumev3"))
+                .ok(),
             token,
         })
     }
@@ -208,12 +214,20 @@ impl OpenStack {
             Service::Compute => &session.compute,
             Service::Image => &session.image,
             Service::Network => &session.network,
+            Service::Volume => session
+                .volume
+                .as_ref()
+                .context("deze OpenStack heeft geen blokopslag (Cinder)")?,
+        };
+        let version = match service {
+            Service::Volume => VOLUME_VERSION,
+            _ => COMPUTE_VERSION,
         };
         let mut request = self
             .http
             .request(method, format!("{base}{path}"))
             .header("X-Auth-Token", &session.token)
-            .header("OpenStack-API-Version", COMPUTE_VERSION);
+            .header("OpenStack-API-Version", version);
         if let Some(body) = body {
             request = request.json(&body);
         }
@@ -453,6 +467,111 @@ impl OpenStack {
             None,
         )
         .await?;
+        Ok(())
+    }
+
+    async fn volume_status(&self, volume: &str) -> anyhow::Result<String> {
+        let body = self
+            .call(
+                Service::Volume,
+                Method::GET,
+                &format!("/volumes/{volume}"),
+                None,
+            )
+            .await?;
+        Ok(body["volume"]["status"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned())
+    }
+
+    async fn wait_for_volume(&self, volume: &str, wanted: &str) -> anyhow::Result<()> {
+        for _ in 0..120 {
+            let status = self.volume_status(volume).await?;
+            if status == wanted {
+                return Ok(());
+            }
+            if status.starts_with("error") {
+                bail!("OpenStack meldt een fout bij het volume ({status})");
+            }
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        }
+        bail!("het volume werd niet op tijd {wanted}")
+    }
+
+    pub async fn create_volume(
+        &self,
+        server: &str,
+        name: &str,
+        size_gb: u32,
+    ) -> anyhow::Result<String> {
+        let body = self
+            .call(
+                Service::Volume,
+                Method::POST,
+                "/volumes",
+                Some(json!({ "volume": { "size": size_gb, "name": name } })),
+            )
+            .await?;
+        let volume = body["volume"]["id"]
+            .as_str()
+            .context("OpenStack gaf geen volume-ID terug")?
+            .to_owned();
+        self.wait_for_volume(&volume, "available").await?;
+        self.attach_volume(server, &volume).await?;
+        Ok(volume)
+    }
+
+    pub async fn attach_volume(&self, server: &str, volume: &str) -> anyhow::Result<()> {
+        self.call(
+            Service::Compute,
+            Method::POST,
+            &format!("/servers/{server}/os-volume_attachments"),
+            Some(json!({ "volumeAttachment": { "volumeId": volume } })),
+        )
+        .await?;
+        self.wait_for_volume(volume, "in-use").await
+    }
+
+    pub async fn detach_volume(&self, server: &str, volume: &str) -> anyhow::Result<()> {
+        if self.volume_status(volume).await? == "available" {
+            return Ok(());
+        }
+        let (status, body) = self
+            .send(
+                Service::Compute,
+                Method::DELETE,
+                &format!("/servers/{server}/os-volume_attachments/{volume}"),
+                None,
+            )
+            .await?;
+        if !status.is_success() && status != StatusCode::NOT_FOUND {
+            bail!(
+                "OpenStack antwoordde {status}: {}",
+                error_message(&body).unwrap_or_else(|| "onbekende fout".to_owned())
+            );
+        }
+        self.wait_for_volume(volume, "available").await
+    }
+
+    pub async fn delete_volume(&self, server: Option<&str>, volume: &str) -> anyhow::Result<()> {
+        if let Some(server) = server {
+            self.detach_volume(server, volume).await?;
+        }
+        let (status, body) = self
+            .send(
+                Service::Volume,
+                Method::DELETE,
+                &format!("/volumes/{volume}"),
+                None,
+            )
+            .await?;
+        if !status.is_success() && status != StatusCode::NOT_FOUND {
+            bail!(
+                "OpenStack antwoordde {status}: {}",
+                error_message(&body).unwrap_or_else(|| "onbekende fout".to_owned())
+            );
+        }
         Ok(())
     }
 

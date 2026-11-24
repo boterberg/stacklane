@@ -6,6 +6,7 @@ pub mod plesk;
 pub mod proxmox;
 pub mod pterodactyl;
 pub mod virtfusion;
+pub mod volumes;
 pub mod vps;
 pub mod webhosting;
 

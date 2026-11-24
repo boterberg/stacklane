@@ -92,6 +92,25 @@ fn encode_ssh_keys(keys: &[String]) -> String {
         .collect()
 }
 
+const DISK_PREFIXES: [&str; 5] = ["scsi", "virtio", "sata", "ide", "unused"];
+
+pub fn disk_key(config: &Value, volid: &str) -> Option<String> {
+    config.as_object()?.iter().find_map(|(key, value)| {
+        let is_disk = DISK_PREFIXES.iter().any(|prefix| {
+            key.strip_prefix(prefix)
+                .is_some_and(|rest| !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()))
+        });
+        (is_disk && value.as_str()?.split(',').next()? == volid).then(|| key.clone())
+    })
+}
+
+pub fn free_disk_key(config: &Value) -> anyhow::Result<String> {
+    (1..=30)
+        .map(|index| format!("scsi{index}"))
+        .find(|key| config.get(key).is_none())
+        .context("deze server heeft geen vrije schijfplaats meer")
+}
+
 pub fn ip_range(settings: &Settings) -> impl Iterator<Item = Ipv4Addr> {
     (u32::from(settings.ip_from)..=u32::from(settings.ip_to)).map(Ipv4Addr::from)
 }
@@ -328,6 +347,90 @@ impl Proxmox {
         Ok(())
     }
 
+    async fn config(&self, vmid: u32) -> anyhow::Result<Value> {
+        self.request(Method::GET, &format!("{}/config", self.vm_path(vmid)), None)
+            .await
+    }
+
+    pub async fn create_volume(&self, vmid: u32, size_gb: u32) -> anyhow::Result<String> {
+        let key = free_disk_key(&self.config(vmid).await?)?;
+        self.run(
+            Method::POST,
+            &format!("{}/config", self.vm_path(vmid)),
+            &[(&key, format!("{}:{size_gb}", self.settings.storage))],
+        )
+        .await?;
+        let config = self.config(vmid).await?;
+        config[&key]
+            .as_str()
+            .and_then(|value| value.split(',').next())
+            .map(str::to_owned)
+            .context("Proxmox maakte geen schijf aan")
+    }
+
+    async fn unused_key(&self, vmid: u32, volid: &str) -> anyhow::Result<String> {
+        let key = disk_key(&self.config(vmid).await?, volid)
+            .context("de schijf staat niet meer bij deze server")?;
+        if key.starts_with("unused") {
+            return Ok(key);
+        }
+        self.run(
+            Method::POST,
+            &format!("{}/config", self.vm_path(vmid)),
+            &[("delete", key)],
+        )
+        .await?;
+        disk_key(&self.config(vmid).await?, volid)
+            .context("de losgekoppelde schijf is niet gevonden")
+    }
+
+    pub async fn detach_volume(&self, vmid: u32, volid: &str) -> anyhow::Result<()> {
+        self.unused_key(vmid, volid).await.map(|_| ())
+    }
+
+    pub async fn attach_volume(&self, from: u32, volid: &str, to: u32) -> anyhow::Result<String> {
+        let unused = self.unused_key(from, volid).await?;
+        let target = free_disk_key(&self.config(to).await?)?;
+        if from == to {
+            self.run(
+                Method::POST,
+                &format!("{}/config", self.vm_path(to)),
+                &[(&target, volid.to_owned())],
+            )
+            .await?;
+        } else {
+            self.run(
+                Method::POST,
+                &format!("{}/move_disk", self.vm_path(from)),
+                &[
+                    ("disk", unused),
+                    ("target-vmid", to.to_string()),
+                    ("target-disk", target.clone()),
+                ],
+            )
+            .await?;
+        }
+        let config = self.config(to).await?;
+        config[&target]
+            .as_str()
+            .and_then(|value| value.split(',').next())
+            .map(str::to_owned)
+            .context("de schijf staat niet bij de nieuwe server")
+    }
+
+    pub async fn delete_volume(&self, vmid: u32, volid: &str) -> anyhow::Result<()> {
+        if disk_key(&self.config(vmid).await?, volid).is_none() {
+            return Ok(());
+        }
+        let unused = self.unused_key(vmid, volid).await?;
+        self.run(
+            Method::POST,
+            &format!("{}/config", self.vm_path(vmid)),
+            &[("delete", unused)],
+        )
+        .await
+    }
+
     pub async fn snapshots(&self, vmid: u32) -> anyhow::Result<Vec<Snapshot>> {
         let list = self
             .request(
@@ -474,6 +577,26 @@ mod tests {
             "ip_to": "10.10.10.102",
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn finds_disks_by_volume() {
+        let config = serde_json::json!({
+            "scsi0": "local-lvm:vm-101-disk-0,size=20G",
+            "scsi1": "local-lvm:vm-101-disk-1,size=10G",
+            "unused0": "local-lvm:vm-101-disk-2",
+            "scsihw": "virtio-scsi-pci",
+        });
+        assert_eq!(
+            super::disk_key(&config, "local-lvm:vm-101-disk-1").as_deref(),
+            Some("scsi1")
+        );
+        assert_eq!(
+            super::disk_key(&config, "local-lvm:vm-101-disk-2").as_deref(),
+            Some("unused0")
+        );
+        assert_eq!(super::disk_key(&config, "local-lvm:vm-101-disk-9"), None);
+        assert_eq!(super::free_disk_key(&config).unwrap(), "scsi2");
     }
 
     #[test]

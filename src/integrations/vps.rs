@@ -42,6 +42,7 @@ pub struct FirewallRule {
 pub struct Features {
     pub snapshots: bool,
     pub firewall: bool,
+    pub volumes: bool,
     pub panel: bool,
 }
 
@@ -61,6 +62,7 @@ impl Machine {
         Features {
             snapshots: !virtfusion,
             firewall: !virtfusion,
+            volumes: !virtfusion,
             panel: virtfusion,
         }
     }
