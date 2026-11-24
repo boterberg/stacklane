@@ -27,6 +27,8 @@ pub struct Settings {
     pub bridge: String,
     #[serde(default = "default_storage")]
     pub storage: String,
+    #[serde(default = "default_storage")]
+    pub iso_storage: String,
     pub gateway: Ipv4Addr,
     #[serde(default = "default_prefix")]
     pub prefix: u8,
@@ -177,12 +179,16 @@ impl Proxmox {
     }
 
     async fn wait_for_task(&self, upid: &str) -> anyhow::Result<()> {
+        self.wait_for_task_up_to(upid, 600).await
+    }
+
+    async fn wait_for_task_up_to(&self, upid: &str, seconds: u32) -> anyhow::Result<()> {
         let path = format!(
             "/nodes/{}/tasks/{}/status",
             self.settings.node,
             upid.replace('!', "%21")
         );
-        for _ in 0..600 {
+        for _ in 0..seconds {
             let task = self.request(Method::GET, &path, None).await?;
             if task["status"] == "stopped" {
                 return match task["exitstatus"].as_str() {
@@ -429,6 +435,101 @@ impl Proxmox {
             &[("delete", unused)],
         )
         .await
+    }
+
+    fn iso_volume(&self, file: &str) -> String {
+        format!("{}:iso/{file}", self.settings.iso_storage)
+    }
+
+    pub async fn import_iso(&self, file: &str, url: &str) -> anyhow::Result<()> {
+        let upid = self
+            .request(
+                Method::POST,
+                &format!(
+                    "/nodes/{}/storage/{}/download-url",
+                    self.settings.node, self.settings.iso_storage
+                ),
+                Some(&[
+                    ("content", "iso".to_owned()),
+                    ("filename", file.to_owned()),
+                    ("url", url.to_owned()),
+                    ("verify-certificates", "1".to_owned()),
+                ]),
+            )
+            .await?;
+        match upid.as_str() {
+            Some(upid) => self.wait_for_task_up_to(upid, 3600).await,
+            None => Ok(()),
+        }
+    }
+
+    pub async fn delete_iso(&self, file: &str) -> anyhow::Result<()> {
+        let volume = self.iso_volume(file);
+        self.request(
+            Method::DELETE,
+            &format!(
+                "/nodes/{}/storage/{}/content/{}",
+                self.settings.node,
+                self.settings.iso_storage,
+                volume.replace('/', "%2F")
+            ),
+            None,
+        )
+        .await
+        .map(|_| ())
+    }
+
+    pub async fn mount_iso(&self, vmid: u32, file: &str, uefi: bool) -> anyhow::Result<()> {
+        let mut options = vec![
+            ("ide2", format!("{},media=cdrom", self.iso_volume(file))),
+            ("boot", "order=ide2;scsi0".to_owned()),
+        ];
+        let config = self.config(vmid).await?;
+        if uefi {
+            options.push(("bios", "ovmf".to_owned()));
+            if config.get("efidisk0").is_none() {
+                options.push((
+                    "efidisk0",
+                    format!("{}:1,efitype=4m,pre-enrolled-keys=0", self.settings.storage),
+                ));
+            }
+        } else if config.get("bios").is_some() {
+            options.push(("delete", "bios".to_owned()));
+        }
+        self.run(
+            Method::POST,
+            &format!("{}/config", self.vm_path(vmid)),
+            &options,
+        )
+        .await?;
+        self.restart_if_running(vmid).await
+    }
+
+    pub async fn unmount_iso(&self, vmid: u32) -> anyhow::Result<()> {
+        self.run(
+            Method::POST,
+            &format!("{}/config", self.vm_path(vmid)),
+            &[
+                ("ide2", "none,media=cdrom".to_owned()),
+                ("boot", "order=scsi0".to_owned()),
+            ],
+        )
+        .await?;
+        self.restart_if_running(vmid).await
+    }
+
+    async fn restart_if_running(&self, vmid: u32) -> anyhow::Result<()> {
+        let status = self
+            .request(
+                Method::GET,
+                &format!("{}/status/current", self.vm_path(vmid)),
+                None,
+            )
+            .await?;
+        if status["status"] == "running" {
+            self.power(vmid, "reboot").await?;
+        }
+        Ok(())
     }
 
     pub async fn snapshots(&self, vmid: u32) -> anyhow::Result<Vec<Snapshot>> {
