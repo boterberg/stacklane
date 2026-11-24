@@ -3,6 +3,7 @@ mod dashboard;
 mod health;
 mod me;
 mod notifications;
+mod support;
 
 use axum::http::StatusCode;
 use axum::routing::{any, get, patch, post};
@@ -22,6 +23,14 @@ pub fn router(state: AppState) -> Router {
         .route("/me/settings", patch(me::update_settings))
         .route("/dashboard", get(dashboard::show))
         .route("/notifications", get(notifications::index))
+        .route("/support/departments", get(support::departments))
+        .route(
+            "/support/tickets",
+            get(support::index).post(support::create),
+        )
+        .route("/support/tickets/{number}", get(support::show))
+        .route("/support/tickets/{number}/replies", post(support::reply))
+        .route("/support/tickets/{number}/close", post(support::close))
         .route("/{*rest}", any(api_not_found));
 
     let router = Router::new()

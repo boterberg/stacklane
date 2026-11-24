@@ -8,7 +8,8 @@ import { PageHeader } from '../components/ui/Heading'
 import { LinkCard } from '../components/ui/LinkCard'
 import { api } from '../lib/api'
 import { formatDate, formatRelative } from '../lib/format'
-import { ticketStatusLabels, type TicketStatus } from '../lib/labels'
+import { Badge } from '../components/ui/Badge'
+import { ticketStatusColors, ticketStatusLabels, type TicketStatus } from '../lib/labels'
 
 type Dashboard = {
   active_tickets: Array<{ id: string; number: number; subject: string; status: TicketStatus; department: string; last_reply_at: string }>
@@ -42,9 +43,7 @@ export function DashboardPage() {
                           #{ticket.number} · {ticket.department} · {formatRelative(ticket.last_reply_at)}
                         </p>
                       </div>
-                      <span className="shrink-0 rounded-md bg-zinc-400/15 px-2 py-1 text-xs font-medium text-zinc-700 dark:bg-zinc-400/40 dark:text-zinc-200">
-                        {ticketStatusLabels[ticket.status]}
-                      </span>
+                      <Badge color={ticketStatusColors[ticket.status]}>{ticketStatusLabels[ticket.status]}</Badge>
                     </Link>
                   </li>
                 ))}

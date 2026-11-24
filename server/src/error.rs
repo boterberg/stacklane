@@ -9,6 +9,8 @@ use serde_json::json;
 pub enum AppError {
     #[error("unauthenticated")]
     Unauthenticated,
+    #[error("not found")]
+    NotFound,
     #[error("validation failed")]
     Validation(BTreeMap<&'static str, String>),
     #[error(transparent)]
@@ -31,6 +33,11 @@ impl IntoResponse for AppError {
             Self::Unauthenticated => (
                 StatusCode::UNAUTHORIZED,
                 Json(json!({ "message": "Je bent niet ingelogd." })),
+            )
+                .into_response(),
+            Self::NotFound => (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "message": "Niet gevonden." })),
             )
                 .into_response(),
             Self::Validation(errors) => (

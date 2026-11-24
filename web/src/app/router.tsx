@@ -7,6 +7,8 @@ import { LoginPage } from '../pages/auth/LoginPage'
 import { RegisterPage } from '../pages/auth/RegisterPage'
 import { DashboardPage } from '../pages/DashboardPage'
 import { NotFoundPage, SectionPage } from '../pages/SectionPage'
+import { TicketDetailPage } from '../pages/support/TicketDetailPage'
+import { TicketsPage } from '../pages/support/TicketsPage'
 
 const sections: Array<[string, string]> = [
   ['/gameservers/servers', 'Servers'],
@@ -15,7 +17,6 @@ const sections: Array<[string, string]> = [
   ['/domains', 'Domeinen'],
   ['/domains/whois-profiles', 'WHOIS-profielen'],
   ['/webhosting', 'Webhosting'],
-  ['/support/tickets', 'Tickets'],
   ['/billing/subscriptions', 'Abonnementen'],
   ['/billing/invoices', 'Facturen'],
   ['/account/profile', 'Account'],
@@ -35,6 +36,8 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { path: '/', element: <DashboardPage /> },
+      { path: '/support/tickets', element: <TicketsPage /> },
+      { path: '/support/tickets/:number', element: <TicketDetailPage /> },
       ...sections.map(([path, title]) => ({ path, element: <SectionPage title={title} /> })),
       { path: '*', element: <NotFoundPage /> },
     ],
