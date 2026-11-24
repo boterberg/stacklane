@@ -81,7 +81,7 @@ export function useLogout() {
 export function usePreferences() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: { locale?: string; theme?: Theme }) => api<Profile>('/me/settings', { method: 'PATCH', body: input }),
+    mutationFn: (input: { locale?: string; theme?: Theme; timezone?: string }) => api<Profile>('/me/settings', { method: 'PATCH', body: input }),
     onSuccess: (profile) => queryClient.setQueryData(meQueryKey, profile),
   })
 }

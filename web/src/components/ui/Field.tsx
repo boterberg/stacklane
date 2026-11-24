@@ -1,4 +1,4 @@
-import { useId, type ComponentProps, type ReactNode } from 'react'
+import { useId, type ComponentProps, type ComponentType, type ReactNode, type SVGProps } from 'react'
 
 import { cn } from '../../lib/cn'
 
@@ -30,8 +30,17 @@ export function Field({ label, description, error, aside, children }: FieldProps
 const control =
   'block h-10 w-full rounded-lg border border-zinc-200 border-b-zinc-300/80 bg-white px-3 text-base text-zinc-700 shadow-xs placeholder:text-zinc-400 focus:outline-2 focus:-outline-offset-1 focus:outline-zinc-800/15 sm:text-sm dark:border-white/10 dark:bg-white/10 dark:text-zinc-300 dark:placeholder:text-zinc-400 dark:focus:outline-white/20'
 
-export function Input({ className, invalid, ...rest }: ComponentProps<'input'> & { invalid?: boolean }) {
-  return <input className={cn(control, invalid && 'border-red-500 dark:border-red-400', className)} {...rest} />
+type IconComponent = ComponentType<SVGProps<SVGSVGElement>>
+
+export function Input({ className, invalid, icon: Icon, ...rest }: ComponentProps<'input'> & { invalid?: boolean; icon?: IconComponent }) {
+  const input = <input className={cn(control, invalid && 'border-red-500 dark:border-red-400', Icon && 'pl-9', className)} {...rest} />
+  if (!Icon) return input
+  return (
+    <div className="relative">
+      <Icon className="pointer-events-none absolute top-1/2 left-3 size-4.5 -translate-y-1/2 text-zinc-400 dark:text-white/40" aria-hidden />
+      {input}
+    </div>
+  )
 }
 
 export function Select({ className, children, ...rest }: ComponentProps<'select'>) {

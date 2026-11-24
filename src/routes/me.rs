@@ -62,6 +62,18 @@ pub async fn update_settings(
             "Deze taal wordt niet ondersteund.",
         ));
     }
+    if let Some(timezone) = input.timezone.as_deref()
+        && (timezone.is_empty()
+            || timezone.len() > 64
+            || !timezone
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric() || "/_+-".contains(character)))
+    {
+        return Err(AppError::field(
+            "timezone",
+            "Kies een tijdzone uit de lijst.",
+        ));
+    }
     sqlx::query(
         "UPDATE users SET theme = COALESCE($2, theme), locale = COALESCE($3, locale), timezone = COALESCE($4, timezone), updated_at = now()
          WHERE id = $1",

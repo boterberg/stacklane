@@ -75,3 +75,74 @@ export function useDisableTwoFactor() {
 export function useNewRecoveryCodes() {
   return useTwoFactorAction<string, { recovery_codes: string[] }>('recovery-codes', (password) => ({ password }))
 }
+
+export type AccountDetails = {
+  first_name: string
+  last_name: string
+  email: string
+  invoice_email: string | null
+  phone: string | null
+  is_business: boolean
+  company_name: string | null
+  coc_number: string | null
+  tax_id: string | null
+  country: string
+  address_line1: string | null
+  address_line2: string | null
+  postal_code: string | null
+  city: string | null
+}
+
+export function useAccount() {
+  return useQuery({ queryKey: ['account', 'details'], queryFn: () => api<AccountDetails>('/account') })
+}
+
+export function useSaveAccount() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: AccountDetails) => api<AccountDetails>('/account', { method: 'PUT', body: input }),
+    onSuccess: (account) => {
+      queryClient.setQueryData(['account', 'details'], account)
+      queryClient.invalidateQueries({ queryKey: ['me'] })
+    },
+  })
+}
+
+export type PaymentDefaults = { mode: 'manual' | 'automatic'; mandate_id: string | null }
+
+export function usePaymentDefaults() {
+  return useQuery({ queryKey: ['account', 'payment-defaults'], queryFn: () => api<PaymentDefaults>('/account/payment-defaults') })
+}
+
+export function useSavePaymentDefaults() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: PaymentDefaults) => api<PaymentDefaults>('/account/payment-defaults', { method: 'PUT', body: input }),
+    onSuccess: (defaults) => {
+      queryClient.setQueryData(['account', 'payment-defaults'], defaults)
+      queryClient.invalidateQueries({ queryKey: ['billing'] })
+    },
+  })
+}
+
+export function useRevokeMandate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api<void>(`/billing/mandates/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['billing'] })
+      queryClient.invalidateQueries({ queryKey: ['account', 'payment-defaults'] })
+    },
+  })
+}
+
+export function useDeleteAccount() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (password: string) => api<void>('/account/delete', { method: 'POST', body: { password } }),
+    onSuccess: () => {
+      queryClient.clear()
+      queryClient.setQueryData(['me'], null)
+    },
+  })
+}

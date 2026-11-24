@@ -164,6 +164,7 @@ fn english(message: &str) -> Option<&'static str> {
         "Zet eerst 2FA aan." => "Turn on 2FA first.",
         "Vul de code uit je authenticator-app in." => "Enter the code from your authenticator app.",
         "Deze code klopt niet." => "This code is not correct.",
+        "Kies een tijdzone uit de lijst." => "Choose a time zone from the list.",
         "Vul je voornaam in." => "Enter your first name.",
         "In de demo kun je het e-mailadres niet wijzigen." => {
             "You cannot change the email address in the demo."
