@@ -565,6 +565,16 @@ pub async fn destroy(
     actor.require("firewalls.delete")?;
     owned(&state, &actor, id).await?;
     let problems = sync_all(&state, actor.owner, id, &attached(&state, id).await?, &[]).await;
+    if !problems.is_empty() {
+        let servers: Vec<&str> = problems.iter().map(|problem| problem.server.as_str()).collect();
+        return Err(AppError::field(
+            "firewall",
+            format!(
+                "De regels konden niet van {} worden gehaald. De firewall blijft staan; probeer het later opnieuw.",
+                servers.join(", ")
+            ),
+        ));
+    }
     sqlx::query("DELETE FROM vps_firewalls WHERE id = $1 AND user_id = $2")
         .bind(id)
         .bind(actor.owner)
