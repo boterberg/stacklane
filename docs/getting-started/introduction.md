@@ -1,6 +1,6 @@
 # Introductie
 
-Stacklane is het panel waar de klanten van je hostingbedrijf inloggen. Ze zien er hun overzicht en stellen vragen aan je supportteam. Je draait het zelf, op een server die je al hebt of een nieuwe.
+Stacklane is het panel waar de klanten van je hostingbedrijf inloggen. Ze bestellen er gameservers, VPS'en en webhosting, betalen hun facturen en stellen vragen aan je supportteam. Je draait het zelf, op een server die je al hebt of een nieuwe.
 
 ::: warning Vroege versie
 Stacklane is net begonnen. Kijk bij de [releases](/releases/) wat er in de huidige versie zit, en gebruik het nog niet voor betalende klanten.
@@ -19,10 +19,13 @@ Stacklane is net begonnen. Kijk bij de [releases](/releases/) wat er in de huidi
 | Betalen met Mollie, Stripe of een overboeking | 1.0.0.0 |
 | Tweestapsverificatie en API-tokens | 1.0.0.0 |
 | Import uit Pterodactyl, WHMCS en Paymenter | 1.0.0.0 |
+| VPS op Proxmox VE: bestellen, aan en uit, snapshots, firewall | 1.1.0.0 |
+| Webhosting op DirectAdmin en Plesk, inloggen met één klik | 1.1.0.0 |
+| Bestellen en betalen in het panel | 1.1.0.0 |
 | Nederlands en Engels, licht en donker | 1.0.0.0 |
 | Het commando `stacklane` met setup, update, status en import | 1.0.0.0 |
 
-VPS, domeinen en webhosting staan op de [roadmap](/#roadmap).
+Domeinen, cPanel en VPS op OpenStack en VirtFusion staan op de [roadmap](/#roadmap).
 
 ## Hoe het in elkaar zit
 
