@@ -79,7 +79,7 @@ Vergroten kan nog niet. Een volume opzeggen gaat via het abonnement.
 
 Een klant kan onder **VPS → ISO's** twee eigen ISO's importeren via een publieke https-link, met BIOS of UEFI. Stacklane haalt de ISO op de achtergrond binnen. Daarna kiest de klant op de serverpagina onder **ISO** welke ISO hij koppelt; de server herstart en start vanaf de ISO. Na het loskoppelen start hij weer van de eigen schijf.
 
-Stacklane weigert links naar privé-adressen, localhost en link-local adressen, zodat niemand via een ISO-import je interne netwerk kan aftasten. ISO's die dertig dagen niet gekoppeld zijn, ruimt Stacklane zelf op.
+Stacklane weigert links naar privé-adressen, localhost, link-local adressen en IPv6-adressen die naar zo'n adres vertalen, zodat niemand via een ISO-import je interne netwerk kan aftasten. De download zelf doet de hypervisor, en die volgt een doorverwijzing of een DNS-naam die later naar een ander adres wijst. Laat de hypervisor daarom niet bij je beheernetwerk of andere interne diensten komen; een uitgaande firewall op de node is genoeg. Een download die vastloopt, stopt Stacklane na een uur en ruimt het halve bestand op. ISO's die dertig dagen niet gekoppeld zijn, ruimt Stacklane zelf op.
 
 | Platform | Hoe het werkt |
 | --- | --- |

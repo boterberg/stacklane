@@ -62,10 +62,31 @@ impl IsoStore {
     }
 }
 
+fn embedded_v4(ip: std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
+    let segments = ip.segments();
+    let [.., a, b, c, d] = ip.octets();
+    let last = std::net::Ipv4Addr::new(a, b, c, d);
+    if let Some(mapped) = ip.to_ipv4_mapped() {
+        Some(mapped)
+    } else if segments[..6] == [0; 6]
+        || segments[..6] == [0x64, 0xff9b, 0, 0, 0, 0]
+        || segments[..3] == [0x64, 0xff9b, 1]
+    {
+        Some(last)
+    } else if segments[0] == 0x2002 {
+        let [high, low] = [segments[1], segments[2]];
+        Some(std::net::Ipv4Addr::from(
+            (u32::from(high) << 16) | u32::from(low),
+        ))
+    } else {
+        None
+    }
+}
+
 fn public(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(ip) => {
-            let [a, b, ..] = ip.octets();
+            let [a, b, c, _] = ip.octets();
             !(ip.is_private()
                 || ip.is_loopback()
                 || ip.is_link_local()
@@ -74,19 +95,25 @@ fn public(ip: IpAddr) -> bool {
                 || ip.is_documentation()
                 || a == 0
                 || (a == 100 && (64..128).contains(&b))
+                || (a == 192 && b == 0 && c == 0)
+                || (a == 192 && b == 88 && c == 99)
                 || (a == 198 && (18..20).contains(&b))
                 || a >= 224)
         }
         IpAddr::V6(ip) => {
-            let first = ip.segments()[0];
+            let [first, second, ..] = ip.segments();
+            if let Some(v4) = embedded_v4(ip) {
+                return public(IpAddr::V4(v4));
+            }
             !(ip.is_loopback()
                 || ip.is_unspecified()
                 || ip.is_multicast()
                 || (first & 0xfe00) == 0xfc00
                 || (first & 0xffc0) == 0xfe80
-                || ip
-                    .to_ipv4_mapped()
-                    .is_some_and(|v4| !public(IpAddr::V4(v4))))
+                || (first & 0xffc0) == 0xfec0
+                || (first == 0x2001 && second == 0)
+                || (first == 0x2001 && second == 0x0db8)
+                || (first == 0x0100 && second == 0))
         }
     }
 }
@@ -128,10 +155,24 @@ mod tests {
             "fd00::1",
             "fe80::1",
             "::ffff:10.0.0.1",
+            "64:ff9b::a9fe:a9fe",
+            "64:ff9b:1::a00:1",
+            "2002:a9fe:a9fe::1",
+            "::a9fe:a9fe",
+            "2001:0:4136:e378:8000:63bf:3fff:fdd2",
+            "fec0::1",
+            "192.0.0.1",
+            "2001:db8::1",
         ] {
             assert!(!public(ip.parse().unwrap()), "{ip}");
         }
-        for ip in ["1.1.1.1", "93.190.187.230", "2a10:92c0::1"] {
+        for ip in [
+            "1.1.1.1",
+            "93.190.187.230",
+            "2a10:92c0::1",
+            "64:ff9b::101:101",
+            "2002:101:101::1",
+        ] {
             assert!(public(ip.parse().unwrap()), "{ip}");
         }
     }
