@@ -61,6 +61,8 @@ export const router = createBrowserRouter([
       { path: '/admin/integrations', element: <IntegrationsPage /> },
       { path: '/account/profile', element: <AccountPage /> },
       { path: '/account/profile/settings', element: <AccountPage /> },
+      { path: '/account/payment-methods', element: <AccountPage /> },
+      { path: '/account/profile/delete', element: <AccountPage /> },
       { path: '/account/security', element: <SecurityPage /> },
       { path: '/account/security/two-factor', element: <SecurityPage /> },
       { path: '/account/security/sessions', element: <SecurityPage /> },

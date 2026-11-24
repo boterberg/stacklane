@@ -13,7 +13,7 @@ function files(directory) {
   })
 }
 
-const labelFiles = ['app/navigation.ts', 'app/router.tsx', 'lib/labels.ts', 'components/admin/UpdatePanel.tsx', 'pages/admin/InvoicePage.tsx', 'pages/account/SecurityPage.tsx', 'pages/account/AccountPage.tsx', 'pages/account/ApiTokensTab.tsx']
+const labelFiles = ['app/navigation.ts', 'app/router.tsx', 'lib/labels.ts', 'components/admin/UpdatePanel.tsx', 'pages/admin/InvoicePage.tsx', 'pages/account/SecurityPage.tsx', 'pages/account/AccountPage.tsx', 'pages/account/PaymentMethodsTab.tsx', 'pages/account/ApiTokensTab.tsx']
 const missing = new Map()
 
 for (const file of files(root)) {
