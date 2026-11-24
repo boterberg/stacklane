@@ -401,6 +401,17 @@ pub async fn mark_invoice_paid(state: &AppState, invoice_id: i64) -> AppResult<(
                 tracing::warn!(%service_id, ?error, "unsuspending after payment failed");
             }
         }
+        if status != "pending" {
+            let domains: Vec<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM services WHERE subscription_id = $1 AND kind = 'domain' AND status IN ('active', 'suspended')",
+            )
+            .bind(subscription_id)
+            .fetch_all(&state.db)
+            .await?;
+            for service_id in domains {
+                crate::services::renew_domain_in_background(state.clone(), service_id);
+            }
+        }
     }
 
     let locale: String = sqlx::query_scalar("SELECT locale FROM users WHERE id = $1")

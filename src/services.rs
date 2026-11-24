@@ -3,7 +3,9 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
-use crate::integrations::{self, openstack, proxmox, pterodactyl, virtfusion, webhosting};
+use crate::integrations::{
+    self, openprovider, openstack, proxmox, pterodactyl, virtfusion, webhosting,
+};
 use crate::state::AppState;
 
 #[derive(sqlx::FromRow)]
@@ -32,10 +34,11 @@ async fn mark_failed(state: &AppState, service_id: Uuid, error: &anyhow::Error) 
 
 async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()> {
     let context: ProvisionContext = sqlx::query_as(
-        "SELECT s.name, s.kind, s.integration_id, p.provisioning, s.details, u.email::text AS email, u.first_name, u.last_name, u.id AS user_id
+        "SELECT s.name, s.kind, s.integration_id, COALESCE(p.provisioning, '{}'::jsonb) AS provisioning, s.details,
+                u.email::text AS email, u.first_name, u.last_name, u.id AS user_id
          FROM services s
          JOIN users u ON u.id = s.user_id
-         JOIN products p ON p.id = s.product_id
+         LEFT JOIN products p ON p.id = s.product_id
          WHERE s.id = $1",
     )
     .bind(service_id)
@@ -68,6 +71,12 @@ async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()>
                 .provision(&service_id.to_string(), &context.name, &owner, &config)
                 .await?
         }
+        "domain" => match &driver {
+            integrations::Driver::Openprovider(client) => {
+                provision_domain(state, integration_id, client, &context).await?
+            }
+            _ => anyhow::bail!("deze koppeling kan geen domeinen registreren"),
+        },
         "vps" => match &driver {
             integrations::Driver::Proxmox(client) => {
                 provision_vps(state, service_id, integration_id, client, &context).await?
@@ -415,6 +424,126 @@ async fn provision_virtfusion(
         external_id: server_id,
         details,
     })
+}
+
+pub async fn registrar_handle(
+    state: &AppState,
+    integration_id: Uuid,
+    client: &openprovider::Openprovider,
+    profile: &crate::routes::whois_profiles::WhoisProfile,
+) -> anyhow::Result<String> {
+    let existing: Option<String> = sqlx::query_scalar(
+        "SELECT handle FROM whois_profile_handles WHERE whois_profile_id = $1 AND integration_id = $2",
+    )
+    .bind(profile.id)
+    .bind(integration_id)
+    .fetch_optional(&state.db)
+    .await?;
+    if let Some(handle) = existing {
+        return Ok(handle);
+    }
+    let handle = client.create_handle(&profile.contact()).await?;
+    sqlx::query(
+        "INSERT INTO whois_profile_handles (whois_profile_id, integration_id, handle) VALUES ($1, $2, $3)
+         ON CONFLICT (whois_profile_id, integration_id) DO UPDATE SET handle = EXCLUDED.handle",
+    )
+    .bind(profile.id)
+    .bind(integration_id)
+    .bind(&handle)
+    .execute(&state.db)
+    .await?;
+    Ok(handle)
+}
+
+#[derive(Deserialize)]
+struct DomainOrder {
+    whois_profile_id: Uuid,
+    operation: String,
+    #[serde(default)]
+    auth_code: Option<String>,
+}
+
+async fn provision_domain(
+    state: &AppState,
+    integration_id: Uuid,
+    client: &openprovider::Openprovider,
+    context: &ProvisionContext,
+) -> anyhow::Result<pterodactyl::Provisioned> {
+    let order: DomainOrder = serde_json::from_value(context.details.clone())?;
+    let profile =
+        crate::routes::whois_profiles::load(state, context.user_id, order.whois_profile_id)
+            .await
+            .map_err(|_| anyhow::anyhow!("het WHOIS-profiel bestaat niet meer"))?;
+    let handle = registrar_handle(state, integration_id, client, &profile).await?;
+    let nameservers = client.settings().nameservers.clone();
+    let registered = if order.operation == "transfer" {
+        let code = crate::payments::reveal(state, order.auth_code.as_ref())
+            .ok_or_else(|| anyhow::anyhow!("de autorisatiecode ontbreekt"))?;
+        client
+            .transfer(&context.name, &code, &handle, &nameservers)
+            .await?
+    } else {
+        client
+            .register(&context.name, &handle, &nameservers)
+            .await?
+    };
+
+    let mut details = context.details.clone();
+    if let Some(object) = details.as_object_mut() {
+        object.remove("auth_code");
+        object.insert("registrar_status".to_owned(), json!(registered.status));
+        object.insert("expires_on".to_owned(), json!(registered.expires_on));
+        object.insert("nameservers".to_owned(), json!(nameservers));
+    }
+    Ok(pterodactyl::Provisioned {
+        external_id: registered.id.to_string(),
+        details,
+    })
+}
+
+async fn renew_domain(state: &AppState, service_id: Uuid) -> anyhow::Result<()> {
+    let (integration_id, external_id): (Option<Uuid>, Option<String>) = sqlx::query_as(
+        "SELECT integration_id, external_id FROM services WHERE id = $1 AND kind = 'domain'",
+    )
+    .bind(service_id)
+    .fetch_one(&state.db)
+    .await?;
+    let (Some(integration_id), Some(external_id)) = (integration_id, external_id) else {
+        anyhow::bail!("dit domein is nooit geregistreerd");
+    };
+    let integrations::Driver::Openprovider(client) = integrations::driver(state, integration_id)
+        .await
+        .map_err(|error| anyhow::anyhow!("{error}"))?
+    else {
+        anyhow::bail!("deze koppeling kan geen domeinen verlengen");
+    };
+    client.renew(&external_id).await?;
+    let expires_on = client
+        .domain(&external_id)
+        .await
+        .ok()
+        .and_then(|domain| domain.expires_on);
+    sqlx::query(
+        "UPDATE services SET details = details || $2, last_error = NULL, updated_at = now() WHERE id = $1",
+    )
+    .bind(service_id)
+    .bind(json!({ "expires_on": expires_on }))
+    .execute(&state.db)
+    .await?;
+    Ok(())
+}
+
+pub fn renew_domain_in_background(state: AppState, service_id: Uuid) {
+    tokio::spawn(async move {
+        if let Err(error) = renew_domain(&state, service_id).await {
+            tracing::warn!(%service_id, error = %format!("{error:#}"), "renewing a domain failed");
+            let _ = sqlx::query("UPDATE services SET last_error = $2 WHERE id = $1")
+                .bind(service_id)
+                .bind(format!("Verlengen mislukt: {error:#}"))
+                .execute(&state.db)
+                .await;
+        }
+    });
 }
 
 pub fn provision_in_background(state: AppState, service_id: Uuid) {
