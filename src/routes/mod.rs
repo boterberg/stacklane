@@ -12,6 +12,7 @@ pub mod me;
 mod notifications;
 mod payments;
 mod security;
+mod ssh_keys;
 mod support;
 mod system;
 mod two_factor;
@@ -39,6 +40,8 @@ pub fn router(state: AppState) -> Router {
             "/account/payment-defaults",
             get(account::payment_defaults).put(account::update_payment_defaults),
         )
+        .route("/ssh-keys", get(ssh_keys::index).post(ssh_keys::create))
+        .route("/ssh-keys/{id}", delete(ssh_keys::destroy))
         .route("/account/password", put(security::change_password))
         .route("/account/two-factor", get(two_factor::status))
         .route("/account/two-factor/setup", post(two_factor::setup))
