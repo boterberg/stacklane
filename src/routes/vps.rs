@@ -244,18 +244,22 @@ pub async fn firewall(
     Ok(Json(machine.firewall_rules().await.map_err(failed)?))
 }
 
+pub const MAX_PORTS_PER_RULE: usize = 15;
+const MAX_RULES_PER_SERVER: usize = 100;
+
 fn valid_ports(ports: &str) -> bool {
-    ports.split(',').all(|part| {
-        let mut bounds = part.split(':');
-        let ok = |value: Option<&str>| {
-            value.is_some_and(|value| value.parse::<u16>().is_ok_and(|port| port > 0))
-        };
-        match (bounds.next(), bounds.next(), bounds.next()) {
-            (first, None, None) => ok(first),
-            (first, second, None) => ok(first) && ok(second),
-            _ => false,
-        }
-    })
+    ports.split(',').count() <= MAX_PORTS_PER_RULE
+        && ports.split(',').all(|part| {
+            let mut bounds = part.split(':');
+            let ok = |value: Option<&str>| {
+                value.is_some_and(|value| value.parse::<u16>().is_ok_and(|port| port > 0))
+            };
+            match (bounds.next(), bounds.next(), bounds.next()) {
+                (first, None, None) => ok(first),
+                (first, second, None) => ok(first) && ok(second),
+                _ => false,
+            }
+        })
 }
 
 fn valid_source(source: &str) -> bool {
@@ -294,9 +298,14 @@ pub async fn add_firewall_rule(
     {
         return Err(AppError::field(
             "dport",
-            "Vul een poort in, zoals 22, 80,443 of 8000:8100.",
+            "Vul hoogstens 15 poorten of reeksen in, zoals 22, 80,443 of 8000:8100.",
         ));
     }
+    rule.comment = rule
+        .comment
+        .as_deref()
+        .map(|comment| comment.trim().chars().take(80).collect::<String>())
+        .filter(|comment| !comment.is_empty());
     if rule
         .source
         .as_deref()
@@ -308,6 +317,12 @@ pub async fn add_firewall_rule(
         ));
     }
     let machine = machine(&state, &user, id).await?;
+    if machine.firewall_rules().await.map_err(failed)?.len() >= MAX_RULES_PER_SERVER {
+        return Err(AppError::field(
+            "dport",
+            "Deze server heeft al 100 firewallregels. Verwijder er eerst een paar.",
+        ));
+    }
     machine.add_firewall_rule(&rule).await.map_err(failed)?;
     Ok(StatusCode::CREATED)
 }
@@ -337,6 +352,18 @@ mod tests {
         assert!(!valid_ports("0"));
         assert!(!valid_ports("ssh"));
         assert!(!valid_ports("1:2:3"));
+        assert!(valid_ports(
+            &(1..=15)
+                .map(|port| port.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        ));
+        assert!(!valid_ports(
+            &(1..=16)
+                .map(|port| port.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        ));
         assert!(valid_source("203.0.113.4"));
         assert!(valid_source("10.0.0.0/8"));
         assert!(!valid_source("10.0.0.0/40"));
