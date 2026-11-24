@@ -164,6 +164,53 @@ pub async fn snapshots(
     Ok(Json(machine.snapshots().await.map_err(failed)?))
 }
 
+#[derive(Serialize)]
+pub struct ServerSnapshot {
+    server_id: Uuid,
+    server_name: String,
+    #[serde(flatten)]
+    snapshot: vps::Snapshot,
+}
+
+#[derive(Serialize)]
+pub struct SnapshotOverview {
+    snapshots: Vec<ServerSnapshot>,
+    used: usize,
+    limit: usize,
+}
+
+pub async fn all_snapshots(
+    State(state): State<AppState>,
+    user: CurrentUser,
+) -> AppResult<Json<SnapshotOverview>> {
+    let servers: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT id, name FROM services WHERE kind = 'vps' AND status = 'active' AND user_id = $1 ORDER BY name",
+    )
+    .bind(user.id)
+    .fetch_all(&state.db)
+    .await?;
+    let mut snapshots = Vec::new();
+    for (server_id, server_name) in &servers {
+        let Ok(machine) = machine(&state, &user, *server_id).await else {
+            continue;
+        };
+        let Ok(found) = machine.snapshots().await else {
+            continue;
+        };
+        snapshots.extend(found.into_iter().map(|snapshot| ServerSnapshot {
+            server_id: *server_id,
+            server_name: server_name.clone(),
+            snapshot,
+        }));
+    }
+    snapshots.sort_by_key(|item| std::cmp::Reverse(item.snapshot.created_at));
+    Ok(Json(SnapshotOverview {
+        used: snapshots.len(),
+        limit: servers.len() * MAX_SNAPSHOTS,
+        snapshots,
+    }))
+}
+
 #[derive(Deserialize)]
 pub struct NewSnapshot {
     description: Option<String>,

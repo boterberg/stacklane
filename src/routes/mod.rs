@@ -44,6 +44,7 @@ pub fn router(state: AppState) -> Router {
             get(account::payment_defaults).put(account::update_payment_defaults),
         )
         .route("/vps/servers", get(vps::index))
+        .route("/vps/snapshots", get(vps::all_snapshots))
         .route("/vps/servers/{id}", get(vps::show))
         .route("/vps/servers/{id}/power", post(vps::power))
         .route("/vps/servers/{id}/password", get(vps::root_password))
