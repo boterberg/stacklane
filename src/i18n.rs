@@ -318,6 +318,19 @@ fn english(message: &str) -> Option<&'static str> {
         "Koppel de ISO eerst los van de server." => "Detach the ISO from the server first.",
         "Wacht tot de ISO klaar is met importeren." => "Wait until the ISO has finished importing.",
         "Koppel eerst de huidige ISO los." => "Detach the current ISO first.",
+        "Kies minimaal één recht." => "Choose at least one permission.",
+        "Je kunt alleen rechten geven die je zelf hebt." => {
+            "You can only grant permissions you have yourself."
+        }
+        "Er is geen account met dit e-mailadres. Vraag de persoon eerst een account aan te maken." => {
+            "There is no account with this email address. Ask the person to create an account first."
+        }
+        "Dit is de eigenaar van deze omgeving." => "This is the owner of this environment.",
+        "Je kunt hoogstens 25 gebruikers toegang geven." => {
+            "You can give access to at most 25 users."
+        }
+        "Deze gebruiker heeft al toegang." => "This user already has access.",
+        "Vul een e-mailadres in." => "Enter an email address.",
         "Kies een ISO die klaar is." => "Choose an ISO that is ready.",
         "Kies het land van je bedrijf." => "Choose the country of your business.",
         "Vul een btw-nummer uit de EU in, zoals NL123456789B01." => {

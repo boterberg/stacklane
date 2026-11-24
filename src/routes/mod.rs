@@ -21,6 +21,7 @@ mod support;
 mod system;
 mod two_factor;
 mod vps;
+pub mod vps_access;
 pub mod vps_firewalls;
 pub mod vps_isos;
 mod vps_volumes;
@@ -50,6 +51,17 @@ pub fn router(state: AppState) -> Router {
             "/account/payment-defaults",
             get(account::payment_defaults).put(account::update_payment_defaults),
         )
+        .route("/vps/access", get(vps_access::me))
+        .route(
+            "/vps/members",
+            get(vps_access::index).post(vps_access::create),
+        )
+        .route(
+            "/vps/members/{id}",
+            put(vps_access::update).delete(vps_access::destroy),
+        )
+        .route("/account/shared-access", get(vps_access::shared))
+        .route("/account/shared-access/{owner}", delete(vps_access::leave))
         .route("/vps/servers", get(vps::index))
         .route("/vps/snapshots", get(vps::all_snapshots))
         .route("/vps/isos", get(vps_isos::index).post(vps_isos::create))
