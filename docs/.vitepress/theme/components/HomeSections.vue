@@ -34,12 +34,10 @@ const reasons = [
 ]
 
 const roadmap = [
-  { icon: 'receipt-text', title: 'Facturatie', text: 'Abonnementen, facturen als pdf en automatisch verlengen' },
-  { icon: 'server', title: 'VPS', text: 'Servers, volumes, snapshots en firewalls' },
-  { icon: 'gamepad-2', title: 'Gameservers', text: 'Console, bestanden en back-ups' },
-  { icon: 'globe', title: 'Domeinen', text: 'Registreren, DNS-records en nameservers' },
-  { icon: 'app-window', title: 'Webhosting', text: 'Pakketten met inloggen in het hostingpaneel' },
-  { icon: 'key-round', title: 'API-tokens', text: 'Alles wat in het panel kan, ook via de API' },
+  { icon: 'server', title: 'VPS', text: 'Servers, volumes, snapshots en firewalls op Proxmox VE, OpenStack en VirtFusion' },
+  { icon: 'globe', title: 'Domeinen', text: 'Registreren, DNS-records en nameservers via Openprovider' },
+  { icon: 'app-window', title: 'Webhosting', text: 'Pakketten met inloggen in DirectAdmin, Plesk of cPanel' },
+  { icon: 'receipt-text', title: 'Meer facturatie', text: 'Pro rata bij upgrades en mislukte betalingen opnieuw proberen' },
 ]
 </script>
 

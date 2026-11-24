@@ -51,4 +51,4 @@ sudo systemctl start stacklane
 
 ## Versienummers
 
-Een versie heeft vier getallen, zoals `0.0.1.0`. Wat er per versie verandert, staat bij de [releases](/releases/).
+Een versie heeft vier getallen, zoals `1.0.0.0`. Wat er per versie verandert, staat bij de [releases](/releases/).

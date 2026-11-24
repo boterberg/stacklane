@@ -17,6 +17,6 @@ cargo build --release
 (cd web && npm ci && npm run build)
 (cd docs && npm ci && npm run build)
 gpg --dearmor < packaging/stacklane.asc > stacklane.gpg
-sh packaging/build-deb.sh --version 0.0.1.0 --bin target/release/stacklane \
+sh packaging/build-deb.sh --version 1.0.0.0 --bin target/release/stacklane \
   --web web/dist --site docs/dist --keyring stacklane.gpg --out dist
 ```

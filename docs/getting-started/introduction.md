@@ -10,16 +10,19 @@ Stacklane is net begonnen. Kijk bij de [releases](/releases/) wat er in de huidi
 
 | Onderdeel | Sinds |
 | --- | --- |
-| Accounts: registreren, inloggen en uitloggen | 0.0.1.0 |
-| Dashboard met openstaande tickets en diensten die verlopen | 0.0.1.0 |
-| Tickets: aanmaken, reageren, sluiten, zoeken en filteren | 0.0.1.0 |
-| Beheer: tickets van alle klanten beantwoorden | 0.0.1.0 |
-| Het commando `stacklane` met setup, update en status | 0.0.1.0 |
-| Gameservers via Pterodactyl: console, bestanden, back-ups | in ontwikkeling |
-| Import uit Pterodactyl, WHMCS en Paymenter | in ontwikkeling |
-| Wachtwoord herstellen per e-mail | in ontwikkeling |
+| Accounts: registreren, inloggen, wachtwoord herstellen per e-mail | 1.0.0.0 |
+| Dashboard met openstaande tickets en diensten die verlopen | 1.0.0.0 |
+| Tickets: aanmaken, reageren, sluiten, zoeken en filteren | 1.0.0.0 |
+| Beheer: tickets, facturen, diensten, producten en koppelingen | 1.0.0.0 |
+| Gameservers via Pterodactyl: console, bestanden, back-ups | 1.0.0.0 |
+| Facturatie: abonnementen, pdf-facturen, automatisch verlengen | 1.0.0.0 |
+| Betalen met Mollie, Stripe of een overboeking | 1.0.0.0 |
+| Tweestapsverificatie en API-tokens | 1.0.0.0 |
+| Import uit Pterodactyl, WHMCS en Paymenter | 1.0.0.0 |
+| Nederlands en Engels, licht en donker | 1.0.0.0 |
+| Het commando `stacklane` met setup, update, status en import | 1.0.0.0 |
 
-Facturatie, VPS, gameservers, domeinen en webhosting staan op de [roadmap](/#roadmap).
+VPS, domeinen en webhosting staan op de [roadmap](/#roadmap).
 
 ## Hoe het in elkaar zit
 
