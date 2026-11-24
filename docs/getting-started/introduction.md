@@ -2,8 +2,8 @@
 
 Stacklane is het panel waar de klanten van je hostingbedrijf inloggen. Ze bestellen er gameservers, VPS'en en webhosting, betalen hun facturen en stellen vragen aan je supportteam. Je draait het zelf, op een server die je al hebt of een nieuwe.
 
-::: warning Vroege versie
-Stacklane is net begonnen. Kijk bij de [releases](/releases/) wat er in de huidige versie zit, en gebruik het nog niet voor betalende klanten.
+::: tip Overstappen
+Stacklane is jong. Probeer het eerst naast je huidige panel: [importeer](/docs/guides/import) je klanten met `--dry-run`, kijk rond en houd je oude systeem aan tot alles klopt. Bij de [releases](/releases/) zie je wat er in elke versie zit.
 :::
 
 ## Wat er nu in zit
