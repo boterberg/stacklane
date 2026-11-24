@@ -7,3 +7,7 @@ ALTER TABLE invoices
     ADD COLUMN customer_vat_number TEXT;
 
 CREATE INDEX invoices_vat_scheme_issued ON invoices (vat_scheme, issued_at);
+
+UPDATE invoices
+SET vat_country = COALESCE((SELECT upper(value->>'home_country') FROM settings WHERE key = 'billing'), 'NL')
+WHERE vat_country IS NULL;

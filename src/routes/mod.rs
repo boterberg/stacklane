@@ -3,6 +3,7 @@ mod admin_billing;
 mod admin_domains;
 mod admin_provisioning;
 mod admin_settings;
+mod admin_vat;
 mod api_tokens;
 mod auth;
 pub mod billing;
@@ -215,6 +216,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/admin/customers", get(admin_provisioning::customers))
         .route("/admin/invoices", get(admin_billing::index))
+        .route("/admin/reports/vat", get(admin_vat::report))
         .route("/admin/invoices/{id}", get(admin_billing::show))
         .route("/admin/invoices/{id}/pdf", get(admin_billing::pdf))
         .route(

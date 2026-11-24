@@ -275,6 +275,7 @@ fn english(message: &str) -> Option<&'static str> {
         "Vul een IPv4-adres of -reeks in, zoals 203.0.113.4 of 10.0.0.0/8." => {
             "Enter an IPv4 address or range, such as 203.0.113.4 or 10.0.0.0/8."
         }
+        "Kies een kwartaal van 1 tot en met 4." => "Choose a quarter from 1 to 4.",
         "Kies het land van je bedrijf." => "Choose the country of your business.",
         "Vul een btw-nummer uit de EU in, zoals NL123456789B01." => {
             "Enter an EU VAT number, such as NL123456789B01."
