@@ -3,6 +3,7 @@ use axum::extract::State;
 use axum::http::HeaderMap;
 use axum_extra::extract::CookieJar;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::{PgPool, Postgres, Transaction};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
@@ -215,6 +216,58 @@ impl Seed<'_> {
         Ok(id)
     }
 
+    async fn product(
+        &mut self,
+        kind: &str,
+        name: &str,
+        description: &str,
+        specs: serde_json::Value,
+        monthly_price_cents: i32,
+    ) -> anyhow::Result<Uuid> {
+        let id = Uuid::new_v4();
+        let slug = format!("{kind}-{}", name.to_lowercase().replace(' ', "-"));
+        sqlx::query(
+            "INSERT INTO products (id, kind, slug, name, description, specs, monthly_price_cents)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        )
+        .bind(id)
+        .bind(kind)
+        .bind(slug)
+        .bind(name)
+        .bind(description)
+        .bind(specs)
+        .bind(monthly_price_cents)
+        .execute(&mut *self.transaction)
+        .await?;
+        Ok(id)
+    }
+
+    async fn service(
+        &mut self,
+        customer: Uuid,
+        product: Uuid,
+        subscription: Uuid,
+        kind: &str,
+        name: &str,
+        details: serde_json::Value,
+    ) -> anyhow::Result<()> {
+        sqlx::query(
+            "INSERT INTO services (id, user_id, product_id, subscription_id, kind, name, status, details, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(customer)
+        .bind(product)
+        .bind(subscription)
+        .bind(kind)
+        .bind(name)
+        .bind(details)
+        .bind(self.ago(24 * 60))
+        .execute(&mut *self.transaction)
+        .await?;
+        Ok(())
+    }
+
     async fn invoice(
         &mut self,
         customer: Uuid,
@@ -284,7 +337,7 @@ pub async fn reset(pool: &PgPool) -> anyhow::Result<()> {
 
     sqlx::query(
         "TRUNCATE sessions, notifications, ticket_messages, tickets, invoice_lines, invoices,
-                  subscription_items, subscriptions, products, users RESTART IDENTITY CASCADE",
+                  subscription_items, subscriptions, services, products, users RESTART IDENTITY CASCADE",
     )
     .execute(&mut *seed.transaction)
     .await?;
@@ -393,6 +446,110 @@ pub async fn reset(pool: &PgPool) -> anyhow::Result<()> {
         "manual",
         -40,
         ("VPS: Cloud M", "2 vCPU · 4 GB RAM · 40 GB opslag", 1250),
+    )
+    .await?;
+
+    let cloud_s = seed
+        .product(
+            "vps",
+            "Cloud S",
+            "Voor een website, een API of een kleine database.",
+            json!({ "cores": 1, "memory_mb": 2048, "disk_gb": 20 }),
+            650,
+        )
+        .await?;
+    seed.product(
+        "vps",
+        "Cloud M",
+        "Voor drukkere sites en een paar containers naast elkaar.",
+        json!({ "cores": 2, "memory_mb": 4096, "disk_gb": 40 }),
+        1250,
+    )
+    .await?;
+    seed.product(
+        "vps",
+        "Cloud L",
+        "Voor webshops, CI-runners en zwaardere databases.",
+        json!({ "cores": 4, "memory_mb": 8192, "disk_gb": 80 }),
+        2400,
+    )
+    .await?;
+    seed.product(
+        "webhosting",
+        "Start",
+        "1 website · 5 GB opslag · 5 e-mailadressen",
+        json!({ "plan": "start" }),
+        300,
+    )
+    .await?;
+    let plus = seed
+        .product(
+            "webhosting",
+            "Plus",
+            "10 websites · 20 GB opslag · onbeperkt e-mail",
+            json!({ "plan": "plus" }),
+            500,
+        )
+        .await?;
+    seed.product(
+        "webhosting",
+        "Pro",
+        "Onbeperkt websites · 50 GB opslag · dagelijkse back-ups",
+        json!({ "plan": "pro" }),
+        900,
+    )
+    .await?;
+    seed.product(
+        "gameserver",
+        "2 GB",
+        "Voor een kleine server met vrienden.",
+        json!({ "memory": 2048 }),
+        650,
+    )
+    .await?;
+    let four_gb = seed
+        .product(
+            "gameserver",
+            "4 GB",
+            "Voor 10 tot 20 spelers of een paar mods.",
+            json!({ "memory": 4096 }),
+            1250,
+        )
+        .await?;
+    seed.product(
+        "gameserver",
+        "8 GB",
+        "Voor grote modpacks en drukke servers.",
+        json!({ "memory": 8192 }),
+        2400,
+    )
+    .await?;
+
+    seed.service(
+        customer,
+        cloud_s,
+        vps,
+        "vps",
+        "web-01",
+        json!({ "hostname": "web-01.jansenbouw.nl", "ipv4": "203.0.113.10", "image": "Ubuntu 24.04", "cores": 1, "memory_mb": 2048, "disk_gb": 20 }),
+    )
+    .await?;
+    seed.service(
+        customer,
+        four_gb,
+        game,
+        "gameserver",
+        "Jansen SMP",
+        json!({ "address": "play.jansenbouw.nl:25565", "egg": "Paper", "memory": 4096, "cpu": 200, "disk": 20480 }),
+    )
+    .await?;
+    seed.service(
+        customer,
+        plus,
+        hosting,
+        "webhosting",
+        "jansenbouw.nl",
+        json!({ "username": "jansenbo", "plan": "plus", "panel": "DirectAdmin" }),
     )
     .await?;
 
