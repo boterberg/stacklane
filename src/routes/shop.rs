@@ -56,6 +56,17 @@ const PRODUCT_SELECT: &str =
      FROM products p LEFT JOIN integrations i ON i.id = p.integration_id
      WHERE p.is_active";
 
+fn demo_images() -> Vec<ImageOption> {
+    ["Ubuntu 24.04", "Debian 12", "Rocky Linux 9"]
+        .into_iter()
+        .zip(1..)
+        .map(|(name, id)| ImageOption {
+            id,
+            name: name.to_owned(),
+        })
+        .collect()
+}
+
 fn images(row: &ProductRow) -> Vec<ImageOption> {
     match (row.integration_kind.as_deref(), &row.integration_settings) {
         (Some("proxmox"), Some(settings)) => {
@@ -82,15 +93,23 @@ pub async fn products(
     Query(query): Query<ShopQuery>,
 ) -> AppResult<Json<Vec<ShopProduct>>> {
     let rows: Vec<ProductRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "{PRODUCT_SELECT} AND p.kind = $1 AND p.integration_id IS NOT NULL ORDER BY p.monthly_price_cents"
+        "{PRODUCT_SELECT} AND p.kind = $1 AND (p.integration_id IS NOT NULL OR $2) ORDER BY p.monthly_price_cents"
     )))
     .bind(&query.kind)
+    .bind(state.config.demo_mode)
     .fetch_all(&state.db)
     .await?;
     Ok(Json(
         rows.into_iter()
             .map(|row| ShopProduct {
-                images: images(&row),
+                images: if state.config.demo_mode
+                    && row.integration_id.is_none()
+                    && row.kind == "vps"
+                {
+                    demo_images()
+                } else {
+                    images(&row)
+                },
                 id: row.id,
                 name: row.name,
                 description: row.description,
