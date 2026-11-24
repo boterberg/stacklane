@@ -17,6 +17,7 @@ import { TicketsPage } from '../pages/support/TicketsPage'
 import { GameServerPage } from '../pages/gameservers/GameServerPage'
 import { DomainExtensionsPage } from '../pages/admin/DomainExtensionsPage'
 import { DomainsPage } from '../pages/domains/DomainsPage'
+import { RegisterDomainPage } from '../pages/domains/RegisterDomainPage'
 import { WhoisProfilesPage } from '../pages/domains/WhoisProfilesPage'
 import { OrderServerPage } from '../pages/vps/OrderServerPage'
 import { VpsServerPage } from '../pages/vps/ServerPage'
@@ -65,6 +66,7 @@ export const router = createBrowserRouter([
       { path: '/gameservers/servers/:id', element: <GameServerPage /> },
       { path: '/admin/domain-extensions', element: <DomainExtensionsPage /> },
       { path: '/domains', element: <DomainsPage /> },
+      { path: '/domains/register', element: <RegisterDomainPage /> },
       { path: '/domains/whois-profiles', element: <WhoisProfilesPage /> },
       { path: '/vps', element: <Navigate to="/vps/servers" replace /> },
       { path: '/webhosting', element: <WebhostingPage /> },
