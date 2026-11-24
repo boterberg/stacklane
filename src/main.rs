@@ -5,6 +5,7 @@ mod crypto;
 mod demo;
 mod error;
 mod html;
+mod imports;
 mod integrations;
 mod pagination;
 mod routes;
@@ -40,6 +41,7 @@ async fn main() -> anyhow::Result<()> {
         "setup" => cli::setup::run().await,
         "update" => cli::update::run().await,
         "status" => cli::status::run().await,
+        "import" => cli::import::run(&args[1..]).await,
         "admin" if args.get(1).map(String::as_str) == Some("create") => {
             cli::admin::create(&args[2..]).await
         }

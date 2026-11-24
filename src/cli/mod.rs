@@ -1,4 +1,5 @@
 pub mod admin;
+pub mod import;
 pub mod setup;
 pub mod status;
 pub mod update;
@@ -125,6 +126,27 @@ pub fn exec(program: &str, args: &[&str]) -> anyhow::Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
+pub fn run_as_service_user() -> anyhow::Result<bool> {
+    let is_root = Command::new("id")
+        .arg("-u")
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim() == "0")
+        .unwrap_or(false);
+    if !is_root || !std::path::Path::new("/usr/bin/stacklane").exists() {
+        return Ok(false);
+    }
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let status = Command::new("runuser")
+        .args(["-u", "stacklane", "--", "/usr/bin/stacklane"])
+        .args(&args)
+        .status()
+        .context("runuser starten")?;
+    if !status.success() {
+        std::process::exit(status.code().unwrap_or(1));
+    }
+    Ok(true)
+}
+
 pub fn installed(program: &str) -> bool {
     Command::new("sh")
         .args(["-c", &format!("command -v {program}")])
@@ -191,6 +213,10 @@ pub fn print_help() {
         ),
         ("status", "Versie, service, database en webadres bekijken"),
         ("admin create", "Een beheerdersaccount aanmaken"),
+        (
+            "import",
+            "Klanten en diensten overnemen, bijvoorbeeld uit Pterodactyl",
+        ),
         ("serve", "De server starten (dit doet systemd)"),
         (
             "demo-reset",

@@ -550,6 +550,38 @@ impl Pterodactyl {
         Ok(body["attributes"].clone())
     }
 
+    pub async fn users(&self) -> anyhow::Result<Vec<Value>> {
+        self.list("/users").await
+    }
+
+    pub async fn servers(&self) -> anyhow::Result<Vec<Value>> {
+        let mut servers = Vec::new();
+        let mut page = 1;
+        loop {
+            let body = self
+                .application(
+                    Method::GET,
+                    "/servers",
+                    &[
+                        ("page", page.to_string()),
+                        ("per_page", "100".into()),
+                        ("include", "allocations,egg".into()),
+                    ],
+                    None,
+                )
+                .await?;
+            servers.extend(body["data"].as_array().cloned().unwrap_or_default());
+            if page
+                >= body["meta"]["pagination"]["total_pages"]
+                    .as_i64()
+                    .unwrap_or(1)
+            {
+                return Ok(servers);
+            }
+            page += 1;
+        }
+    }
+
     pub async fn backup_download(&self, identifier: &str, backup: &str) -> anyhow::Result<String> {
         let body = self
             .client(
