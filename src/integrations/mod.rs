@@ -47,6 +47,7 @@ pub enum Driver {
     Plesk(plesk::Plesk),
     OpenStack(openstack::OpenStack),
     VirtFusion(virtfusion::VirtFusion),
+    Openprovider(openprovider::Openprovider),
 }
 
 fn wrong_kind() -> AppError {
@@ -82,6 +83,7 @@ impl Driver {
             Self::Plesk(client) => client.test().await,
             Self::OpenStack(client) => client.test().await,
             Self::VirtFusion(client) => client.test().await,
+            Self::Openprovider(client) => client.test().await,
         }
     }
 
@@ -93,6 +95,7 @@ impl Driver {
             Self::Plesk(client) => client.suspend(webhosting::plesk_parts(external_id).1).await,
             Self::OpenStack(client) => client.power(external_id, "stop").await,
             Self::VirtFusion(client) => client.suspend(external_id).await,
+            Self::Openprovider(_) => Ok(()),
         }
     }
 
@@ -108,6 +111,7 @@ impl Driver {
             }
             Self::OpenStack(client) => client.power(external_id, "start").await,
             Self::VirtFusion(client) => client.unsuspend(external_id).await,
+            Self::Openprovider(_) => Ok(()),
         }
     }
 
@@ -122,6 +126,7 @@ impl Driver {
             }
             Self::OpenStack(client) => client.destroy(external_id).await,
             Self::VirtFusion(client) => client.destroy(external_id).await,
+            Self::Openprovider(_) => Ok(()),
         }
     }
 }
@@ -182,6 +187,17 @@ pub fn build(kind: &str, base_url: &str, credentials: &[u8], settings: Value) ->
             let settings =
                 serde_json::from_value(settings).context("ongeldige OpenStack-instellingen")?;
             Ok(Driver::OpenStack(openstack::OpenStack::new(
+                base_url,
+                credentials,
+                settings,
+            )?))
+        }
+        "openprovider" => {
+            let credentials =
+                serde_json::from_slice(credentials).context("ongeldige Openprovider-gegevens")?;
+            let settings =
+                serde_json::from_value(settings).context("ongeldige Openprovider-instellingen")?;
+            Ok(Driver::Openprovider(openprovider::Openprovider::new(
                 base_url,
                 credentials,
                 settings,
