@@ -1,0 +1,15 @@
+[Unit]
+Description=Re-sign the Stacklane package index
+
+[Service]
+Type=oneshot
+User=stacklane-repo
+Group=stacklane-repo
+Environment=HOME=/srv/stacklane-apt
+ExecStart=/usr/bin/reprepro --basedir /srv/stacklane-apt export stable
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/srv/stacklane-apt
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
