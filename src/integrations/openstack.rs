@@ -736,15 +736,25 @@ impl OpenStack {
         for group in groups {
             let _ = self.delete_security_group(&group).await;
         }
-        for snapshot in self.snapshots(id).await.unwrap_or_default() {
-            let _ = self
-                .call(
+        let mut left = Vec::new();
+        for snapshot in self.snapshots(id).await? {
+            let (status, _) = self
+                .send(
                     Service::Image,
                     Method::DELETE,
                     &format!("/v2/images/{}", snapshot.name),
                     None,
                 )
-                .await;
+                .await?;
+            if !status.is_success() && status != StatusCode::NOT_FOUND {
+                left.push(snapshot.name);
+            }
+        }
+        if !left.is_empty() {
+            bail!(
+                "snapshots konden niet worden verwijderd: {}",
+                left.join(", ")
+            );
         }
         Ok(())
     }
@@ -765,28 +775,32 @@ impl OpenStack {
     }
 
     pub async fn snapshots(&self, id: &str) -> anyhow::Result<Vec<Snapshot>> {
-        let images = self
-            .call(
-                Service::Image,
-                Method::GET,
-                "/v2/images?visibility=private&limit=200&sort_key=created_at&sort_dir=desc",
-                None,
-            )
-            .await?;
-        Ok(images["images"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|image| image["instance_uuid"] == id)
-            .map(|image| Snapshot {
-                name: image["id"].as_str().unwrap_or_default().to_owned(),
-                description: image["name"].as_str().unwrap_or_default().to_owned(),
-                created_at: image["created_at"]
-                    .as_str()
-                    .and_then(|created| OffsetDateTime::parse(created, &Rfc3339).ok())
-                    .map(OffsetDateTime::unix_timestamp),
-            })
-            .collect())
+        let mut found = Vec::new();
+        let mut path =
+            format!("/v2/images?instance_uuid={id}&limit=200&sort_key=created_at&sort_dir=desc");
+        for _ in 0..50 {
+            let page = self.call(Service::Image, Method::GET, &path, None).await?;
+            found.extend(
+                page["images"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|image| image["instance_uuid"] == id)
+                    .map(|image| Snapshot {
+                        name: image["id"].as_str().unwrap_or_default().to_owned(),
+                        description: image["name"].as_str().unwrap_or_default().to_owned(),
+                        created_at: image["created_at"]
+                            .as_str()
+                            .and_then(|created| OffsetDateTime::parse(created, &Rfc3339).ok())
+                            .map(OffsetDateTime::unix_timestamp),
+                    }),
+            );
+            match page["next"].as_str() {
+                Some(next) if next.starts_with("/v2/images?") => path = next.to_owned(),
+                _ => return Ok(found),
+            }
+        }
+        bail!("OpenStack gaf te veel pagina's met images terug")
     }
 
     pub async fn create_snapshot(
@@ -945,7 +959,58 @@ pub fn product_details(config: &ProductConfig) -> Value {
 
 #[cfg(test)]
 mod tests {
-    use super::{cloud_config, error_message, port_range};
+    use super::{Credentials, OpenStack, Value, cloud_config, error_message, port_range};
+
+    #[tokio::test]
+    async fn lists_every_snapshot_page_of_a_server() {
+        use axum::extract::{Query, State};
+        use std::collections::HashMap;
+
+        async fn token(State(base): State<String>) -> impl axum::response::IntoResponse {
+            let endpoint = |kind: &str| serde_json::json!({ "type": kind, "endpoints": [{ "interface": "public", "url": base }] });
+            (
+                [("x-subject-token", "t")],
+                axum::Json(serde_json::json!({ "token": { "catalog": [
+                    endpoint("compute"), endpoint("image"), endpoint("network"),
+                ] } })),
+            )
+        }
+        async fn images(Query(query): Query<HashMap<String, String>>) -> axum::Json<Value> {
+            let image = |id: &str, server: &str| serde_json::json!({ "id": id, "name": id, "instance_uuid": server });
+            axum::Json(if query.contains_key("marker") {
+                serde_json::json!({ "images": [image("old-1", "srv"), image("old-2", "srv")] })
+            } else {
+                serde_json::json!({
+                    "images": [image("new", "srv"), image("other", "elsewhere")],
+                    "next": "/v2/images?marker=other&instance_uuid=srv&limit=200",
+                })
+            })
+        }
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let app = axum::Router::new()
+            .route("/v3/auth/tokens", axum::routing::post(token))
+            .route("/v2/images", axum::routing::get(images))
+            .with_state(base.clone());
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        let client = OpenStack::new(
+            &base,
+            Credentials {
+                application_credential_id: "id".into(),
+                application_credential_secret: "secret".into(),
+            },
+            serde_json::from_value(serde_json::json!({ "network_id": "net" })).unwrap(),
+        )
+        .unwrap();
+        let names: Vec<String> = client
+            .snapshots("srv")
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|snapshot| snapshot.name)
+            .collect();
+        assert_eq!(names, ["new", "old-1", "old-2"]);
+    }
     use serde_json::json;
 
     #[test]
