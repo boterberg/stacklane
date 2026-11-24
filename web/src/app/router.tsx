@@ -23,6 +23,8 @@ import { WhoisProfilesPage } from '../pages/domains/WhoisProfilesPage'
 import { OrderServerPage } from '../pages/vps/OrderServerPage'
 import { VpsServerPage } from '../pages/vps/ServerPage'
 import { VpsServersPage } from '../pages/vps/ServersPage'
+import { FirewallPage } from '../pages/vps/FirewallPage'
+import { FirewallsPage } from '../pages/vps/FirewallsPage'
 import { SnapshotsPage } from '../pages/vps/SnapshotsPage'
 import { OrderWebhostingPage } from '../pages/webhosting/OrderWebhostingPage'
 import { WebhostingPage } from '../pages/webhosting/WebhostingPage'
@@ -77,6 +79,8 @@ export const router = createBrowserRouter([
       { path: '/vps/servers/order', element: <OrderServerPage /> },
       { path: '/vps/servers/:id', element: <VpsServerPage /> },
       { path: '/vps/snapshots', element: <SnapshotsPage /> },
+      { path: '/vps/firewalls', element: <FirewallsPage /> },
+      { path: '/vps/firewalls/:id', element: <FirewallPage /> },
       { path: '/vps/ssh-keys', element: <SshKeysPage /> },
       { path: '/admin/services', element: <ServicesPage /> },
       { path: '/admin/products', element: <ProductsPage /> },

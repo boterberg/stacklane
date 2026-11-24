@@ -21,6 +21,7 @@ import {
   QuestionMarkCircleIcon,
   ReceiptPercentIcon,
   ServerStackIcon,
+  ShieldCheckIcon,
   WindowIcon,
   WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline'
@@ -117,6 +118,7 @@ export const vpsSection: NavSection = {
   groups: [
     { label: 'Compute', children: [{ label: 'Servers', to: '/vps/servers', icon: ServerStackIcon }] },
     { label: 'Opslag', children: [{ label: 'Snapshots', to: '/vps/snapshots', icon: CameraIcon }] },
+    { label: 'Netwerk', children: [{ label: 'Firewalls', to: '/vps/firewalls', icon: ShieldCheckIcon }] },
     { label: 'Toegang', children: [{ label: 'SSH-sleutels', to: '/vps/ssh-keys', icon: KeyIcon }] },
   ],
 }
