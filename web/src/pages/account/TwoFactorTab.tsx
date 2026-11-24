@@ -14,6 +14,10 @@ function fieldError(error: Error | null, field: string) {
   return error instanceof ApiError ? (error.fieldErrors[field] ?? error.message) : undefined
 }
 
+function codeError(error: Error | null) {
+  return error instanceof ApiError ? error.fieldErrors.code : undefined
+}
+
 function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void }) {
   const [copied, setCopied] = useState(false)
   async function copy() {
@@ -115,27 +119,33 @@ function PasswordDialog({
   danger?: boolean
   pending: boolean
   error?: string
+  codeError?: string
   onClose: () => void
-  onConfirm: (password: string) => void
+  onConfirm: (input: { password: string; code: string }) => void
 }) {
   const [password, setPassword] = useState('')
+  const [code, setCode] = useState('')
   return (
     <ConfirmDialog
       open={open}
       title={title}
       confirmLabel={confirmLabel}
       danger={danger}
-      pending={pending || !password}
+      pending={pending || !password || !code.trim()}
       onClose={() => {
         setPassword('')
+        setCode('')
         onClose()
       }}
-      onConfirm={() => onConfirm(password)}
+      onConfirm={() => onConfirm({ password, code })}
     >
       <p>{text}</p>
-      <div className="mt-4">
-        <Field label={t('Je wachtwoord')} error={error}>
+      <div className="mt-4 space-y-4">
+        <Field label={t('Je wachtwoord')} error={codeError ? undefined : error}>
           {(id) => <Input id={id} type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />}
+        </Field>
+        <Field label={t('Code uit de app of een herstelcode')} error={codeError}>
+          {(id) => <Input id={id} autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} />}
         </Field>
       </div>
     </ConfirmDialog>
@@ -212,8 +222,9 @@ export function TwoFactorTab() {
         danger
         pending={disable.isPending}
         error={fieldError(disable.error, 'password')}
+        codeError={codeError(disable.error)}
         onClose={() => setMode('idle')}
-        onConfirm={(password) => disable.mutate(password, { onSuccess: () => setMode('idle') })}
+        onConfirm={(input) => disable.mutate(input, { onSuccess: () => setMode('idle') })}
       />
       <PasswordDialog
         open={mode === 'renew'}
@@ -222,9 +233,10 @@ export function TwoFactorTab() {
         confirmLabel={t('Nieuwe codes maken')}
         pending={renew.isPending}
         error={fieldError(renew.error, 'password')}
+        codeError={codeError(renew.error)}
         onClose={() => setMode('idle')}
-        onConfirm={(password) =>
-          renew.mutate(password, {
+        onConfirm={(input) =>
+          renew.mutate(input, {
             onSuccess: (result) => {
               setMode('idle')
               setCodes(result.recovery_codes)

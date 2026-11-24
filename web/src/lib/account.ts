@@ -69,11 +69,11 @@ export function useEnableTwoFactor() {
 }
 
 export function useDisableTwoFactor() {
-  return useTwoFactorAction<string, void>('disable', (password) => ({ password }))
+  return useTwoFactorAction<{ password: string; code: string }, void>('disable', (input) => input)
 }
 
 export function useNewRecoveryCodes() {
-  return useTwoFactorAction<string, { recovery_codes: string[] }>('recovery-codes', (password) => ({ password }))
+  return useTwoFactorAction<{ password: string; code: string }, { recovery_codes: string[] }>('recovery-codes', (input) => input)
 }
 
 export type AccountDetails = {
