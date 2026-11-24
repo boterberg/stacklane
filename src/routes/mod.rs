@@ -1,3 +1,4 @@
+mod account;
 mod admin_billing;
 mod admin_provisioning;
 mod admin_settings;
@@ -32,6 +33,12 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/forgot-password", post(auth::forgot_password))
         .route("/auth/reset-password", post(auth::reset_password))
         .route("/me", get(me::show))
+        .route("/account", get(account::show).put(account::update))
+        .route("/account/delete", post(account::destroy))
+        .route(
+            "/account/payment-defaults",
+            get(account::payment_defaults).put(account::update_payment_defaults),
+        )
         .route("/account/password", put(security::change_password))
         .route("/account/two-factor", get(two_factor::status))
         .route("/account/two-factor/setup", post(two_factor::setup))

@@ -58,7 +58,7 @@ fn split_name(name: &str) -> (String, String) {
     }
 }
 
-fn looks_like_email(email: &str) -> bool {
+pub(super) fn looks_like_email(email: &str) -> bool {
     let mut parts = email.split('@');
     matches!((parts.next(), parts.next(), parts.next()), (Some(local), Some(domain), None) if !local.is_empty() && domain.contains('.'))
 }

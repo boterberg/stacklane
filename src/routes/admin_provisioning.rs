@@ -424,7 +424,7 @@ pub async fn customers(
     let search = format!("%{}%", query.q.unwrap_or_default().trim());
     let rows = sqlx::query_as(
         "SELECT id, email::text AS email, COALESCE(NULLIF(trim(first_name || ' ' || last_name), ''), email::text) AS name
-         FROM users WHERE role = 'customer' AND (email::text ILIKE $1 OR first_name || ' ' || last_name ILIKE $1)
+         FROM users WHERE role = 'customer' AND deleted_at IS NULL AND (email::text ILIKE $1 OR first_name || ' ' || last_name ILIKE $1)
          ORDER BY created_at DESC LIMIT 20",
     )
     .bind(search)

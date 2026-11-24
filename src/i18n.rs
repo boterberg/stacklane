@@ -164,6 +164,17 @@ fn english(message: &str) -> Option<&'static str> {
         "Zet eerst 2FA aan." => "Turn on 2FA first.",
         "Vul de code uit je authenticator-app in." => "Enter the code from your authenticator app.",
         "Deze code klopt niet." => "This code is not correct.",
+        "Vul je voornaam in." => "Enter your first name.",
+        "In de demo kun je het e-mailadres niet wijzigen." => {
+            "You cannot change the email address in the demo."
+        }
+        "Kies handmatig of automatisch." => "Choose manual or automatic.",
+        "In de demo kun je je account niet verwijderen." => {
+            "You cannot delete your account in the demo."
+        }
+        "Zeg eerst je abonnementen op en betaal je openstaande facturen." => {
+            "Cancel your subscriptions and pay your open invoices first."
+        }
         "Vul de naam van je bedrijf in." => "Enter the name of your company.",
         "Kies een btw-tarief tussen 0 en 100 procent." => {
             "Choose a VAT rate between 0 and 100 percent."
