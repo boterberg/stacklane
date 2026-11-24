@@ -119,7 +119,7 @@ pub async fn search(
         let results = client
             .check(&domains)
             .await
-            .map_err(|error| AppError::field("query", format!("{error:#}")))?;
+            .map_err(|error| AppError::upstream("query", error))?;
         for result in results {
             availability.insert(result.domain.clone(), result);
         }
@@ -205,7 +205,7 @@ pub async fn order(
     let check = client
         .check(&[(name.clone(), extension.clone())])
         .await
-        .map_err(|error| AppError::field("domain", format!("{error:#}")))?;
+        .map_err(|error| AppError::upstream("domain", error))?;
     let available = check.first().is_some_and(|result| result.available);
     let premium = check.first().is_some_and(|result| result.premium);
     if premium {
@@ -309,6 +309,7 @@ pub struct OwnedDomain {
     name: String,
     status: String,
     details: Value,
+    #[serde(serialize_with = "crate::error::public_error")]
     last_error: Option<String>,
     subscription_code: Option<String>,
     #[serde(with = "time::serde::rfc3339::option")]
@@ -368,7 +369,7 @@ async fn registrar(
 }
 
 fn failed(error: anyhow::Error) -> AppError {
-    AppError::field("domain", format!("{error:#}"))
+    AppError::upstream("domain", error)
 }
 
 pub async fn show(

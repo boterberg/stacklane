@@ -21,6 +21,7 @@ pub struct Iso {
     url: String,
     firmware: String,
     status: String,
+    #[serde(serialize_with = "crate::error::public_error")]
     last_error: Option<String>,
     mounted_on: Option<Uuid>,
     server_name: Option<String>,
@@ -149,7 +150,7 @@ pub async fn create(
     }
     let url = isos::check_url(&input.url)
         .await
-        .map_err(|error| AppError::field("url", format!("{error:#}")))?;
+        .map_err(|error| AppError::field("url", error.to_string()))?;
     let mut transaction = state.db.begin().await?;
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1::text))")
         .bind(format!("isos {}", actor.owner))
@@ -263,7 +264,7 @@ pub async fn destroy(
     }
     remove(&state, id)
         .await
-        .map_err(|error| AppError::field("iso", format!("{error:#}")))?;
+        .map_err(|error| AppError::upstream("iso", error))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -350,7 +351,7 @@ pub async fn mount(
         .await?
         .mount(&server, &external_id, firmware == "uefi")
         .await
-        .map_err(|error| AppError::field("iso_id", format!("{error:#}")))?;
+        .map_err(|error| AppError::upstream("iso_id", error))?;
     sqlx::query("UPDATE vps_isos SET mounted_on = $2, last_used_at = now() WHERE id = $1")
         .bind(input.iso_id)
         .bind(id)
@@ -370,7 +371,7 @@ pub async fn unmount(
         .await?
         .unmount(&server)
         .await
-        .map_err(|error| AppError::field("iso_id", format!("{error:#}")))?;
+        .map_err(|error| AppError::upstream("iso_id", error))?;
     sqlx::query(
         "UPDATE vps_isos SET mounted_on = NULL, last_used_at = now() WHERE mounted_on = $1",
     )

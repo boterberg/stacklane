@@ -93,7 +93,7 @@ pub(crate) async fn machine_of(
 }
 
 fn failed(error: anyhow::Error) -> AppError {
-    AppError::field("server", format!("{error:#}"))
+    AppError::upstream("server", error)
 }
 
 pub async fn index(State(state): State<AppState>, actor: VpsActor) -> AppResult<Json<Vec<Server>>> {

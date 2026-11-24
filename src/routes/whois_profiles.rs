@@ -233,7 +233,7 @@ pub async fn update(
             client
                 .update_handle(&handle, &profile.contact())
                 .await
-                .map_err(|error| AppError::field("profile", format!("{error:#}")))?;
+                .map_err(|error| AppError::upstream("profile", error))?;
         }
     }
     Ok(Json(profile))

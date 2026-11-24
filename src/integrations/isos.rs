@@ -130,9 +130,8 @@ pub async fn check_url(raw: &str) -> anyhow::Result<String> {
     let port = url.port_or_known_default().unwrap_or(443);
     let addresses: Vec<IpAddr> = tokio::net::lookup_host((host.as_str(), port))
         .await
-        .context("de host van de URL bestaat niet")?
-        .map(|address| address.ip())
-        .collect();
+        .map(|found| found.map(|address| address.ip()).collect())
+        .unwrap_or_default();
     if addresses.is_empty() || !addresses.iter().copied().all(public) {
         bail!("de URL moet naar een publiek adres op internet wijzen");
     }

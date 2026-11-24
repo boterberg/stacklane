@@ -194,7 +194,10 @@ async fn sync_all(
         if let Err(error) = sync_server(state, user_id, *service_id, &marker, rules).await {
             problems.push(SyncProblem {
                 server: server_name(state, *service_id).await,
-                error: format!("{error:#}"),
+                error: {
+                    tracing::warn!(error = %format!("{error:#}"), "syncing a firewall failed");
+                    crate::i18n::tr(&crate::error::public_message(&error.to_string()))
+                },
             });
         }
     }

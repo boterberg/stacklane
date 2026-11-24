@@ -18,6 +18,7 @@ pub struct Website {
     status: String,
     product_name: Option<String>,
     details: Value,
+    #[serde(serialize_with = "crate::error::public_error")]
     last_error: Option<String>,
     subscription_code: Option<String>,
     #[serde(with = "time::serde::rfc3339::option")]
@@ -108,7 +109,7 @@ pub async fn panel_login(
     let url = hosting
         .login_url(&external_id, &visitor_ip(&headers))
         .await
-        .map_err(|error| AppError::field("website", format!("{error:#}")))?;
+        .map_err(|error| AppError::upstream("website", error))?;
     Ok(Json(PanelLink { url }))
 }
 

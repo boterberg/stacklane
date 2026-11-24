@@ -23,6 +23,7 @@ pub struct Volume {
     server_name: Option<String>,
     subscription_code: Option<String>,
     cancelled: bool,
+    #[serde(serialize_with = "crate::error::public_error")]
     last_error: Option<String>,
     #[serde(with = "time::serde::rfc3339")]
     created_at: OffsetDateTime,
@@ -145,7 +146,7 @@ async fn server_external(state: &AppState, server_id: Option<&str>) -> AppResult
 }
 
 fn failed(error: anyhow::Error) -> AppError {
-    AppError::field("volume", format!("{error:#}"))
+    AppError::upstream("volume", error)
 }
 
 fn reference(volume: &Owned) -> volumes::VolumeRef {
