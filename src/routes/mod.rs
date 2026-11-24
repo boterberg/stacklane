@@ -10,6 +10,7 @@ mod health;
 pub mod me;
 mod notifications;
 mod payments;
+mod security;
 mod support;
 mod system;
 
@@ -30,6 +31,11 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/forgot-password", post(auth::forgot_password))
         .route("/auth/reset-password", post(auth::reset_password))
         .route("/me", get(me::show))
+        .route("/account/password", put(security::change_password))
+        .route(
+            "/account/sessions/logout-others",
+            post(security::logout_other_sessions),
+        )
         .route(
             "/account/api-tokens",
             get(api_tokens::index).post(api_tokens::create),

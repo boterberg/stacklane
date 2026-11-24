@@ -151,6 +151,10 @@ fn english(message: &str) -> Option<&'static str> {
         "Je hebt al 25 tokens. Verwijder er eerst een." => {
             "You already have 25 tokens. Delete one first."
         }
+        "Dit wachtwoord klopt niet." => "This password is not correct.",
+        "In de demo kun je het wachtwoord niet wijzigen." => {
+            "You cannot change the password in the demo."
+        }
         "Vul de naam van je bedrijf in." => "Enter the name of your company.",
         "Kies een btw-tarief tussen 0 en 100 procent." => {
             "Choose a VAT rate between 0 and 100 percent."

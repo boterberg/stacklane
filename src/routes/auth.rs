@@ -15,7 +15,7 @@ use crate::mail::Email;
 use crate::routes::me::{Profile, load_profile};
 use crate::state::AppState;
 
-const MIN_PASSWORD_LENGTH: usize = 10;
+pub const MIN_PASSWORD_LENGTH: usize = 10;
 
 #[derive(Deserialize)]
 pub struct RegisterRequest {
