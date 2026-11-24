@@ -677,5 +677,41 @@ pub async fn change_state(state: &AppState, service_id: Uuid, action: &str) -> A
         .bind(next)
         .execute(&state.db)
         .await?;
+    if kind == "vps" && action == "terminate" {
+        release_volumes(state, service_id, integration_id, external_id.as_deref()).await?;
+    }
+    Ok(())
+}
+
+async fn release_volumes(
+    state: &AppState,
+    service_id: Uuid,
+    integration_id: Option<Uuid>,
+    external_id: Option<&str>,
+) -> AppResult<()> {
+    let lost: Vec<Option<Uuid>> = sqlx::query_scalar(
+        "UPDATE services SET status = 'terminated', last_error = 'De server van dit volume is opgeheven.', updated_at = now()
+         WHERE kind = 'volume' AND status <> 'terminated' AND integration_id = $1
+           AND details->>'host' <> '' AND details->>'host' = $2
+         RETURNING subscription_id",
+    )
+    .bind(integration_id)
+    .bind(external_id)
+    .fetch_all(&state.db)
+    .await?;
+    sqlx::query(
+        "UPDATE subscriptions SET status = 'cancelled', cancelled_at = COALESCE(cancelled_at, now())
+         WHERE id = ANY($1) AND status IN ('active', 'suspended', 'pending')",
+    )
+    .bind(lost.into_iter().flatten().collect::<Vec<_>>())
+    .execute(&state.db)
+    .await?;
+    sqlx::query(
+        "UPDATE services SET details = details - 'server_id', updated_at = now()
+         WHERE kind = 'volume' AND status <> 'terminated' AND details->>'server_id' = $1::text",
+    )
+    .bind(service_id.to_string())
+    .execute(&state.db)
+    .await?;
     Ok(())
 }
