@@ -43,7 +43,21 @@ Onder **Beheer → Producten** kies je als soort **VPS**, de koppeling, en het a
 - de server starten, netjes afsluiten, hard uitzetten en herstarten
 - het rootwachtwoord bekijken
 - tot drie snapshots maken, terugzetten en verwijderen
-- firewallregels toevoegen en verwijderen
+- firewallregels toevoegen en verwijderen, per server of via een firewall voor meerdere servers
+
+### Firewalls
+
+Onder **VPS → Firewalls** maakt een klant een firewall: een set regels met een naam, die hij aan een of meer servers koppelt. Past hij de regels aan, dan zet Stacklane ze meteen op alle gekoppelde servers. Met **Automatisch toewijzen** krijgt elke nieuwe server de firewall vanzelf zodra hij klaar is.
+
+Stacklane zet de regels van een firewall bovenaan de firewall van de server en herkent ze aan een korte code in de notitie, zoals `[fw:1a2b3c4d]`. Eigen regels die de klant per server maakt blijven staan. Op de serverpagina staan de regels van een firewall met het label *Via een firewall*; die pas je aan op de firewallpagina.
+
+| Platform | Wat werkt |
+| --- | --- |
+| Proxmox VE | Alle regels, ook blokkeren. Een poortlijst zoals 80,443 blijft één regel. |
+| OpenStack | Alleen toestaan. Een poortlijst wordt per poort een aparte regel in de security group. |
+| VirtFusion | Geen firewalls van Stacklane; de server staat niet in de lijst. |
+
+Lukt het bijwerken van een server niet, dan slaat Stacklane de firewall toch op en toont het welke server niet is bijgewerkt en waarom.
 
 ## OpenStack
 
