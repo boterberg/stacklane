@@ -10,7 +10,7 @@ REPOSITORY = os.environ.get("STACKLANE_REPO_DIR", "/srv/stacklane-apt")
 TOKEN_FILE = os.environ.get("STACKLANE_REPO_TOKEN_FILE", "/etc/stacklane-repo/token")
 LISTEN = ("127.0.0.1", int(os.environ.get("STACKLANE_REPO_PORT", "8091")))
 MAX_SIZE = 200 * 1024 * 1024
-VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+\.\d+$")
+VERSION_PATTERN = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$", re.ASCII)
 
 
 def expected_token():
@@ -39,10 +39,15 @@ class Upload(BaseHTTPRequestHandler):
             return self.reply(404, {"error": "not found"})
 
         given = self.headers.get("Authorization", "").removeprefix("Bearer ").strip()
-        if not given or not hmac.compare_digest(given, expected_token()):
+        if not given or not hmac.compare_digest(
+            given.encode("utf-8", "surrogateescape"), expected_token().encode()
+        ):
             return self.reply(401, {"error": "invalid token"})
 
-        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return self.reply(400, {"error": "invalid length"})
         if length <= 0 or length > MAX_SIZE:
             return self.reply(413, {"error": "package missing or too large"})
 

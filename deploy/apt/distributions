@@ -6,3 +6,4 @@ Architectures: amd64
 Components: main
 Description: Stacklane packages
 SignWith: @FINGERPRINT@
+ValidFor: 30d
