@@ -6,7 +6,9 @@ import Icon from './Icon.vue'
 
 const { frontmatter } = useData()
 
-const date = computed(() => new Intl.DateTimeFormat('nl-NL', { dateStyle: 'long' }).format(new Date(frontmatter.value.date)))
+const date = computed(() =>
+  new Intl.DateTimeFormat(frontmatter.value.lang === 'en' ? 'en-GB' : 'nl-NL', { dateStyle: 'long' }).format(new Date(frontmatter.value.date)),
+)
 </script>
 
 <template>

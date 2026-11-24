@@ -19,16 +19,21 @@ export type ReleaseHighlight = {
   text: string
 }
 
-export type Release = {
-  version: string
+export type ReleaseText = {
   title: string
   label: string | null
   summary: string
-  date: string
-  url: string
   images: ReleaseImage[]
   highlights: ReleaseHighlight[]
   changes: ReleaseChanges
+}
+
+export type Release = ReleaseText & {
+  version: string
+  date: string
+  url: string
+  building: boolean
+  en: Partial<ReleaseText>
 }
 
 declare const data: Release[]
@@ -55,6 +60,8 @@ export default createContentLoader('releases/v*.md', {
         images: (page.frontmatter.images ?? []) as ReleaseImage[],
         highlights: (page.frontmatter.highlights ?? []) as ReleaseHighlight[],
         changes: (page.frontmatter.changes ?? {}) as ReleaseChanges,
+        building: page.frontmatter.status === 'building',
+        en: (page.frontmatter.en ?? {}) as Partial<ReleaseText>,
       }))
       .sort((left, right) => versionKey(right.version).localeCompare(versionKey(left.version)))
   },
