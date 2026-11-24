@@ -18,7 +18,7 @@ pub struct CurrentUser {
     pub token_hash: String,
 }
 
-fn hash_token(token: &str) -> String {
+pub fn hash_token(token: &str) -> String {
     hex::encode(Sha256::digest(token.as_bytes()))
 }
 

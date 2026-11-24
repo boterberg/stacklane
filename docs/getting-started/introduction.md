@@ -15,6 +15,9 @@ Stacklane is net begonnen. Kijk bij de [releases](/releases/) wat er in de huidi
 | Tickets: aanmaken, reageren, sluiten, zoeken en filteren | 0.0.1.0 |
 | Beheer: tickets van alle klanten beantwoorden | 0.0.1.0 |
 | Het commando `stacklane` met setup, update en status | 0.0.1.0 |
+| Gameservers via Pterodactyl: console, bestanden, back-ups | in ontwikkeling |
+| Import uit Pterodactyl | in ontwikkeling |
+| Wachtwoord herstellen per e-mail | in ontwikkeling |
 
 Facturatie, VPS, gameservers, domeinen en webhosting staan op de [roadmap](/#roadmap).
 

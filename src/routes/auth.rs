@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::auth::{self, CurrentUser};
 use crate::error::{AppError, AppResult};
+use crate::mail::Email;
 use crate::routes::me::{Profile, load_profile};
 use crate::state::AppState;
 
@@ -176,9 +177,96 @@ pub async fn logout(
     ))
 }
 
-pub async fn forgot_password(Json(input): Json<ForgotPasswordRequest>) -> AppResult<StatusCode> {
-    if !looks_like_email(input.email.trim()) {
+pub async fn forgot_password(
+    State(state): State<AppState>,
+    Json(input): Json<ForgotPasswordRequest>,
+) -> AppResult<StatusCode> {
+    let email = input.email.trim().to_lowercase();
+    if !looks_like_email(&email) {
         return Err(AppError::field("email", "Vul een geldig e-mailadres in."));
     }
+    let user: Option<(Uuid, String)> =
+        sqlx::query_as("SELECT id, first_name FROM users WHERE email = $1")
+            .bind(&email)
+            .fetch_optional(&state.db)
+            .await?;
+    if let Some((user_id, first_name)) = user {
+        let token = hex::encode(rand::random::<[u8; 32]>());
+        sqlx::query("DELETE FROM password_resets WHERE user_id = $1 AND used_at IS NULL")
+            .bind(user_id)
+            .execute(&state.db)
+            .await?;
+        sqlx::query(
+            "INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES ($1, $2, now() + interval '1 hour')",
+        )
+        .bind(auth::hash_token(&token))
+        .bind(user_id)
+        .execute(&state.db)
+        .await?;
+        let greeting = if first_name.is_empty() {
+            "Hallo".to_owned()
+        } else {
+            format!("Hallo {first_name}")
+        };
+        let link = format!("{}/reset-password?token={token}", state.config.public_url);
+        let body = format!(
+            "{greeting},\n\nJe hebt gevraagd om een nieuw wachtwoord voor je account. Via deze link stel je het in:\n\n{link}\n\nDe link werkt een uur. Heb je dit niet zelf gevraagd, dan kun je deze e-mail negeren.\n"
+        );
+        if let Err(error) = state
+            .mailer
+            .send(Email {
+                to: &email,
+                subject: "Je wachtwoord opnieuw instellen",
+                body,
+            })
+            .await
+        {
+            tracing::error!(?error, "sending password reset mail failed");
+        }
+    }
     Ok(StatusCode::ACCEPTED)
+}
+
+#[derive(Deserialize)]
+pub struct ResetPasswordRequest {
+    token: String,
+    password: String,
+}
+
+pub async fn reset_password(
+    State(state): State<AppState>,
+    Json(input): Json<ResetPasswordRequest>,
+) -> AppResult<StatusCode> {
+    if input.password.chars().count() < MIN_PASSWORD_LENGTH {
+        return Err(AppError::field(
+            "password",
+            format!("Je wachtwoord moet minstens {MIN_PASSWORD_LENGTH} tekens lang zijn."),
+        ));
+    }
+    let mut transaction = state.db.begin().await?;
+    let user_id: Option<Uuid> = sqlx::query_scalar(
+        "UPDATE password_resets SET used_at = now()
+         WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
+         RETURNING user_id",
+    )
+    .bind(auth::hash_token(input.token.trim()))
+    .fetch_optional(&mut *transaction)
+    .await?;
+    let user_id = user_id.ok_or_else(|| {
+        AppError::field(
+            "token",
+            "Deze link is verlopen of al gebruikt. Vraag een nieuwe aan.",
+        )
+    })?;
+    sqlx::query("UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1")
+        .bind(user_id)
+        .bind(auth::hash_password(&input.password)?)
+        .execute(&mut *transaction)
+        .await?;
+    sqlx::query("DELETE FROM sessions WHERE user_id = $1")
+        .bind(user_id)
+        .execute(&mut *transaction)
+        .await?;
+    transaction.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
 }

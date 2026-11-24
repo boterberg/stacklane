@@ -5,6 +5,7 @@ import { AuthLayout } from '../pages/auth/AuthLayout'
 import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage'
 import { LoginPage } from '../pages/auth/LoginPage'
 import { RegisterPage } from '../pages/auth/RegisterPage'
+import { ResetPasswordPage } from '../pages/auth/ResetPasswordPage'
 import { DashboardPage } from '../pages/DashboardPage'
 import { NotFoundPage, SectionPage } from '../pages/SectionPage'
 import { TicketDetailPage } from '../pages/support/TicketDetailPage'
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
       { path: '/login', element: <LoginPage /> },
       { path: '/register', element: <RegisterPage /> },
       { path: '/forgot-password', element: <ForgotPasswordPage /> },
+      { path: '/reset-password', element: <ResetPasswordPage /> },
     ],
   },
   {

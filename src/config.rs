@@ -16,6 +16,7 @@ pub struct Config {
     pub static_dir: Option<PathBuf>,
     pub demo_mode: bool,
     pub secrets: Option<SecretBox>,
+    pub public_url: String,
 }
 
 impl Config {
@@ -28,6 +29,10 @@ impl Config {
                 .unwrap_or(true),
             static_dir: std::env::var_os("STATIC_DIR").map(PathBuf::from),
             demo_mode: std::env::var("DEMO_MODE").is_ok_and(|value| value == "true"),
+            public_url: std::env::var("PUBLIC_URL")
+                .unwrap_or_else(|_| "http://localhost:5173".into())
+                .trim_end_matches('/')
+                .to_owned(),
             secrets: match std::env::var("SECRET_KEY") {
                 Ok(key) if !key.trim().is_empty() => Some(SecretBox::from_hex(&key)?),
                 _ => None,

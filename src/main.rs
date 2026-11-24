@@ -7,12 +7,11 @@ mod error;
 mod html;
 mod imports;
 mod integrations;
+mod mail;
 mod pagination;
 mod routes;
 mod services;
 mod state;
-
-use std::sync::Arc;
 
 use anyhow::Context;
 use sqlx::PgPool;
@@ -98,10 +97,7 @@ async fn serve() -> anyhow::Result<()> {
     init_tracing();
     let config = Config::from_env()?;
     let pool = connect(&config).await?;
-    let state = AppState {
-        db: pool,
-        config: Arc::new(config),
-    };
+    let state = AppState::new(pool, config)?;
     if state.config.demo_mode {
         let users: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
             .fetch_one(&state.db)

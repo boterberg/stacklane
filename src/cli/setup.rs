@@ -102,6 +102,19 @@ fn webserver(domain: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn set_env(key: &str, value: &str) -> anyhow::Result<()> {
+    let path = "/etc/stacklane/stacklane.env";
+    let current = std::fs::read_to_string(path).unwrap_or_default();
+    let mut lines: Vec<String> = current
+        .lines()
+        .filter(|line| !line.starts_with(&format!("{key}=")))
+        .map(str::to_owned)
+        .collect();
+    lines.push(format!("{key}={value}"));
+    std::fs::write(path, lines.join("\n") + "\n").context("stacklane.env bijwerken")?;
+    Ok(())
+}
+
 fn admin_account() -> anyhow::Result<()> {
     let existing = exec(
         "runuser",
@@ -193,6 +206,9 @@ pub async fn run() -> anyhow::Result<()> {
         warn("Geen domein opgegeven, de webserver sla ik over");
     } else {
         webserver(&domain)?;
+        set_env("PUBLIC_URL", &format!("https://{domain}"))?;
+        exec("systemctl", &["restart", "stacklane"])?;
+        wait_until_ready(30);
     }
 
     admin_account()?;

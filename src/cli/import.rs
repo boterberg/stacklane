@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use uuid::Uuid;
 
 use super::{banner, bold, done, run_as_service_user, step, warn};
@@ -47,10 +45,7 @@ async fn pterodactyl(args: &[String]) -> anyhow::Result<()> {
 
     let config = Config::from_env()?;
     let pool = crate::connect(&config).await?;
-    let state = AppState {
-        db: pool.clone(),
-        config: Arc::new(config),
-    };
+    let state = AppState::new(pool.clone(), config)?;
 
     let candidates: Vec<(Uuid, String)> = sqlx::query_as(
         "SELECT id, name FROM integrations WHERE kind = 'pterodactyl' ORDER BY created_at",
