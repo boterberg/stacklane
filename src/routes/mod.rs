@@ -7,6 +7,7 @@ mod gameservers;
 mod health;
 pub mod me;
 mod notifications;
+mod payments;
 mod support;
 mod system;
 
@@ -34,6 +35,15 @@ pub fn router(state: AppState) -> Router {
         .route("/billing/invoices", get(billing::invoices))
         .route("/billing/invoices/{id}", get(billing::invoice))
         .route("/billing/invoices/{id}/pdf", get(billing::invoice_pdf))
+        .route("/billing/invoices/{id}/pay", post(payments::pay))
+        .route("/billing/payment-options", get(payments::options))
+        .route("/billing/mandates/{id}", delete(payments::revoke_mandate))
+        .route("/webhooks/mollie", post(payments::mollie_webhook))
+        .route("/webhooks/stripe", post(payments::stripe_webhook))
+        .route(
+            "/admin/payment-settings",
+            get(payments::admin_settings).put(payments::update_admin_settings),
+        )
         .route("/notifications", get(notifications::index))
         .route("/support/departments", get(support::departments))
         .route(

@@ -12,6 +12,7 @@ mod integrations;
 mod invoice_pdf;
 mod mail;
 mod pagination;
+mod payments;
 mod pdf;
 mod routes;
 mod services;

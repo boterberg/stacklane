@@ -130,6 +130,12 @@ fn english(message: &str) -> Option<&'static str> {
         }
         "Er loopt al een update." => "An update is already running.",
         "Er is geen nieuwere versie." => "There is no newer version.",
+        "Deze betaalmethode is niet beschikbaar." => "This payment method is not available.",
+        "In de demo kun je niet echt betalen." => "You cannot really pay in the demo.",
+        "Vul eerst een API-sleutel van Mollie in." => "Enter a Mollie API key first.",
+        "Vul eerst de geheime sleutel en het webhookgeheim van Stripe in." => {
+            "Enter the Stripe secret key and webhook secret first."
+        }
         "Vul de naam van je bedrijf in." => "Enter the name of your company.",
         "Kies een btw-tarief tussen 0 en 100 procent." => {
             "Choose a VAT rate between 0 and 100 percent."
