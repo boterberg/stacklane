@@ -648,15 +648,31 @@ impl OpenStack {
                 error_message(&body).unwrap_or_else(|| "importeren mislukt".to_owned())
             );
         }
+        let mut failures = 0;
         for _ in 0..1800 {
-            let image = self
+            let image = match self
                 .call(
                     Service::Image,
                     Method::GET,
                     &format!("/v2/images/{id}"),
                     None,
                 )
-                .await?;
+                .await
+            {
+                Ok(image) => {
+                    failures = 0;
+                    image
+                }
+                Err(error) => {
+                    failures += 1;
+                    if failures >= 5 {
+                        let _ = self.delete_iso(&id).await;
+                        return Err(error);
+                    }
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    continue;
+                }
+            };
             match image["status"].as_str() {
                 Some("active") => return Ok(id),
                 Some("killed" | "deleted" | "deactivated") => {
