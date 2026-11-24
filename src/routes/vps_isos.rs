@@ -150,9 +150,14 @@ pub async fn create(
     let url = isos::check_url(&input.url)
         .await
         .map_err(|error| AppError::field("url", format!("{error:#}")))?;
+    let mut transaction = state.db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1::text))")
+        .bind(format!("isos {}", actor.owner))
+        .execute(&mut *transaction)
+        .await?;
     let used: i64 = sqlx::query_scalar("SELECT count(*) FROM vps_isos WHERE user_id = $1")
         .bind(actor.owner)
-        .fetch_one(&state.db)
+        .fetch_one(&mut *transaction)
         .await?;
     if used >= MAX_ISOS {
         return Err(AppError::field(
@@ -182,8 +187,9 @@ pub async fn create(
     .bind(name)
     .bind(&url)
     .bind(&input.firmware)
-    .execute(&state.db)
+    .execute(&mut *transaction)
     .await?;
+    transaction.commit().await?;
     tokio::spawn(run_import(
         state.clone(),
         id,
@@ -206,12 +212,19 @@ pub async fn remove(state: &AppState, id: Uuid) -> anyhow::Result<()> {
             .bind(id)
             .fetch_one(&state.db)
             .await?;
-    if let Some(external_id) = external_id {
-        store(state, integration_id)
-            .await
-            .map_err(|error| anyhow::anyhow!("{error}"))?
-            .delete(&external_id)
-            .await?;
+    let store = store(state, integration_id)
+        .await
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+    match external_id {
+        Some(external_id) => store.delete(&external_id).await?,
+        None => {
+            if let isos::IsoStore::Proxmox(_) = &store {
+                store
+                    .delete(&format!("stacklane-{}.iso", id.simple()))
+                    .await
+                    .ok();
+            }
+        }
     }
     sqlx::query("DELETE FROM vps_isos WHERE id = $1")
         .bind(id)
@@ -368,6 +381,12 @@ pub async fn unmount(
 }
 
 pub async fn remove_unused(state: &AppState) -> AppResult<usize> {
+    sqlx::query(
+        "UPDATE vps_isos SET status = 'failed', last_error = 'Het importeren is niet afgemaakt.'
+         WHERE status = 'importing' AND created_at < now() - interval '3 hours'",
+    )
+    .execute(&state.db)
+    .await?;
     let stale: Vec<Uuid> = sqlx::query_scalar(
         "SELECT id FROM vps_isos
          WHERE mounted_on IS NULL AND status <> 'importing' AND last_used_at < now() - make_interval(days => $1)",

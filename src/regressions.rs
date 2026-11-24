@@ -901,3 +901,49 @@ async fn a_member_needs_the_matching_right_for_every_firewall_change(db: PgPool)
         StatusCode::OK
     );
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn concurrent_iso_imports_respect_the_quota(db: PgPool) {
+    use crate::testing::{NewService, fake_api, proxmox_integration, service};
+    let client = std::sync::Arc::new(Client::new(db));
+    let (base, _) = fake_api(steady_node).await;
+    let integration = proxmox_integration(&client.state, &base).await;
+    let (user, cookie) = client.register("iso@example.test").await;
+    service(
+        &client.state,
+        NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "active",
+            integration: Some(integration),
+            external_id: Some("300"),
+            details: json!({}),
+        },
+    )
+    .await;
+    let imports: Vec<_> = (0..6)
+        .map(|index| {
+            let (client, cookie) = (client.clone(), cookie.clone());
+            tokio::spawn(async move {
+                client
+                    .send(
+                        Method::POST,
+                        "/vps/isos",
+                        Some(&cookie),
+                        Some(json!({ "name": format!("race {index}"), "url": "https://1.1.1.1/x.iso", "firmware": "bios" })),
+                    )
+                    .await
+                    .status
+            })
+        })
+        .collect();
+    let mut created = 0;
+    for import in imports {
+        if import.await.unwrap() == StatusCode::CREATED {
+            created += 1;
+        }
+    }
+    assert_eq!(created, 2);
+}

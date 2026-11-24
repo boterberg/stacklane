@@ -507,10 +507,29 @@ impl Proxmox {
                 ]),
             )
             .await?;
-        match upid.as_str() {
-            Some(upid) => self.wait_for_task_up_to(upid, 3600).await,
-            None => Ok(()),
+        let Some(upid) = upid.as_str() else {
+            return Ok(());
+        };
+        if let Err(error) = self.wait_for_task_up_to(upid, 3600).await {
+            self.stop_task(upid).await.ok();
+            self.delete_iso(file).await.ok();
+            return Err(error);
         }
+        Ok(())
+    }
+
+    async fn stop_task(&self, upid: &str) -> anyhow::Result<()> {
+        self.request(
+            Method::DELETE,
+            &format!(
+                "/nodes/{}/tasks/{}",
+                self.settings.node,
+                upid.replace('!', "%21")
+            ),
+            None,
+        )
+        .await
+        .map(|_| ())
     }
 
     pub async fn delete_iso(&self, file: &str) -> anyhow::Result<()> {
@@ -736,6 +755,43 @@ mod tests {
             token_secret: "s".into(),
         };
         (Proxmox::new(&base, credentials, settings()).unwrap(), calls)
+    }
+
+    fn stuck_download(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+        match (method, path) {
+            ("POST", path) if path.ends_with("/download-url") => (
+                200,
+                json!({ "data": "UPID:pve:1:2:3:download:iso:root@pam:" }),
+            ),
+            ("GET", path) if path.contains("/tasks/") => (503, json!({ "message": "busy" })),
+            _ => (200, json!({ "data": null })),
+        }
+    }
+
+    #[tokio::test]
+    async fn an_abandoned_iso_download_is_stopped_and_removed() {
+        let (base, calls) = crate::testing::fake_api(stuck_download).await;
+        let credentials = Credentials {
+            token_id: "t".into(),
+            token_secret: "s".into(),
+        };
+        let client = Proxmox::new(&base, credentials, settings()).unwrap();
+        assert!(
+            client
+                .import_iso("stacklane-x.iso", "https://example.test/x.iso")
+                .await
+                .is_err()
+        );
+        let calls = calls.lock().unwrap().clone();
+        assert!(
+            calls
+                .iter()
+                .any(|call| call.starts_with("DELETE /api2/json/nodes/pve/tasks/UPID"))
+        );
+        assert!(calls.iter().any(
+            |call| call.starts_with("DELETE /api2/json/nodes/pve/storage/")
+                && call.contains("stacklane-x.iso")
+        ));
     }
 
     #[tokio::test]
