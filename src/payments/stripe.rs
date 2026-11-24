@@ -22,7 +22,11 @@ pub struct Checkout<'a> {
 impl Client {
     pub fn new(secret_key: String) -> Self {
         Self {
-            http: reqwest::Client::new(),
+            http: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap_or_default(),
             base_url: std::env::var("STRIPE_API_URL")
                 .unwrap_or_else(|_| "https://api.stripe.com/v1".into()),
             secret_key,

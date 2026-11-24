@@ -95,6 +95,7 @@ impl DirectAdmin {
         settings: Settings,
     ) -> anyhow::Result<Self> {
         let http = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
             .timeout(Duration::from_secs(120))
             .user_agent(concat!("stacklane/", env!("CARGO_PKG_VERSION")))
             .build()?;
