@@ -34,6 +34,7 @@ pub fn state(db: PgPool) -> AppState {
         updates: Arc::new(Updates::new(config.update_dir.clone(), None)),
         config: Arc::new(config),
         mailer: Arc::new(Mailer::Disabled),
+        limits: Arc::new(crate::limits::Limits::default()),
     }
 }
 

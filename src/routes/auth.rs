@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::auth::{self, CurrentUser};
 use crate::error::{AppError, AppResult};
 use crate::i18n::Locale;
+use crate::limits::{self, ClientIp};
 
 use crate::mail::Email;
 use crate::routes::me::{Profile, load_profile};
@@ -65,10 +66,12 @@ pub(super) fn looks_like_email(email: &str) -> bool {
 
 pub async fn register(
     State(state): State<AppState>,
+    ClientIp(ip): ClientIp,
     jar: CookieJar,
     headers: HeaderMap,
     Json(input): Json<RegisterRequest>,
 ) -> AppResult<(CookieJar, Json<Profile>)> {
+    state.limits.check(&limits::REGISTER, &ip)?;
     let email = input.email.trim().to_lowercase();
     let mut errors = BTreeMap::new();
     if input.name.trim().is_empty() {
@@ -119,7 +122,7 @@ pub async fn register(
     )
     .bind(user_id)
     .bind(&email)
-    .bind(auth::hash_password(&input.password)?)
+    .bind(auth::hash(&input.password).await?)
     .bind(first_name)
     .bind(last_name)
     .bind(input.country.to_uppercase())
@@ -140,26 +143,36 @@ pub async fn register(
 
 pub async fn login(
     State(state): State<AppState>,
+    ClientIp(ip): ClientIp,
     jar: CookieJar,
     headers: HeaderMap,
     Json(input): Json<LoginRequest>,
 ) -> AppResult<(CookieJar, Json<Profile>)> {
     let email = input.email.trim().to_lowercase();
+    state.limits.check(&limits::LOGIN, &ip)?;
+    state
+        .limits
+        .check(&limits::LOGIN_ACCOUNT, &format!("{ip}|{email}"))?;
     let account: Option<(Uuid, String, Option<String>)> =
         sqlx::query_as("SELECT id, password_hash, totp_secret FROM users WHERE email = $1")
             .bind(&email)
             .fetch_optional(&state.db)
             .await?;
 
+    let matches = auth::verify(
+        &input.password,
+        account.as_ref().map(|(_, hash, _)| hash.as_str()),
+    )
+    .await?;
     let user_id = match account {
-        Some((id, hash, totp_secret)) if auth::verify_password(&input.password, &hash) => {
+        Some((id, hash, totp_secret)) if matches => {
             if let Some(sealed) = totp_secret {
                 two_factor::check_login_code(&state, id, &sealed, input.code.as_deref()).await?;
             }
             if auth::needs_rehash(&hash) {
                 sqlx::query("UPDATE users SET password_hash = $2 WHERE id = $1")
                     .bind(id)
-                    .bind(auth::hash_password(&input.password)?)
+                    .bind(auth::hash(&input.password).await?)
                     .execute(&state.db)
                     .await?;
             }
@@ -196,8 +209,10 @@ pub async fn logout(
 
 pub async fn forgot_password(
     State(state): State<AppState>,
+    ClientIp(ip): ClientIp,
     Json(input): Json<ForgotPasswordRequest>,
 ) -> AppResult<StatusCode> {
+    state.limits.check(&limits::RECOVERY, &ip)?;
     let email = input.email.trim().to_lowercase();
     if !looks_like_email(&email) {
         return Err(AppError::field("email", "Vul een geldig e-mailadres in."));
@@ -207,7 +222,19 @@ pub async fn forgot_password(
             .bind(&email)
             .fetch_optional(&state.db)
             .await?;
-    if let Some((user_id, first_name, locale)) = user {
+    let recent: bool = match &user {
+        Some((user_id, _, _)) => {
+            sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM password_resets
+                                WHERE user_id = $1 AND used_at IS NULL AND created_at > now() - interval '2 minutes')",
+            )
+            .bind(user_id)
+            .fetch_one(&state.db)
+            .await?
+        }
+        None => false,
+    };
+    if let Some((user_id, first_name, locale)) = user.filter(|_| !recent) {
         let token = hex::encode(rand::random::<[u8; 32]>());
         sqlx::query("DELETE FROM password_resets WHERE user_id = $1 AND used_at IS NULL")
             .bind(user_id)
@@ -266,8 +293,10 @@ pub struct ResetPasswordRequest {
 
 pub async fn reset_password(
     State(state): State<AppState>,
+    ClientIp(ip): ClientIp,
     Json(input): Json<ResetPasswordRequest>,
 ) -> AppResult<StatusCode> {
+    state.limits.check(&limits::VERIFY, &ip)?;
     if input.password.chars().count() < MIN_PASSWORD_LENGTH {
         return Err(AppError::field(
             "password",
@@ -295,7 +324,7 @@ pub async fn reset_password(
          WHERE id = $1",
     )
     .bind(user_id)
-    .bind(auth::hash_password(&input.password)?)
+    .bind(auth::hash(&input.password).await?)
     .execute(&mut *transaction)
     .await?;
     for table in ["sessions", "api_tokens", "password_resets"] {

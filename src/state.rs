@@ -3,6 +3,7 @@ use std::sync::Arc;
 use sqlx::PgPool;
 
 use crate::config::Config;
+use crate::limits::Limits;
 use crate::mail::Mailer;
 use crate::updates::Updates;
 
@@ -12,6 +13,7 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub mailer: Arc<Mailer>,
     pub updates: Arc<Updates>,
+    pub limits: Arc<Limits>,
 }
 
 impl AppState {
@@ -24,6 +26,7 @@ impl AppState {
             )),
             config: Arc::new(config),
             mailer: Arc::new(Mailer::from_env()?),
+            limits: Arc::new(Limits::default()),
         })
     }
 }

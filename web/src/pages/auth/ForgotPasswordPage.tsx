@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 
 import { Button } from '../../components/ui/Button'
-import { Field, Input } from '../../components/ui/Field'
+import { Field, FormError, Input } from '../../components/ui/Field'
 import { api, ApiError } from '../../lib/api'
 import { AuthFooter, AuthHeading, TextLink } from './AuthLayout'
 import { t } from '../../lib/i18n'
@@ -29,6 +29,7 @@ export function ForgotPasswordPage() {
           <Field label={t('E-mailadres')} error={errors.email}>
             {(id) => <Input id={id} type="email" autoComplete="email" invalid={!!errors.email} value={email} onChange={(event) => setEmail(event.target.value)} />}
           </Field>
+          <FormError error={request.error} />
           <Button type="submit" variant="primary" className="w-full" disabled={request.isPending}>
             {t('Reset aanvragen')}
           </Button>

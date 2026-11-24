@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router'
 
 import { Button, ButtonLink } from '../../components/ui/Button'
-import { Field, Input } from '../../components/ui/Field'
+import { Field, FormError, Input } from '../../components/ui/Field'
 import { api, ApiError } from '../../lib/api'
 import { AuthFooter, AuthHeading, TextLink } from './AuthLayout'
 import { t } from '../../lib/i18n'
@@ -54,6 +54,7 @@ export function ResetPasswordPage() {
           <Field label={t('Nog een keer')} error={mismatch ? t('De wachtwoorden zijn niet gelijk.') : undefined}>
             {(id) => <Input id={id} type="password" autoComplete="new-password" invalid={mismatch} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />}
           </Field>
+          <FormError error={reset.error} />
           <Button type="submit" variant="primary" className="w-full" disabled={reset.isPending}>
             {t('Wachtwoord opslaan')}
           </Button>

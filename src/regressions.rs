@@ -300,3 +300,80 @@ async fn a_password_change_revokes_api_tokens_and_reset_links(db: PgPool) {
         .unwrap();
     assert_eq!(resets, 0);
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn password_guessing_is_throttled(db: PgPool) {
+    let client = Client::new(db);
+    client.register("guess@example.test").await;
+    let mut statuses = Vec::new();
+    for _ in 0..11 {
+        statuses.push(
+            client
+                .login("guess@example.test", "not the password", None)
+                .await
+                .status,
+        );
+    }
+    assert!(
+        statuses[..10]
+            .iter()
+            .all(|status| *status == StatusCode::UNPROCESSABLE_ENTITY)
+    );
+    assert_eq!(statuses[10], StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn forgot_password_sends_one_mail_per_cooldown(db: PgPool) {
+    let client = Client::new(db);
+    let (user, _) = client.register("forgot@example.test").await;
+    for _ in 0..3 {
+        let reply = client
+            .send(
+                Method::POST,
+                "/auth/forgot-password",
+                None,
+                Some(json!({ "email": "forgot@example.test" })),
+            )
+            .await;
+        assert_eq!(reply.status, StatusCode::ACCEPTED);
+    }
+    let resets: i64 = sqlx::query_scalar("SELECT count(*) FROM password_resets WHERE user_id = $1")
+        .bind(user)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(resets, 1);
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn password_hashing_does_not_stall_other_requests(db: PgPool) {
+    let client = std::sync::Arc::new(Client::new(db));
+    client.register("busy@example.test").await;
+    let started = std::time::Instant::now();
+    let logins: Vec<_> = (0..4)
+        .map(|_| {
+            let client = client.clone();
+            tokio::spawn(async move {
+                client
+                    .login("busy@example.test", "not the password", None)
+                    .await
+            })
+        })
+        .collect();
+    tokio::task::yield_now().await;
+    let meta_started = std::time::Instant::now();
+    let meta = client.send(Method::GET, "/meta", None, None).await;
+    let meta_took = meta_started.elapsed();
+    for login in logins {
+        login.await.unwrap();
+    }
+    let logins_took = started.elapsed();
+    assert_eq!(meta.status, StatusCode::OK);
+    assert!(
+        meta_took * 2 < logins_took,
+        "meta {meta_took:?}, logins {logins_took:?}"
+    );
+}

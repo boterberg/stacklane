@@ -15,6 +15,10 @@ pub enum AppError {
     Forbidden,
     #[error("not found")]
     NotFound,
+    #[error("too many requests")]
+    TooMany,
+    #[error("busy")]
+    Busy,
     #[error("validation failed")]
     Validation(BTreeMap<&'static str, String>),
     #[error(transparent)]
@@ -47,6 +51,18 @@ impl IntoResponse for AppError {
             Self::NotFound => (
                 StatusCode::NOT_FOUND,
                 Json(json!({ "message": tr("Niet gevonden.") })),
+            )
+                .into_response(),
+            Self::TooMany => (
+                StatusCode::TOO_MANY_REQUESTS,
+                [(axum::http::header::RETRY_AFTER, "60")],
+                Json(json!({ "message": tr("Te veel pogingen. Probeer het over een minuut opnieuw.") })),
+            )
+                .into_response(),
+            Self::Busy => (
+                StatusCode::TOO_MANY_REQUESTS,
+                [(axum::http::header::RETRY_AFTER, "5")],
+                Json(json!({ "message": tr("Het is even te druk. Probeer het over een paar seconden opnieuw.") })),
             )
                 .into_response(),
             Self::Validation(errors) => (

@@ -1,4 +1,10 @@
+use std::sync::LazyLock;
+use std::time::Duration;
+
 use argon2::Argon2;
+use tokio::sync::Semaphore;
+
+use crate::error::{AppError, AppResult};
 use argon2::password_hash::phc::PasswordHash;
 use argon2::password_hash::{PasswordHasher, PasswordVerifier};
 
@@ -30,6 +36,37 @@ pub fn verify_password(password: &str, stored_hash: &str) -> bool {
 
 pub fn needs_rehash(stored_hash: &str) -> bool {
     is_bcrypt(stored_hash)
+}
+
+static GATE: LazyLock<Semaphore> = LazyLock::new(|| {
+    let cores = std::thread::available_parallelism().map_or(2, usize::from);
+    Semaphore::new(cores.saturating_sub(1).clamp(1, 4))
+});
+
+static UNKNOWN_ACCOUNT: LazyLock<String> =
+    LazyLock::new(|| hash_password("stacklane unknown account").unwrap_or_default());
+
+async fn gated<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> AppResult<T> {
+    let _permit = tokio::time::timeout(Duration::from_secs(5), GATE.acquire())
+        .await
+        .map_err(|_| AppError::Busy)?
+        .map_err(|error| AppError::Internal(error.into()))?;
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|error| AppError::Internal(error.into()))
+}
+
+pub async fn hash(password: &str) -> AppResult<String> {
+    let password = password.to_owned();
+    Ok(gated(move || hash_password(&password)).await??)
+}
+
+pub async fn verify(password: &str, stored_hash: Option<&str>) -> AppResult<bool> {
+    let known = stored_hash.is_some();
+    let password = password.to_owned();
+    let stored_hash = stored_hash.map_or_else(|| UNKNOWN_ACCOUNT.clone(), str::to_owned);
+    let matches = gated(move || verify_password(&password, &stored_hash)).await?;
+    Ok(known && matches)
 }
 
 #[cfg(test)]

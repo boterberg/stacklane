@@ -1,6 +1,7 @@
 import { useId, type ComponentProps, type ComponentType, type ReactNode, type SVGProps } from 'react'
 
 import { cn } from '../../lib/cn'
+import { ApiError } from '../../lib/api'
 
 type FieldProps = {
   label: ReactNode
@@ -62,4 +63,10 @@ export function Checkbox({ label, className, ...rest }: ComponentProps<'input'> 
       {label}
     </label>
   )
+}
+
+export function FormError({ error }: { error: unknown }) {
+  if (!(error instanceof Error)) return null
+  if (error instanceof ApiError && Object.keys(error.fieldErrors).length > 0) return null
+  return <p className="text-sm font-medium text-red-500 dark:text-red-400">{error.message}</p>
 }

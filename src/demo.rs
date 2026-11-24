@@ -113,7 +113,7 @@ impl Seed<'_> {
         )
         .bind(id)
         .bind(email)
-        .bind(auth::hash_password(&password)?)
+        .bind(auth::hash(&password).await?)
         .bind(first_name)
         .bind(last_name)
         .bind(role)
