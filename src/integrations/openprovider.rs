@@ -1,10 +1,11 @@
-use std::time::Duration;
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, bail};
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use tokio::sync::OnceCell;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Credentials {
@@ -68,8 +69,13 @@ pub struct Openprovider {
     credentials: Credentials,
     settings: Settings,
     http: reqwest::Client,
-    token: OnceCell<String>,
 }
+
+const TOKEN_LIFETIME: Duration = Duration::from_secs(12 * 60 * 60);
+
+type Tokens = HashMap<String, (String, Instant)>;
+
+static TOKENS: LazyLock<Mutex<Tokens>> = LazyLock::new(Mutex::default);
 
 pub fn split_domain(domain: &str) -> Option<(String, String)> {
     let domain = domain.trim().trim_end_matches('.').to_lowercase();
@@ -144,7 +150,6 @@ impl Openprovider {
             credentials,
             settings,
             http,
-            token: OnceCell::new(),
         })
     }
 
@@ -187,20 +192,51 @@ impl Openprovider {
             .context("Openprovider gaf geen token terug")
     }
 
-    async fn call(&self, method: Method, path: &str, body: Option<Value>) -> anyhow::Result<Value> {
-        let token = self.token.get_or_try_init(|| self.login()).await?;
-        let mut request = self
-            .http
-            .request(method, format!("{}/v1{path}", self.base_url))
-            .bearer_auth(token);
-        if let Some(body) = body {
-            request = request.json(&body);
+    fn cache_key(&self) -> String {
+        format!("{}|{}", self.base_url, self.credentials.username)
+    }
+
+    async fn token(&self, fresh: bool) -> anyhow::Result<String> {
+        let key = self.cache_key();
+        if !fresh {
+            let tokens = TOKENS
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some((token, issued)) = tokens.get(&key)
+                && issued.elapsed() < TOKEN_LIFETIME
+            {
+                return Ok(token.clone());
+            }
         }
-        let response = request
-            .send()
-            .await
-            .context("Openprovider is niet bereikbaar")?;
-        Self::envelope(response).await
+        let token = self.login().await?;
+        TOKENS
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(key, (token.clone(), Instant::now()));
+        Ok(token)
+    }
+
+    async fn call(&self, method: Method, path: &str, body: Option<Value>) -> anyhow::Result<Value> {
+        let mut fresh = false;
+        loop {
+            let token = self.token(fresh).await?;
+            let mut request = self
+                .http
+                .request(method.clone(), format!("{}/v1{path}", self.base_url))
+                .bearer_auth(token);
+            if let Some(body) = &body {
+                request = request.json(body);
+            }
+            let response = request
+                .send()
+                .await
+                .context("Openprovider is niet bereikbaar")?;
+            if response.status() == reqwest::StatusCode::UNAUTHORIZED && !fresh {
+                fresh = true;
+                continue;
+            }
+            return Self::envelope(response).await;
+        }
     }
 
     pub async fn test(&self) -> anyhow::Result<String> {
@@ -408,7 +444,46 @@ impl Openprovider {
 
 #[cfg(test)]
 mod tests {
-    use super::{split_domain, split_phone};
+    use super::*;
+
+    #[tokio::test]
+    async fn reuses_the_login_token_between_clients() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let logins = Arc::new(AtomicUsize::new(0));
+        let counter = logins.clone();
+        let app = axum::Router::new()
+            .route(
+                "/v1/auth/login",
+                axum::routing::post(move || {
+                    let counter = counter.clone();
+                    async move {
+                        counter.fetch_add(1, Ordering::SeqCst);
+                        axum::Json(json!({ "code": 0, "data": { "token": "t" } }))
+                    }
+                }),
+            )
+            .route(
+                "/v1/domains",
+                axum::routing::get(|| async { axum::Json(json!({ "code": 0, "data": {} })) }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        let credentials = Credentials {
+            username: "reuse".into(),
+            password: "secret".into(),
+        };
+        let settings = Settings {
+            nameservers: default_nameservers(),
+        };
+        for _ in 0..3 {
+            let client = Openprovider::new(&base, credentials.clone(), settings.clone()).unwrap();
+            client.test().await.unwrap();
+        }
+        assert_eq!(logins.load(Ordering::SeqCst), 1);
+    }
 
     #[test]
     fn splits_domains_and_phones() {
