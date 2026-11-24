@@ -158,24 +158,31 @@ impl Plesk {
                 body["message"].as_str().unwrap_or("onbekende fout")
             );
         }
-        self.cli(
-            "subscription",
-            &[
-                "--create",
-                account.domain,
-                "-owner",
-                account.username,
-                "-service-plan",
-                account.plan,
-                "-ip",
-                &self.settings.ip,
-                "-login",
-                account.username,
-                "-passwd",
-                account.password,
-            ],
-        )
-        .await?;
+        let subscription = self
+            .cli(
+                "subscription",
+                &[
+                    "--create",
+                    account.domain,
+                    "-owner",
+                    account.username,
+                    "-service-plan",
+                    account.plan,
+                    "-ip",
+                    &self.settings.ip,
+                    "-login",
+                    account.username,
+                    "-passwd",
+                    account.password,
+                ],
+            )
+            .await;
+        if let Err(error) = subscription {
+            self.cli("customer", &["--remove", account.username])
+                .await
+                .ok();
+            return Err(error);
+        }
         Ok(())
     }
 
