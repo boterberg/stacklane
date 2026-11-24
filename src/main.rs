@@ -40,11 +40,35 @@ use crate::state::AppState;
 
 const ENV_FILE: &str = "/etc/stacklane/stacklane.env";
 
+fn trusted_env_file(owner: u32, mode: u32, running_as: u32) -> bool {
+    running_as != 0 || (owner == 0 && mode & 0o022 == 0)
+}
+
+fn load_env() {
+    if cfg!(debug_assertions) && dotenvy::dotenv().is_ok() {
+        return;
+    }
+    let path = std::env::var_os("STACKLANE_ENV_FILE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(ENV_FILE));
+    let Ok(metadata) = std::fs::metadata(&path) else {
+        return;
+    };
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let running_as = unsafe { libc::geteuid() };
+    if !trusted_env_file(metadata.uid(), metadata.permissions().mode(), running_as) {
+        eprintln!(
+            "{} wordt overgeslagen: het bestand moet van root zijn en mag niet door anderen beschreven worden",
+            path.display()
+        );
+        return;
+    }
+    dotenvy::from_path(&path).ok();
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    if dotenvy::dotenv().is_err() {
-        dotenvy::from_path(ENV_FILE).ok();
-    }
+    load_env();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let command = args.first().map(String::as_str).unwrap_or("serve");
     if command != "serve" {
@@ -162,5 +186,19 @@ async fn shutdown_signal() {
                 None => std::future::pending::<()>().await,
             }
         } => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::trusted_env_file;
+
+    #[test]
+    fn root_only_reads_a_root_owned_env_file() {
+        assert!(trusted_env_file(0, 0o100640, 0));
+        assert!(!trusted_env_file(999, 0o100640, 0));
+        assert!(!trusted_env_file(0, 0o100660, 0));
+        assert!(!trusted_env_file(0, 0o100646, 0));
+        assert!(trusted_env_file(999, 0o100600, 999));
     }
 }

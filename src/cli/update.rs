@@ -23,7 +23,7 @@ fn backup() -> anyhow::Result<String> {
     let stamp = exec("date", &["+%Y%m%d-%H%M%S"])?;
     let path = format!("{BACKUP_DIR}/stacklane-{VERSION}-{stamp}.dump");
     let file = std::fs::File::create(&path).context("back-upbestand maken")?;
-    let status = Command::new("runuser")
+    let status = super::clean(&mut Command::new("runuser"))
         .args([
             "-u",
             "postgres",
