@@ -39,7 +39,7 @@ export type ShopProduct = {
   description: string | null
   specs: { cores?: number; memory_mb?: number; disk_gb?: number }
   monthly_price_cents: number
-  images: Array<{ id: number; name: string }>
+  images: Array<{ id: string; name: string }>
 }
 
 export function useVpsServers() {
@@ -131,7 +131,7 @@ export function useShopProducts(kind: string) {
   return useQuery({ queryKey: ['shop', kind], queryFn: () => api<ShopProduct[]>(`/shop/products?kind=${kind}`) })
 }
 
-export type NewOrder = { product_id: string; billing_interval: string; name: string; image: number | null; ssh_key_ids: string[] }
+export type NewOrder = { product_id: string; billing_interval: string; name: string; image: string | null; ssh_key_ids: string[] }
 
 export function usePlaceOrder() {
   const queryClient = useQueryClient()

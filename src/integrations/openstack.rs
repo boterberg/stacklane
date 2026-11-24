@@ -59,11 +59,6 @@ pub struct NewServer<'a> {
     pub description: &'a str,
 }
 
-pub struct Created {
-    pub id: String,
-    pub ipv4: Option<String>,
-}
-
 #[derive(Clone, Copy)]
 enum Service {
     Compute,
@@ -265,6 +260,28 @@ impl OpenStack {
         })
     }
 
+    pub async fn flavors(&self) -> anyhow::Result<Value> {
+        let body = self
+            .call(Service::Compute, Method::GET, "/flavors/detail", None)
+            .await?;
+        let mut flavors: Vec<Value> = body["flavors"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|flavor| {
+                json!({
+                    "id": flavor["id"],
+                    "name": flavor["name"],
+                    "cores": flavor["vcpus"],
+                    "memory_mb": flavor["ram"],
+                    "disk_gb": flavor["disk"],
+                })
+            })
+            .collect();
+        flavors.sort_by_key(|flavor| (flavor["cores"].as_u64(), flavor["memory_mb"].as_u64()));
+        Ok(json!({ "flavors": flavors }))
+    }
+
     async fn server(&self, id: &str) -> anyhow::Result<Value> {
         let body = self
             .call(
@@ -297,11 +314,11 @@ impl OpenStack {
             .map(str::to_owned)
     }
 
-    async fn wait_until_active(&self, id: &str) -> anyhow::Result<Value> {
+    pub async fn wait_until_active(&self, id: &str) -> anyhow::Result<Option<String>> {
         for _ in 0..300 {
             let server = self.server(id).await?;
             match server["status"].as_str() {
-                Some("ACTIVE") => return Ok(server),
+                Some("ACTIVE") => return Ok(Self::ipv4(&server)),
                 Some("ERROR") => bail!(
                     "OpenStack kon de server niet maken: {}",
                     server["fault"]["message"]
@@ -344,7 +361,7 @@ impl OpenStack {
         Ok(id)
     }
 
-    pub async fn create(&self, server: &NewServer<'_>) -> anyhow::Result<Created> {
+    pub async fn create(&self, server: &NewServer<'_>) -> anyhow::Result<String> {
         let group = self
             .create_security_group(
                 &format!("stacklane-{}", server.hostname),
@@ -380,15 +397,10 @@ impl OpenStack {
                 return Err(error);
             }
         };
-        let id = created["server"]["id"]
+        Ok(created["server"]["id"]
             .as_str()
             .context("OpenStack gaf geen server-ID terug")?
-            .to_owned();
-        let active = self.wait_until_active(&id).await?;
-        Ok(Created {
-            ipv4: Self::ipv4(&active),
-            id,
-        })
+            .to_owned())
     }
 
     pub async fn status(&self, id: &str) -> anyhow::Result<Status> {
@@ -476,6 +488,16 @@ impl OpenStack {
         }
         for group in groups {
             let _ = self.delete_security_group(&group).await;
+        }
+        for snapshot in self.snapshots(id).await.unwrap_or_default() {
+            let _ = self
+                .call(
+                    Service::Image,
+                    Method::DELETE,
+                    &format!("/v2/images/{}", snapshot.name),
+                    None,
+                )
+                .await;
         }
         Ok(())
     }

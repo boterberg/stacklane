@@ -29,7 +29,7 @@ export function OrderServerPage() {
   const [productId, setProductId] = useState<string | null>(null)
   const [interval, setInterval] = useState('monthly')
   const [name, setName] = useState('')
-  const [image, setImage] = useState<number | null>(null)
+  const [image, setImage] = useState<string | null>(null)
   const [keyIds, setKeyIds] = useState<string[]>([])
   const errors = place.error instanceof ApiError ? place.error.fieldErrors : {}
 
@@ -86,7 +86,7 @@ export function OrderServerPage() {
               {product && product.images.length > 0 && (
                 <Field label={t('Besturingssysteem')} error={errors.image}>
                   {(id) => (
-                    <Select id={id} value={chosenImage ?? ''} onChange={(event) => setImage(Number(event.target.value))}>
+                    <Select id={id} value={chosenImage ?? ''} onChange={(event) => setImage(event.target.value)}>
                       {product.images.map((option) => (
                         <option key={option.id} value={option.id}>
                           {option.name}

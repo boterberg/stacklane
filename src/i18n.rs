@@ -212,6 +212,16 @@ fn english(message: &str) -> Option<&'static str> {
         "Op dit platform kun je alleen verkeer toestaan." => {
             "On this platform you can only allow traffic."
         }
+        "Vul het ID en het geheim van de application credential in." => {
+            "Enter the ID and secret of the application credential."
+        }
+        "Vul het netwerk en minstens één image in." => {
+            "Enter the network and at least one image."
+        }
+        "Op dit platform geef je per regel één poort of reeks op." => {
+            "On this platform each rule takes one port or range."
+        }
+        "Kies een flavor." => "Choose a flavor.",
         "Kies TCP, UDP of ICMP." => "Choose TCP, UDP or ICMP.",
         "Vul een poort in, zoals 22, 80,443 of 8000:8100." => {
             "Enter a port, such as 22, 80,443 or 8000:8100."

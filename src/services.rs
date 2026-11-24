@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
-use crate::integrations::{self, proxmox, pterodactyl, webhosting};
+use crate::integrations::{self, openstack, proxmox, pterodactyl, webhosting};
 use crate::state::AppState;
 
 #[derive(sqlx::FromRow)]
@@ -68,12 +68,15 @@ async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()>
                 .provision(&service_id.to_string(), &context.name, &owner, &config)
                 .await?
         }
-        "vps" => {
-            let client = driver
-                .proxmox()
-                .map_err(|error| anyhow::anyhow!("{error}"))?;
-            provision_vps(state, service_id, integration_id, client, &context).await?
-        }
+        "vps" => match &driver {
+            integrations::Driver::Proxmox(client) => {
+                provision_vps(state, service_id, integration_id, client, &context).await?
+            }
+            integrations::Driver::OpenStack(client) => {
+                provision_openstack(state, service_id, client, &context).await?
+            }
+            _ => anyhow::bail!("deze koppeling kan geen VPS maken"),
+        },
         "webhosting" => {
             let hosting = webhosting::Hosting::from_driver(&driver)
                 .ok_or_else(|| anyhow::anyhow!("deze koppeling kan geen webhosting maken"))?;
@@ -98,11 +101,13 @@ async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()>
 #[derive(Deserialize, Default)]
 struct VpsOrder {
     #[serde(default)]
-    image: Option<u32>,
+    image: Option<String>,
     #[serde(default)]
     ssh_key_ids: Vec<Uuid>,
     #[serde(default)]
     vmid: Option<u32>,
+    #[serde(default)]
+    server_id: Option<String>,
 }
 
 fn hostname(name: &str) -> String {
@@ -145,11 +150,12 @@ async fn provision_vps(
     let settings = client.settings();
     let image = order
         .image
-        .and_then(|template| {
+        .as_deref()
+        .and_then(|wanted| {
             settings
                 .images
                 .iter()
-                .find(|image| image.template == template)
+                .find(|image| image.template.to_string() == wanted)
         })
         .or_else(|| settings.images.first())
         .ok_or_else(|| anyhow::anyhow!("er staat geen besturingssysteem op deze koppeling"))?
@@ -183,12 +189,7 @@ async fn provision_vps(
         .await?;
     transaction.commit().await?;
 
-    let ssh_keys: Vec<String> =
-        sqlx::query_scalar("SELECT public_key FROM ssh_keys WHERE user_id = $1 AND id = ANY($2)")
-            .bind(context.user_id)
-            .bind(&order.ssh_key_ids)
-            .fetch_all(&state.db)
-            .await?;
+    let ssh_keys = customer_keys(state, context, &order).await?;
     let password = root_password();
     let hostname = hostname(&context.name);
     client
@@ -223,6 +224,81 @@ async fn provision_vps(
     }
     Ok(pterodactyl::Provisioned {
         external_id: vmid.to_string(),
+        details,
+    })
+}
+
+async fn customer_keys(
+    state: &AppState,
+    context: &ProvisionContext,
+    order: &VpsOrder,
+) -> anyhow::Result<Vec<String>> {
+    Ok(
+        sqlx::query_scalar("SELECT public_key FROM ssh_keys WHERE user_id = $1 AND id = ANY($2)")
+            .bind(context.user_id)
+            .bind(&order.ssh_key_ids)
+            .fetch_all(&state.db)
+            .await?,
+    )
+}
+
+async fn provision_openstack(
+    state: &AppState,
+    service_id: Uuid,
+    client: &openstack::OpenStack,
+    context: &ProvisionContext,
+) -> anyhow::Result<pterodactyl::Provisioned> {
+    let config: openstack::ProductConfig = serde_json::from_value(context.provisioning.clone())?;
+    let order: VpsOrder = serde_json::from_value(context.details.clone()).unwrap_or_default();
+    let settings = client.settings();
+    let image = order
+        .image
+        .as_deref()
+        .and_then(|wanted| settings.images.iter().find(|image| image.id == wanted))
+        .or_else(|| settings.images.first())
+        .ok_or_else(|| anyhow::anyhow!("er staat geen besturingssysteem op deze koppeling"))?
+        .clone();
+
+    if let Some(previous) = order.server_id.as_deref() {
+        let _ = client.destroy(previous).await;
+    }
+
+    let ssh_keys = customer_keys(state, context, &order).await?;
+    let password = root_password();
+    let hostname = hostname(&context.name);
+    let server_id = client
+        .create(&openstack::NewServer {
+            hostname: &hostname,
+            image_id: &image.id,
+            flavor_id: &config.flavor_id,
+            ssh_keys: &ssh_keys,
+            password: &password,
+            description: &format!("Stacklane {service_id} ({})", context.email),
+        })
+        .await?;
+    sqlx::query("UPDATE services SET details = details || $2 WHERE id = $1")
+        .bind(service_id)
+        .bind(json!({ "server_id": server_id }))
+        .execute(&state.db)
+        .await?;
+    let ipv4 = client.wait_until_active(&server_id).await?;
+
+    let mut details = context.details.clone();
+    let extra = json!({
+        "server_id": server_id,
+        "ipv4": ipv4,
+        "hostname": hostname,
+        "image": image.name,
+        "cores": config.cores,
+        "memory_mb": config.memory_mb,
+        "disk_gb": config.disk_gb,
+        "root_password": crate::payments::conceal(state, &password).map_err(|error| anyhow::anyhow!("{error}"))?,
+    });
+    if let (Some(target), Some(source)) = (details.as_object_mut(), extra.as_object()) {
+        target.extend(source.clone());
+    }
+    Ok(pterodactyl::Provisioned {
+        external_id: server_id,
         details,
     })
 }

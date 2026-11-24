@@ -65,13 +65,16 @@ async fn machine(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<vp
             "Deze server is nu niet beschikbaar.",
         ));
     }
-    let (Some(integration_id), Some(vmid)) =
-        (integration_id, external_id.and_then(|id| id.parse().ok()))
-    else {
-        return Err(AppError::field("server", "Deze server is nog niet klaar."));
+    let not_ready = || AppError::field("server", "Deze server is nog niet klaar.");
+    let (Some(integration_id), Some(external_id)) = (integration_id, external_id) else {
+        return Err(not_ready());
     };
     match integrations::driver(state, integration_id).await? {
-        integrations::Driver::Proxmox(client) => Ok(vps::Machine::Proxmox(client, vmid)),
+        integrations::Driver::Proxmox(client) => Ok(vps::Machine::Proxmox(
+            client,
+            external_id.parse().map_err(|_| not_ready())?,
+        )),
+        integrations::Driver::OpenStack(client) => Ok(vps::Machine::OpenStack(client, external_id)),
         _ => Err(AppError::NotFound),
     }
 }
@@ -355,6 +358,23 @@ pub async fn add_firewall_rule(
         ));
     }
     let machine = machine(&state, &user, id).await?;
+    if rule.action != "ACCEPT" && !machine.can_block() {
+        return Err(AppError::field(
+            "action",
+            "Op dit platform kun je alleen verkeer toestaan.",
+        ));
+    }
+    if !machine.can_block()
+        && rule
+            .dport
+            .as_deref()
+            .is_some_and(|ports| ports.contains(','))
+    {
+        return Err(AppError::field(
+            "dport",
+            "Op dit platform geef je per regel één poort of reeks op.",
+        ));
+    }
     machine.add_firewall_rule(&rule).await.map_err(failed)?;
     Ok(StatusCode::CREATED)
 }

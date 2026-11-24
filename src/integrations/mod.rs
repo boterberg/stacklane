@@ -43,6 +43,7 @@ pub enum Driver {
     Proxmox(proxmox::Proxmox),
     DirectAdmin(directadmin::DirectAdmin),
     Plesk(plesk::Plesk),
+    OpenStack(openstack::OpenStack),
 }
 
 fn wrong_kind() -> AppError {
@@ -70,19 +71,13 @@ impl Driver {
         }
     }
 
-    pub fn proxmox(&self) -> AppResult<&proxmox::Proxmox> {
-        match self {
-            Self::Proxmox(client) => Ok(client),
-            _ => Err(wrong_kind()),
-        }
-    }
-
     pub async fn test(&self) -> anyhow::Result<String> {
         match self {
             Self::Pterodactyl(client) => client.test().await,
             Self::Proxmox(client) => client.test().await,
             Self::DirectAdmin(client) => client.test().await,
             Self::Plesk(client) => client.test().await,
+            Self::OpenStack(client) => client.test().await,
         }
     }
 
@@ -92,6 +87,7 @@ impl Driver {
             Self::Proxmox(client) => client.power(vmid(external_id)?, "stop").await,
             Self::DirectAdmin(client) => client.suspend(external_id).await,
             Self::Plesk(client) => client.suspend(webhosting::plesk_parts(external_id).1).await,
+            Self::OpenStack(client) => client.power(external_id, "stop").await,
         }
     }
 
@@ -105,6 +101,7 @@ impl Driver {
                     .unsuspend(webhosting::plesk_parts(external_id).1)
                     .await
             }
+            Self::OpenStack(client) => client.power(external_id, "start").await,
         }
     }
 
@@ -117,6 +114,7 @@ impl Driver {
                 let (username, domain) = webhosting::plesk_parts(external_id);
                 client.terminate(domain, username).await
             }
+            Self::OpenStack(client) => client.destroy(external_id).await,
         }
     }
 }
@@ -166,6 +164,17 @@ pub fn build(kind: &str, base_url: &str, credentials: &[u8], settings: Value) ->
             let settings =
                 serde_json::from_value(settings).context("ongeldige Plesk-instellingen")?;
             Ok(Driver::Plesk(plesk::Plesk::new(
+                base_url,
+                credentials,
+                settings,
+            )?))
+        }
+        "openstack" => {
+            let credentials =
+                serde_json::from_slice(credentials).context("ongeldige OpenStack-sleutels")?;
+            let settings =
+                serde_json::from_value(settings).context("ongeldige OpenStack-instellingen")?;
+            Ok(Driver::OpenStack(openstack::OpenStack::new(
                 base_url,
                 credentials,
                 settings,

@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::error::{AppError, AppResult};
-use crate::integrations::proxmox;
+use crate::integrations::{openstack, proxmox};
 use crate::invoicing::{self, Line};
 use crate::payments::interval_months;
 use crate::settings::{self, Billing};
@@ -23,7 +23,7 @@ pub struct ShopQuery {
 
 #[derive(Serialize)]
 pub struct ImageOption {
-    id: u32,
+    id: String,
     name: String,
 }
 
@@ -65,7 +65,21 @@ fn images(row: &ProductRow) -> Vec<ImageOption> {
                         .images
                         .into_iter()
                         .map(|image| ImageOption {
-                            id: image.template,
+                            id: image.template.to_string(),
+                            name: image.name,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+        (Some("openstack"), Some(settings)) => {
+            serde_json::from_value::<openstack::Settings>(settings.clone())
+                .map(|settings| {
+                    settings
+                        .images
+                        .into_iter()
+                        .map(|image| ImageOption {
+                            id: image.id,
                             name: image.name,
                         })
                         .collect()
@@ -106,7 +120,7 @@ pub struct NewOrder {
     product_id: Uuid,
     billing_interval: String,
     name: String,
-    image: Option<u32>,
+    image: Option<String>,
     #[serde(default)]
     ssh_key_ids: Vec<Uuid>,
 }
@@ -188,7 +202,7 @@ pub async fn place(
     let image = match (input.image, images.first()) {
         (Some(wanted), _) if images.iter().any(|image| image.id == wanted) => Some(wanted),
         (Some(_), _) => return Err(AppError::field("image", "Kies een besturingssysteem.")),
-        (None, Some(first)) if product.kind == "vps" => Some(first.id),
+        (None, Some(first)) if product.kind == "vps" => Some(first.id.clone()),
         _ => None,
     };
     let owned: i64 =
