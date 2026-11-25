@@ -494,6 +494,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Er hangt een geblokkeerd volume of IP-adres aan deze server. Terugzetten kan pas als dat weer actief is." => {
             "A blocked volume or IP address belongs to this server. You can restore a snapshot once it is active again."
         }
+        "Je hebt een actieve VPS op dit platform nodig voor een privénetwerk." => {
+            "You need an active VPS on this platform for a private network."
+        }
         _ => return None,
     })
 }

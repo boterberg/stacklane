@@ -224,6 +224,20 @@ pub async fn create(
         {
             return Err(platform_unavailable());
         }
+        let has_server: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM services WHERE user_id = $1 AND kind = 'vps'
+                            AND status = 'active' AND integration_id = $2)",
+        )
+        .bind(owner)
+        .bind(input.integration_id)
+        .fetch_one(&state.db)
+        .await?;
+        if !has_server {
+            return Err(AppError::field(
+                "integration_id",
+                "Je hebt een actieve VPS op dit platform nodig voor een privénetwerk.",
+            ));
+        }
         let existing: Vec<(String, String)> =
             sqlx::query_as("SELECT name, cidr FROM vps_networks WHERE user_id = $1")
                 .bind(owner)
@@ -765,8 +779,31 @@ mod flows {
     async fn networks_get_their_own_vlan_and_refuse_overlaps(db: PgPool) {
         let client = Client::new(db);
         let integration = setup(&client).await;
-        let (_, cookie) = client.register("net-create@example.test").await;
+        let (user, cookie) = client.register("net-create@example.test").await;
         let create = |name: &str, cidr: &str| json!({ "name": name, "cidr": cidr, "integration_id": integration });
+
+        let without_server = client
+            .send(
+                Method::POST,
+                "/vps/networks",
+                Some(&cookie),
+                Some(create("network-1", "10.1.0.0/24")),
+            )
+            .await;
+        assert_eq!(without_server.status, StatusCode::UNPROCESSABLE_ENTITY);
+        crate::testing::service(
+            &client.state,
+            crate::testing::NewService {
+                user,
+                subscription: None,
+                kind: "vps",
+                status: "active",
+                integration: Some(integration),
+                external_id: Some("700"),
+                details: json!({}),
+            },
+        )
+        .await;
 
         let overview = client
             .send(Method::GET, "/vps/networks", Some(&cookie), None)
