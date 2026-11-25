@@ -137,6 +137,7 @@ pub async fn create(
     actor: VpsActor,
     Json(input): Json<NewIso>,
 ) -> AppResult<(StatusCode, Json<Iso>)> {
+    actor.browser_only()?;
     actor.require("isos.import")?;
     let name = input.name.trim();
     if name.is_empty() || name.chars().count() > 60 {
