@@ -2318,3 +2318,92 @@ async fn invoices_keep_the_currency_they_were_issued_in(db: PgPool) {
     let meta = client.send(Method::GET, "/meta", None, None).await;
     assert_eq!(meta.body["currency"], "USD");
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn admins_brand_the_panel_with_plain_images_only(db: PgPool) {
+    use crate::testing::make_admin;
+    use base64::Engine;
+    let client = Client::new(db);
+    let (_, cookie) = client.register("brand-klant@example.test").await;
+    let (admin, admin_cookie) = client.register("brand-staff@example.test").await;
+    make_admin(&client.state, admin).await;
+    let encode = |bytes: &[u8]| {
+        format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        )
+    };
+    let png = b"\x89PNG\r\n\x1a\n0000IHDR";
+    assert_eq!(
+        client
+            .send(
+                Method::PUT,
+                "/admin/branding/logo",
+                Some(&cookie),
+                Some(json!({ "data": encode(png) })),
+            )
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+    let svg = client
+        .send(
+            Method::PUT,
+            "/admin/branding/logo",
+            Some(&admin_cookie),
+            Some(json!({ "data": encode(b"<svg xmlns='http://www.w3.org/2000/svg' onload='alert(1)'/>") })),
+        )
+        .await;
+    assert_eq!(svg.status, StatusCode::UNPROCESSABLE_ENTITY);
+    let uploaded = client
+        .send(
+            Method::PUT,
+            "/admin/branding/logo",
+            Some(&admin_cookie),
+            Some(json!({ "data": encode(png) })),
+        )
+        .await;
+    assert_eq!(uploaded.status, StatusCode::OK, "{}", uploaded.body);
+    assert!(uploaded.body["logo"].is_i64());
+    let request = axum::http::Request::builder()
+        .uri("/api/branding/logo")
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let response = tower::ServiceExt::oneshot(client.app.clone(), request)
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "image/png");
+    assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+    let bad = client
+        .send(
+            Method::PUT,
+            "/admin/branding",
+            Some(&admin_cookie),
+            Some(json!({ "name": "Kronix", "accent": "red;}" })),
+        )
+        .await;
+    assert_eq!(bad.status, StatusCode::UNPROCESSABLE_ENTITY);
+    let saved = client
+        .send(
+            Method::PUT,
+            "/admin/branding",
+            Some(&admin_cookie),
+            Some(json!({ "name": " Kronix ", "accent": "#E11D48" })),
+        )
+        .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
+    let meta = client.send(Method::GET, "/meta", None, None).await;
+    assert_eq!(meta.body["branding"]["name"], "Kronix");
+    assert_eq!(meta.body["branding"]["accent"], "#e11d48");
+    assert!(meta.body["branding"]["logo"].is_i64());
+    assert!(meta.body["branding"]["favicon"].is_null());
+    assert_eq!(
+        client
+            .send(Method::GET, "/branding/secrets", None, None)
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+}

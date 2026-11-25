@@ -23,6 +23,7 @@ pub struct Meta {
     next_reset_at: Option<OffsetDateTime>,
     company: Option<crate::settings::Company>,
     currency: String,
+    branding: crate::routes::branding::BrandingInfo,
 }
 
 #[derive(Deserialize)]
@@ -48,6 +49,7 @@ pub async fn meta(State(state): State<AppState>) -> AppResult<Json<Meta>> {
         next_reset_at: demo.then(|| next_full_hour(OffsetDateTime::now_utc())),
         company: (!company.name.is_empty()).then_some(company),
         currency: billing.currency,
+        branding: crate::routes::branding::info(&state).await?,
     }))
 }
 
@@ -374,7 +376,7 @@ pub async fn reset(pool: &PgPool) -> anyhow::Result<()> {
     sqlx::query(
         "TRUNCATE sessions, notifications, ticket_messages, tickets, invoice_lines, invoices,
                   subscription_items, subscriptions, services, products, users, integrations,
-                  domain_extensions, ptr_cleanups, mail_log RESTART IDENTITY CASCADE",
+                  domain_extensions, ptr_cleanups, mail_log, brand_assets RESTART IDENTITY CASCADE",
     )
     .execute(&mut *seed.transaction)
     .await?;

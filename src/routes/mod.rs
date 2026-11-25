@@ -9,6 +9,7 @@ mod admin_vat;
 mod api_tokens;
 mod auth;
 pub mod billing;
+pub(crate) mod branding;
 mod dashboard;
 mod domains;
 mod email_verification;
@@ -251,6 +252,12 @@ pub fn router(state: AppState) -> Router {
             patch(support::staff_update_status),
         )
         .route("/meta", get(demo::meta))
+        .route("/branding/{kind}", get(branding::asset))
+        .route("/admin/branding", put(branding::update))
+        .route(
+            "/admin/branding/{kind}",
+            put(branding::upload).delete(branding::remove),
+        )
         .route("/gameservers", get(gameservers::index))
         .route("/gameservers/{id}", get(gameservers::show))
         .route("/gameservers/{id}/power", post(gameservers::power))

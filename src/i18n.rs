@@ -530,6 +530,9 @@ fn english(message: &str) -> Option<&'static str> {
         }
         "In de demo voer je dit niet echt uit." => "The demo does not really carry this out.",
         "Kies een valuta uit de lijst." => "Choose a currency from the list.",
+        "Gebruik een kleur als #4f46e5." => "Use a colour like #4f46e5.",
+        "Kies een PNG-, JPG- of WebP-afbeelding." => "Choose a PNG, JPG or WebP image.",
+        "Kies een bestand van hoogstens 512 kB." => "Choose a file of at most 512 kB.",
         _ => return None,
     })
 }
