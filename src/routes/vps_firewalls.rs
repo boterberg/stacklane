@@ -592,6 +592,19 @@ pub async fn destroy(
 ) -> AppResult<Json<Saved>> {
     actor.require("firewalls.delete")?;
     owned(&state, &actor, id).await?;
+    let waiting: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM vps_firewall_servers s JOIN services v ON v.id = s.service_id
+                        WHERE s.firewall_id = $1 AND v.status NOT IN ('active', 'terminated'))",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await?;
+    if waiting {
+        return Err(AppError::field(
+            "firewall",
+            "Een gekoppelde server is nu niet actief, dus de regels kunnen er niet af. Koppel die server eerst los of wacht tot hij weer actief is.",
+        ));
+    }
     let problems = sync_all(&state, actor.owner, id, &attached(&state, id).await?, &[]).await;
     if !problems.is_empty() {
         let servers: Vec<&str> = problems

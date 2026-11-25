@@ -391,6 +391,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Een server kan samen hoogstens 100 poorten of reeksen uit firewalls krijgen. Koppel minder firewalls aan deze server." => {
             "A server can get at most 100 ports or ranges from firewalls in total. Attach fewer firewalls to this server."
         }
+        "Een gekoppelde server is nu niet actief, dus de regels kunnen er niet af. Koppel die server eerst los of wacht tot hij weer actief is." => {
+            "An attached server is not active right now, so its rules cannot be removed. Detach that server first or wait until it is active again."
+        }
         _ => return None,
     })
 }
