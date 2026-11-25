@@ -164,6 +164,19 @@ async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()>
         },
         "volume" => provision_volume(state, &context, driver).await?,
         "webhosting" => {
+            let taken: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM services WHERE kind = 'webhosting' AND id <> $1
+                                AND integration_id = $2 AND lower(name) = lower($3)
+                                AND status IN ('provisioning', 'active', 'suspended'))",
+            )
+            .bind(service_id)
+            .bind(integration_id)
+            .bind(&context.name)
+            .fetch_one(&state.db)
+            .await?;
+            if taken {
+                anyhow::bail!("deze domeinnaam draait al op een ander pakket op deze server");
+            }
             let hosting = webhosting::Hosting::from_driver(&driver)
                 .ok_or_else(|| anyhow::anyhow!("deze koppeling kan geen webhosting maken"))?;
             provision_webhosting(service_id, &hosting, &context).await?

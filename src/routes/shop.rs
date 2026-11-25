@@ -301,8 +301,9 @@ async fn place_order(
         let taken: bool = sqlx::query_scalar(
             "SELECT EXISTS (
                  SELECT 1 FROM services
-                 WHERE lower(name) = $1 AND status <> 'terminated'
-                   AND ((kind = 'webhosting' AND integration_id = $2) OR (kind = 'domain' AND user_id <> $3)))",
+                 WHERE lower(name) = $1
+                   AND ((kind = 'webhosting' AND integration_id = $2 AND status IN ('provisioning', 'active', 'suspended'))
+                        OR (kind = 'domain' AND user_id <> $3 AND status IN ('active', 'suspended'))))",
         )
         .bind(name)
         .bind(product.integration_id)
