@@ -607,6 +607,13 @@ pub async fn detach(
             .bind(server_id)
             .execute(&state.db)
             .await?;
+        sqlx::query(
+            "UPDATE services SET details = details || jsonb_build_object('networks_changed_at', extract(epoch FROM now())::bigint)
+             WHERE id = $1",
+        )
+        .bind(server_id)
+        .execute(&state.db)
+        .await?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await

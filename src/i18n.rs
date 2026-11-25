@@ -509,6 +509,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Je hebt al 10 domeinen besteld die nog niet betaald zijn. Betaal of annuleer die eerst." => {
             "You already have 10 domain orders that are not paid yet. Pay or cancel those first."
         }
+        "Deze snapshot is van voor je laatste netwerkwijziging. Maak een nieuwe snapshot of koppel het netwerk eerst opnieuw." => {
+            "This snapshot is older than your last network change. Make a new snapshot or attach the network again first."
+        }
         _ => return None,
     })
 }

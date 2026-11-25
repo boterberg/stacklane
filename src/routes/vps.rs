@@ -549,6 +549,27 @@ pub async fn rollback_snapshot(
             "Er hangt een geblokkeerd volume of IP-adres aan deze server. Terugzetten kan pas als dat weer actief is.",
         ));
     }
+    let changed: Option<i64> = sqlx::query_scalar(
+        "SELECT (details->>'networks_changed_at')::bigint FROM services WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await?;
+    if let Some(changed) = changed {
+        let taken = machine
+            .snapshots()
+            .await
+            .map_err(failed)?
+            .into_iter()
+            .find(|snapshot| snapshot.name == name)
+            .and_then(|snapshot| snapshot.created_at);
+        if taken.is_none_or(|taken| taken <= changed) {
+            return Err(AppError::field(
+                "snapshot",
+                "Deze snapshot is van voor je laatste netwerkwijziging. Maak een nieuwe snapshot of koppel het netwerk eerst opnieuw.",
+            ));
+        }
+    }
     machine
         .rollback_snapshot(identifier(&name)?)
         .await
