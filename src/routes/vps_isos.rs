@@ -323,7 +323,7 @@ pub async fn mount(
     actor.browser_only()?;
     actor.require("isos.mount")?;
     server_context(&state, &actor, id).await?;
-    let _guard = crate::locks::service(&state.db, id).await?;
+    let _guard = crate::locks::service_or_busy(&state.db, id).await?;
     let (integration_id, server) = server_context(&state, &actor, id).await?;
     let already: bool =
         sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM vps_isos WHERE mounted_on = $1)")
@@ -389,7 +389,7 @@ pub async fn unmount(
 ) -> AppResult<StatusCode> {
     actor.require("isos.mount")?;
     server_context(&state, &actor, id).await?;
-    let _guard = crate::locks::service(&state.db, id).await?;
+    let _guard = crate::locks::service_or_busy(&state.db, id).await?;
     let (integration_id, server) = server_context(&state, &actor, id).await?;
     store(&state, integration_id)
         .await?

@@ -67,7 +67,7 @@ type ServiceLock = sqlx::Transaction<'static, sqlx::Postgres>;
 
 async fn locked(state: &AppState, owner: Uuid, id: Uuid) -> AppResult<(ServiceLock, vps::Machine)> {
     machine_of(state, owner, id).await?;
-    let guard = crate::locks::service(&state.db, id).await?;
+    let guard = crate::locks::service_or_busy(&state.db, id).await?;
     let machine = machine_of(state, owner, id).await?;
     Ok((guard, machine))
 }

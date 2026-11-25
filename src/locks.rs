@@ -55,6 +55,24 @@ pub async fn service(
     Ok(guard)
 }
 
+pub async fn service_or_busy(
+    db: &sqlx::PgPool,
+    id: uuid::Uuid,
+) -> AppResult<sqlx::Transaction<'static, sqlx::Postgres>> {
+    let mut guard = db.begin().await?;
+    let taken: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(hashtext($1))")
+        .bind(format!("service {id}"))
+        .fetch_one(&mut *guard)
+        .await?;
+    if !taken {
+        return Err(AppError::field(
+            "action",
+            "Hier loopt al een actie. Probeer het over een paar seconden opnieuw.",
+        ));
+    }
+    Ok(guard)
+}
+
 #[cfg(test)]
 mod tests {
     use super::exclusive;
