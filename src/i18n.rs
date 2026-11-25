@@ -528,6 +528,7 @@ fn english(message: &str) -> Option<&'static str> {
         "Je hebt al 10 bestellingen die nog niet betaald zijn. Betaal of annuleer die eerst." => {
             "You already have 10 orders that are not paid yet. Pay or cancel those first."
         }
+        "In de demo voer je dit niet echt uit." => "The demo does not really carry this out.",
         _ => return None,
     })
 }

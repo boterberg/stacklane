@@ -253,6 +253,9 @@ pub fn build(kind: &str, base_url: &str, credentials: &[u8], settings: Value) ->
 }
 
 pub async fn driver(state: &AppState, integration_id: Uuid) -> AppResult<Driver> {
+    if state.config.demo_mode {
+        return Err(AppError::field("server", vps::DEMO_ONLY));
+    }
     let (kind, base_url, sealed, settings): (String, String, Vec<u8>, Value) = sqlx::query_as(
         "SELECT kind, base_url, credentials, settings FROM integrations WHERE id = $1",
     )

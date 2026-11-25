@@ -103,6 +103,9 @@ async fn connect(
             "Deze server is nu niet beschikbaar.",
         ));
     }
+    if state.config.demo_mode {
+        return Ok(vps::Machine::Demo(id.as_u128() as u64));
+    }
     let not_ready = || AppError::field("server", "Deze server is nog niet klaar.");
     let (Some(integration_id), Some(external_id)) = (integration_id, external_id) else {
         return Err(not_ready());

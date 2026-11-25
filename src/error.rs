@@ -44,6 +44,7 @@ const PLATFORM_FAILED: &str =
     "Er ging iets mis bij het platform. Probeer het later opnieuw of neem contact op met support.";
 
 const CUSTOMER_SAFE: &[&str] = &[
+    crate::integrations::vps::DEMO_ONLY,
     "Stacklane werd herstart tijdens het leveren. Probeer het opnieuw.",
     "Stacklane werd herstart tijdens het importeren.",
     crate::services::REBUILD_FAILED,
