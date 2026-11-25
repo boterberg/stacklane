@@ -3690,3 +3690,51 @@ async fn a_vat_number_must_match_the_billing_country(db: PgPool) {
         refused.body
     );
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn terminating_a_failed_virtfusion_vps_removes_its_server(db: PgPool) {
+    use crate::testing::{NewService, fake_api, service};
+    let client = Client::new(db);
+    let (user, _) = client.register("vf-failed@example.test").await;
+    let (base, calls) = fake_api(quiet_node).await;
+    let integration = uuid::Uuid::new_v4();
+    let sealed =
+        crate::integrations::seal_credentials(&client.state, &json!({ "api_token": "t" })).unwrap();
+    sqlx::query(
+        "INSERT INTO integrations (id, kind, name, base_url, credentials, settings)
+         VALUES ($1, 'virtfusion', 'VF', $2, $3, $4)",
+    )
+    .bind(integration)
+    .bind(&base)
+    .bind(sealed)
+    .bind(json!({ "hypervisor_group_id": 1 }))
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    let server = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "failed",
+            integration: Some(integration),
+            external_id: None,
+            details: json!({ "server_id": "2222" }),
+        },
+    )
+    .await;
+    crate::services::change_state_because(&client.state, server, "terminate", "admin")
+        .await
+        .unwrap();
+    assert!(
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|call| call.starts_with("DELETE") && call.contains("/servers/2222")),
+        "{:?}",
+        calls.lock().unwrap()
+    );
+}

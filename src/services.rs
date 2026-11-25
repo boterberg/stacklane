@@ -400,7 +400,7 @@ async fn destroy_unfinished(
     if !shared
         && client
             .description(vmid)
-            .await
+            .await?
             .is_some_and(|description| created_for(&description, service_id))
     {
         client.destroy(vmid).await?;
@@ -464,6 +464,8 @@ async fn provision_vps(
         && client
             .description(previous)
             .await
+            .ok()
+            .flatten()
             .is_some_and(|description| created_for(&description, service_id))
     {
         stale = Some(previous);
@@ -1379,6 +1381,18 @@ pub async fn change_state_because(
         destroy_unfinished(state, service_id, integration_id, vmid)
             .await
             .map_err(|error| AppError::field("action", format!("{error:#}")))?;
+    } else if kind == "vps"
+        && action == "terminate"
+        && external_id.is_none()
+        && let (Some(integration_id), Some(server)) =
+            (integration_id, details["server_id"].as_str())
+    {
+        let result = match integrations::driver(state, integration_id).await? {
+            integrations::Driver::OpenStack(client) => client.destroy(server).await,
+            integrations::Driver::VirtFusion(client) => client.destroy(server).await,
+            _ => Ok(()),
+        };
+        result.map_err(|error| AppError::field("action", format!("{error:#}")))?;
     } else if let (Some(integration_id), Some(external_id)) =
         (integration_id, external_id.as_deref())
     {

@@ -293,12 +293,15 @@ impl Proxmox {
         bail!("Proxmox gaf geen vrij VM-nummer")
     }
 
-    pub async fn description(&self, vmid: u32) -> Option<String> {
-        let config = self
+    pub async fn description(&self, vmid: u32) -> anyhow::Result<Option<String>> {
+        match self
             .request(Method::GET, &format!("{}/config", self.vm_path(vmid)), None)
             .await
-            .ok()?;
-        config["description"].as_str().map(str::to_owned)
+        {
+            Ok(config) => Ok(config["description"].as_str().map(str::to_owned)),
+            Err(error) if format!("{error:#}").contains("does not exist") => Ok(None),
+            Err(error) => Err(error),
+        }
     }
 
     pub async fn create(
