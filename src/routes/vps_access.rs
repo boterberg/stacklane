@@ -368,7 +368,7 @@ pub async fn create(
         user,
         (
             "Uitnodiging voor een VPS-omgeving".to_owned(),
-            format!("Het account {owner} nodigt je uit voor zijn VPS-omgeving. Onder Gedeelde toegang kun je de uitnodiging accepteren of weigeren."),
+            format!("Het account {owner} nodigt je uit voor een VPS-omgeving. Onder Gedeelde toegang kun je de uitnodiging accepteren of weigeren."),
         ),
         (
             "Invitation to a VPS environment".to_owned(),
