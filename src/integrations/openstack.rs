@@ -507,6 +507,10 @@ impl OpenStack {
     }
 
     pub async fn suspend(&self, id: &str) -> anyhow::Result<()> {
+        if self.server(id).await?["status"] == "RESCUE" {
+            self.unrescue(id).await?;
+            self.wait_until_active(id).await?;
+        }
         if self.status(id).await?.state == "running" {
             self.power(id, "stop").await?;
         }

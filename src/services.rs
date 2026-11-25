@@ -1383,7 +1383,8 @@ pub async fn change_state_because(
 
     sqlx::query(
         "UPDATE services SET status = $2, updated_at = now(),
-                suspension_reason = CASE WHEN $2 = 'suspended' THEN $3 END
+                suspension_reason = CASE WHEN $2 = 'suspended' THEN $3 END,
+                details = CASE WHEN $2 = 'suspended' THEN details - 'rescue' ELSE details END
          WHERE id = $1",
     )
     .bind(service_id)
