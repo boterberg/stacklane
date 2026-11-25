@@ -253,7 +253,29 @@ async fn handle_stripe(
             payments::update_payment(state, payment_id, "expired", None).await
         }
         "payment_intent.succeeded" => {
-            payments::update_payment(state, payment_id, "paid", None).await
+            let intent_id = text(&object, "/id").unwrap_or_default();
+            let intent = client
+                .payment_intent(intent_id)
+                .await
+                .map_err(AppError::Internal)?;
+            let method = intent.get("payment_method").cloned().unwrap_or_default();
+            let description = stripe::describe_card(&method);
+            if save_mandate
+                && let (Some(customer), Some(method_id)) =
+                    (text(&intent, "/customer"), text(&method, "/id"))
+            {
+                payments::record_mandate(
+                    state,
+                    payment_id,
+                    user_id,
+                    "stripe",
+                    customer,
+                    method_id,
+                    &description,
+                )
+                .await?;
+            }
+            payments::update_payment(state, payment_id, "paid", Some(&description)).await
         }
         "payment_intent.payment_failed" => {
             payments::update_payment(state, payment_id, "failed", None).await
