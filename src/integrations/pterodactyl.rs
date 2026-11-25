@@ -548,6 +548,70 @@ impl Pterodactyl {
         Ok(())
     }
 
+    pub async fn pull_file(
+        &self,
+        identifier: &str,
+        url: &str,
+        directory: &str,
+        filename: &str,
+    ) -> anyhow::Result<()> {
+        self.client(
+            Method::POST,
+            &format!("/servers/{identifier}/files/pull"),
+            &[],
+            Some(json!({ "url": url, "directory": directory, "filename": filename, "use_header": false, "foreground": true })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn delete_files(
+        &self,
+        identifier: &str,
+        root: &str,
+        files: &[&str],
+    ) -> anyhow::Result<()> {
+        self.client(
+            Method::POST,
+            &format!("/servers/{identifier}/files/delete"),
+            &[],
+            Some(json!({ "root": root, "files": files })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn startup_variables(
+        &self,
+        identifier: &str,
+    ) -> anyhow::Result<Vec<(String, String)>> {
+        let body = self
+            .client(
+                Method::GET,
+                &format!("/servers/{identifier}/startup"),
+                &[],
+                None,
+            )
+            .await?;
+        Ok(body["data"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|entry| {
+                let attributes = &entry["attributes"];
+                Some((
+                    attributes["env_variable"].as_str()?.to_owned(),
+                    attributes["server_value"]
+                        .as_str()
+                        .or_else(|| attributes["default_value"].as_str())
+                        .unwrap_or_default()
+                        .to_owned(),
+                ))
+            })
+            .collect())
+    }
+
     pub async fn backups(&self, identifier: &str) -> anyhow::Result<Value> {
         let body = self
             .client(

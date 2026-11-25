@@ -82,7 +82,7 @@ fn clean_path(path: &str) -> AppResult<String> {
     })
 }
 
-async fn panel(
+pub(super) async fn panel(
     state: &AppState,
     user: &CurrentUser,
     id: Uuid,

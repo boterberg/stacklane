@@ -28,6 +28,7 @@ pub fn state(db: PgPool) -> AppState {
         ),
         public_url: "http://panel.test".into(),
         update_dir: PathBuf::from("/nonexistent"),
+        modrinth_url: "http://modrinth.invalid".into(),
     };
     AppState {
         db,
@@ -51,7 +52,14 @@ pub struct Reply {
 
 impl Client {
     pub fn new(db: PgPool) -> Self {
-        let state = state(db);
+        Self::with_config(db, |_| {})
+    }
+
+    pub fn with_config(db: PgPool, change: impl FnOnce(&mut Config)) -> Self {
+        let mut state = state(db);
+        let mut config = (*state.config).clone();
+        change(&mut config);
+        state.config = Arc::new(config);
         Self {
             app: crate::routes::router(state.clone()),
             state,

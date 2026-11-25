@@ -553,8 +553,13 @@ fn english(message: &str) -> Option<&'static str> {
         "Je kunt je eigen rechten niet wijzigen." => "You cannot change your own permissions.",
         "Je kunt jezelf niet uit het team halen." => "You cannot remove yourself from the team.",
         "Dit is je eigen account." => "This is your own account.",
-        "Je kunt hoogstens 10 gebruikers toegang geven." => {
-            "You can give at most 10 users access."
+        "Je kunt hoogstens 10 gebruikers toegang geven." => "You can give at most 10 users access.",
+        "Kies een servertype uit de lijst." => "Choose a server type from the list.",
+        "Gebruik een Minecraft-versie zoals 1.21.1." => "Use a Minecraft version such as 1.21.1.",
+        "Dit is geen plugin- of modbestand." => "This is not a plugin or mod file.",
+        "Onbekende plugin." => "Unknown plugin.",
+        "Er is geen versie die past bij dit servertype en deze Minecraft-versie." => {
+            "There is no version that fits this server type and Minecraft version."
         }
         _ => return None,
     })

@@ -19,6 +19,7 @@ pub struct Config {
     pub secrets: Option<SecretBox>,
     pub public_url: String,
     pub update_dir: PathBuf,
+    pub modrinth_url: String,
 }
 
 impl Config {
@@ -38,6 +39,10 @@ impl Config {
             update_dir: std::env::var_os("UPDATE_DIR")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("/var/lib/stacklane/update")),
+            modrinth_url: std::env::var("MODRINTH_URL")
+                .unwrap_or_else(|_| "https://api.modrinth.com".into())
+                .trim_end_matches('/')
+                .to_owned(),
             secrets: match std::env::var("SECRET_KEY") {
                 Ok(key) if !key.trim().is_empty() => Some(SecretBox::from_hex(&key)?),
                 _ => None,

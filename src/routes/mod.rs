@@ -17,6 +17,7 @@ mod dashboard;
 mod domains;
 mod email_verification;
 mod game_access;
+mod game_addons;
 mod gameservers;
 mod health;
 mod kb;
@@ -84,6 +85,17 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/account/shared-gameservers/{server}/accept",
             post(game_access::accept),
+        )
+        .route(
+            "/gameservers/{id}/addons/context",
+            get(game_addons::context),
+        )
+        .route("/gameservers/{id}/addons/search", get(game_addons::search))
+        .route(
+            "/gameservers/{id}/addons",
+            get(game_addons::installed)
+                .post(game_addons::install)
+                .delete(game_addons::remove),
         )
         .route(
             "/gameservers/{id}/members",

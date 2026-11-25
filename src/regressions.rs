@@ -3117,3 +3117,180 @@ async fn shared_gameservers_only_allow_what_the_owner_ticked(db: PgPool) {
         StatusCode::NOT_FOUND
     );
 }
+
+fn addon_world(method: &str, path: &str, _body: &str) -> (u16, serde_json::Value) {
+    if path.starts_with("/v2/search") {
+        (
+            200,
+            json!({ "hits": [{ "project_id": "ESSX1234", "slug": "essentialsx", "title": "EssentialsX", "description": "Basis", "downloads": 10, "icon_url": null, "author": "md678685" }] }),
+        )
+    } else if path.starts_with("/v2/project/ESSX1234/version") {
+        (
+            200,
+            json!([{ "version_type": "release", "files": [{ "url": "https://cdn.modrinth.com/data/ESSX1234/EssentialsX-2.21.0.jar", "filename": "EssentialsX-2.21.0.jar", "primary": true }] }]),
+        )
+    } else if path.starts_with("/v2/project/EVIL1234/version") {
+        (
+            200,
+            json!([{ "version_type": "release", "files": [{ "url": "http://169.254.169.254/latest.jar", "filename": "x.jar", "primary": true }] }]),
+        )
+    } else if path.starts_with("/v2/project/") {
+        (200, json!({ "title": "EssentialsX" }))
+    } else if path.ends_with("/startup") {
+        (
+            200,
+            json!({ "data": [{ "attributes": { "env_variable": "MINECRAFT_VERSION", "server_value": "1.21.1" } }] }),
+        )
+    } else if method == "GET" && path.contains("/files/list") {
+        (
+            200,
+            json!({ "data": [
+                { "attributes": { "name": "LuckPerms.jar", "is_file": true, "size": 10, "modified_at": "2026-11-25T10:00:00Z" } },
+                { "attributes": { "name": "LuckPerms", "is_file": false, "size": 0, "modified_at": "2026-11-25T10:00:00Z" } }
+            ] }),
+        )
+    } else {
+        (204, json!(null))
+    }
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn plugins_install_only_from_modrinth_into_the_right_folder(db: PgPool) {
+    use crate::testing::{NewService, fake_api, service};
+    let (base, calls) = fake_api(addon_world).await;
+    let modrinth = base.clone();
+    let client = Client::with_config(db, |config| config.modrinth_url = modrinth);
+    let sealed = crate::integrations::seal_credentials(
+        &client.state,
+        &json!({ "application_key": "ptla_x", "client_key": "ptlc_x" }),
+    )
+    .unwrap();
+    let integration = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO integrations (id, kind, name, base_url, credentials) VALUES ($1, 'pterodactyl', 'Panel', $2, $3)",
+    )
+    .bind(integration)
+    .bind(&base)
+    .bind(sealed)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    let (owner, cookie) = client.register("plugin-eigenaar@example.test").await;
+    let (_, stranger) = client.register("plugin-vreemde@example.test").await;
+    let server = service(
+        &client.state,
+        NewService {
+            user: owner,
+            subscription: None,
+            kind: "gameserver",
+            status: "active",
+            integration: Some(integration),
+            external_id: Some("7"),
+            details: json!({ "identifier": "abc123", "egg": "Paper" }),
+        },
+    )
+    .await;
+    let context = client
+        .send(
+            Method::GET,
+            &format!("/gameservers/{server}/addons/context"),
+            Some(&cookie),
+            None,
+        )
+        .await;
+    assert_eq!(context.status, StatusCode::OK, "{}", context.body);
+    assert_eq!(context.body["loader"], "paper");
+    assert_eq!(context.body["version"], "1.21.1");
+    let search = client
+        .send(
+            Method::GET,
+            &format!(
+                "/gameservers/{server}/addons/search?loader=paper&query=essentials&version=1.21.1"
+            ),
+            Some(&cookie),
+            None,
+        )
+        .await;
+    assert_eq!(search.body[0]["title"], "EssentialsX");
+    assert_eq!(
+        client
+            .send(
+                Method::GET,
+                &format!("/gameservers/{server}/addons/search?loader=paper&query=x"),
+                Some(&stranger),
+                None,
+            )
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+    let installed = client
+        .send(
+            Method::POST,
+            &format!("/gameservers/{server}/addons"),
+            Some(&cookie),
+            Some(json!({ "project": "ESSX1234", "loader": "paper", "version": "1.21.1" })),
+        )
+        .await;
+    assert_eq!(installed.status, StatusCode::CREATED, "{}", installed.body);
+    assert_eq!(installed.body["folder"], "/plugins");
+    let evil = client
+        .send(
+            Method::POST,
+            &format!("/gameservers/{server}/addons"),
+            Some(&cookie),
+            Some(json!({ "project": "EVIL1234", "loader": "paper" })),
+        )
+        .await;
+    assert_eq!(evil.status, StatusCode::UNPROCESSABLE_ENTITY);
+    let traversal = client
+        .send(
+            Method::POST,
+            &format!("/gameservers/{server}/addons"),
+            Some(&cookie),
+            Some(json!({ "project": "../../api", "loader": "paper" })),
+        )
+        .await;
+    assert_eq!(traversal.status, StatusCode::UNPROCESSABLE_ENTITY);
+    let list = client
+        .send(
+            Method::GET,
+            &format!("/gameservers/{server}/addons?loader=paper"),
+            Some(&cookie),
+            None,
+        )
+        .await;
+    assert_eq!(list.body["files"].as_array().map(Vec::len), Some(1));
+    let removed = client
+        .send(
+            Method::DELETE,
+            &format!("/gameservers/{server}/addons?loader=paper&file=LuckPerms.jar"),
+            Some(&cookie),
+            None,
+        )
+        .await;
+    assert_eq!(removed.status, StatusCode::NO_CONTENT, "{}", removed.body);
+    let sneaky = client
+        .send(
+            Method::DELETE,
+            &format!("/gameservers/{server}/addons?loader=paper&file=..%2Fserver.properties"),
+            Some(&cookie),
+            None,
+        )
+        .await;
+    assert_eq!(sneaky.status, StatusCode::UNPROCESSABLE_ENTITY);
+    let calls = calls.lock().unwrap().clone();
+    let pulls: Vec<&String> = calls
+        .iter()
+        .filter(|call| call.contains("/files/pull"))
+        .collect();
+    assert_eq!(pulls.len(), 1, "{calls:#?}");
+    assert!(pulls[0].contains("\"directory\":\"/plugins\""));
+    assert!(pulls[0].contains("https://cdn.modrinth.com/data/ESSX1234/EssentialsX-2.21.0.jar"));
+    assert!(
+        calls
+            .iter()
+            .any(|call| call.contains("/files/delete") && call.contains("LuckPerms.jar"))
+    );
+}
