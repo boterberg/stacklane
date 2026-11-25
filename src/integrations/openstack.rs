@@ -29,6 +29,8 @@ pub struct Settings {
     #[serde(default)]
     pub region: Option<String>,
     pub network_id: String,
+    #[serde(default)]
+    pub floating_network_id: Option<String>,
     #[serde(default = "default_interface")]
     pub interface: String,
     #[serde(default)]
@@ -110,6 +112,14 @@ pub fn cloud_config(hostname: &str, password: &str, ssh_keys: &[String]) -> Stri
         "users": [{ "name": "root", "ssh_authorized_keys": ssh_keys }],
     });
     format!("#cloud-config\n{config}\n")
+}
+
+fn floating_ip_of(body: &Value) -> anyhow::Result<(String, String)> {
+    let ip = &body["floatingip"];
+    match (ip["id"].as_str(), ip["floating_ip_address"].as_str()) {
+        (Some(id), Some(address)) => Ok((id.to_owned(), address.to_owned())),
+        _ => bail!("OpenStack gaf geen floating IP terug"),
+    }
 }
 
 fn port_range(ports: &str) -> anyhow::Result<(u16, u16)> {
@@ -281,6 +291,21 @@ impl OpenStack {
         )
         .await
         .context("het netwerk is niet gevonden")?;
+        if self.has_floating_ips() {
+            let network = self
+                .call(
+                    Service::Network,
+                    Method::GET,
+                    &format!("/v2.0/networks/{}", self.floating_network()?),
+                    None,
+                )
+                .await
+                .context("het netwerk voor floating IPs is niet gevonden")?;
+            anyhow::ensure!(
+                network["network"]["router:external"] == true,
+                "het netwerk voor floating IPs is geen extern netwerk"
+            );
+        }
         Ok(match &self.settings.region {
             Some(region) => format!("OpenStack, regio {region}"),
             None => "OpenStack".to_owned(),
@@ -602,6 +627,115 @@ impl OpenStack {
                 Service::Volume,
                 Method::DELETE,
                 &format!("/volumes/{volume}"),
+                None,
+            )
+            .await?;
+        if !status.is_success() && status != StatusCode::NOT_FOUND {
+            bail!(
+                "OpenStack antwoordde {status}: {}",
+                error_message(&body).unwrap_or_else(|| "onbekende fout".to_owned())
+            );
+        }
+        Ok(())
+    }
+
+    pub fn has_floating_ips(&self) -> bool {
+        self.floating_network().is_ok()
+    }
+
+    fn floating_network(&self) -> anyhow::Result<&str> {
+        self.settings
+            .floating_network_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .context("er is geen extern netwerk voor floating IPs ingesteld")
+    }
+
+    pub async fn create_floating_ip(&self, description: &str) -> anyhow::Result<(String, String)> {
+        let body = self
+            .call(
+                Service::Network,
+                Method::POST,
+                "/v2.0/floatingips",
+                Some(json!({ "floatingip": {
+                    "floating_network_id": self.floating_network()?,
+                    "description": description,
+                } })),
+            )
+            .await?;
+        floating_ip_of(&body)
+    }
+
+    pub async fn floating_ip(&self, id: &str) -> anyhow::Result<Option<(String, String)>> {
+        let (status, body) = self
+            .send(
+                Service::Network,
+                Method::GET,
+                &format!("/v2.0/floatingips/{id}"),
+                None,
+            )
+            .await?;
+        if status == StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() {
+            bail!(
+                "OpenStack antwoordde {status}: {}",
+                error_message(&body).unwrap_or_else(|| "onbekende fout".to_owned())
+            );
+        }
+        floating_ip_of(&body).map(Some)
+    }
+
+    async fn server_port(&self, server: &str) -> anyhow::Result<String> {
+        let ports = self
+            .call(
+                Service::Network,
+                Method::GET,
+                &format!("/v2.0/ports?device_id={server}"),
+                None,
+            )
+            .await?;
+        let ports = ports["ports"].as_array().cloned().unwrap_or_default();
+        ports
+            .iter()
+            .find(|port| port["network_id"] == self.settings.network_id.as_str())
+            .or_else(|| ports.first())
+            .and_then(|port| port["id"].as_str())
+            .map(str::to_owned)
+            .context("de server heeft geen netwerkpoort")
+    }
+
+    pub async fn attach_floating_ip(&self, id: &str, server: &str) -> anyhow::Result<()> {
+        let port = self.server_port(server).await?;
+        self.call(
+            Service::Network,
+            Method::PUT,
+            &format!("/v2.0/floatingips/{id}"),
+            Some(json!({ "floatingip": { "port_id": port } })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn detach_floating_ip(&self, id: &str) -> anyhow::Result<()> {
+        self.call(
+            Service::Network,
+            Method::PUT,
+            &format!("/v2.0/floatingips/{id}"),
+            Some(json!({ "floatingip": { "port_id": null } })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn delete_floating_ip(&self, id: &str) -> anyhow::Result<()> {
+        let (status, body) = self
+            .send(
+                Service::Network,
+                Method::DELETE,
+                &format!("/v2.0/floatingips/{id}"),
                 None,
             )
             .await?;
@@ -1052,6 +1186,101 @@ mod tests {
             .collect();
         assert_eq!(names, ["new", "old-1", "old-2"]);
     }
+    #[tokio::test]
+    async fn floating_ips_go_through_neutron() {
+        use axum::extract::{Request, State};
+        use std::sync::{Arc, Mutex};
+
+        type Shared = (String, Arc<Mutex<Vec<String>>>);
+        async fn token(State((base, _)): State<Shared>) -> impl axum::response::IntoResponse {
+            let endpoint = |kind: &str| serde_json::json!({ "type": kind, "endpoints": [{ "interface": "public", "url": base }] });
+            (
+                [("x-subject-token", "t")],
+                axum::Json(serde_json::json!({ "token": { "catalog": [
+                    endpoint("compute"), endpoint("image"), endpoint("network"),
+                ] } })),
+            )
+        }
+        async fn neutron(
+            State((_, calls)): State<Shared>,
+            request: Request,
+        ) -> (axum::http::StatusCode, axum::Json<Value>) {
+            let method = request.method().to_string();
+            let path = request.uri().to_string();
+            let body = axum::body::to_bytes(request.into_body(), 1 << 16)
+                .await
+                .unwrap_or_default();
+            calls.lock().unwrap().push(
+                format!("{method} {path} {}", String::from_utf8_lossy(&body))
+                    .trim_end()
+                    .to_owned(),
+            );
+            let fip = serde_json::json!({ "floatingip": { "id": "fip", "floating_ip_address": "203.0.113.5" } });
+            match (method.as_str(), path.as_str()) {
+                ("GET", "/v2.0/ports?device_id=srv") => (
+                    axum::http::StatusCode::OK,
+                    axum::Json(serde_json::json!({ "ports": [
+                        { "id": "private", "network_id": "other" },
+                        { "id": "public", "network_id": "net" },
+                    ] })),
+                ),
+                ("DELETE", _) => (axum::http::StatusCode::NOT_FOUND, axum::Json(Value::Null)),
+                _ => (axum::http::StatusCode::OK, axum::Json(fip)),
+            }
+        }
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let app = axum::Router::new()
+            .route("/v3/auth/tokens", axum::routing::post(token))
+            .fallback(neutron)
+            .with_state((base.clone(), calls.clone()));
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        let client = |settings: Value| {
+            OpenStack::new(
+                &base,
+                Credentials {
+                    application_credential_id: "id".into(),
+                    application_credential_secret: "secret".into(),
+                },
+                serde_json::from_value(settings).unwrap(),
+            )
+            .unwrap()
+        };
+        assert!(!client(json!({ "network_id": "net" })).has_floating_ips());
+        assert!(
+            !client(json!({ "network_id": "net", "floating_network_id": " " })).has_floating_ips()
+        );
+        let client = client(json!({ "network_id": "net", "floating_network_id": "ext" }));
+        assert!(client.has_floating_ips());
+
+        let created = client.create_floating_ip("Stacklane x").await.unwrap();
+        assert_eq!(created, ("fip".to_owned(), "203.0.113.5".to_owned()));
+        client.attach_floating_ip("fip", "srv").await.unwrap();
+        client.detach_floating_ip("fip").await.unwrap();
+        client.delete_floating_ip("fip").await.unwrap();
+
+        let calls = calls.lock().unwrap().clone();
+        let parsed = |index: usize| -> Value {
+            serde_json::from_str(
+                calls[index]
+                    .split_once(' ')
+                    .unwrap()
+                    .1
+                    .split_once(' ')
+                    .unwrap()
+                    .1,
+            )
+            .unwrap()
+        };
+        assert!(calls[0].starts_with("POST /v2.0/floatingips "));
+        assert_eq!(parsed(0)["floatingip"]["floating_network_id"], "ext");
+        assert!(calls[2].starts_with("PUT /v2.0/floatingips/fip "));
+        assert_eq!(parsed(2)["floatingip"]["port_id"], "public");
+        assert_eq!(parsed(3)["floatingip"]["port_id"], Value::Null);
+        assert_eq!(calls[4], "DELETE /v2.0/floatingips/fip");
+    }
+
     use serde_json::json;
 
     #[test]
