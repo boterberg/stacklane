@@ -1817,3 +1817,57 @@ async fn an_api_token_never_opens_rescue_or_an_iso(db: PgPool) {
         assert_eq!(reply.status, StatusCode::FORBIDDEN, "{path}");
     }
 }
+
+const UNFINISHED: &str = "0b5e0000-0000-4000-8000-000000000733";
+
+fn unfinished_node(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+    match (method, path) {
+        ("GET", "/api2/json/nodes/pve/qemu/733/config") => (
+            200,
+            json!({ "data": { "description": format!("Stacklane {UNFINISHED} vps") } }),
+        ),
+        ("GET", path) if path.ends_with("/status/current") => {
+            (200, json!({ "data": { "status": "stopped" } }))
+        }
+        _ => (200, json!({ "data": null })),
+    }
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn terminating_an_unfinished_vps_removes_its_vm(db: PgPool) {
+    let client = Client::new(db);
+    let (base, calls) = crate::testing::fake_api(unfinished_node).await;
+    let integration = crate::testing::proxmox_integration(&client.state, &base).await;
+    let (user, _) = client.register("unfinished@example.test").await;
+    let service = crate::testing::service(
+        &client.state,
+        crate::testing::NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "failed",
+            integration: Some(integration),
+            external_id: None,
+            details: json!({ "vmid": 733, "ipv4": "192.0.2.73" }),
+        },
+    )
+    .await;
+    let id: uuid::Uuid = UNFINISHED.parse().unwrap();
+    sqlx::query("UPDATE services SET id = $2 WHERE id = $1")
+        .bind(service)
+        .bind(id)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    crate::services::change_state_because(&client.state, id, "terminate", "admin")
+        .await
+        .unwrap();
+    assert!(
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|call| call.starts_with("DELETE /api2/json/nodes/pve/qemu/733"))
+    );
+}

@@ -176,17 +176,22 @@ async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()>
         "floating_ip" => provision_floating_ip(state, service_id, integration_id, &driver).await?,
         "webhosting" => {
             let taken: bool = sqlx::query_scalar(
-                "SELECT EXISTS (SELECT 1 FROM services WHERE kind = 'webhosting' AND id <> $1
-                                AND integration_id = $2 AND lower(name) = lower($3)
-                                AND status IN ('provisioning', 'active', 'suspended'))",
+                "SELECT EXISTS (SELECT 1 FROM services WHERE id <> $1 AND lower(name) = lower($3)
+                                AND ((kind = 'webhosting' AND integration_id = $2
+                                      AND status IN ('provisioning', 'active', 'suspended'))
+                                     OR (kind = 'domain' AND user_id <> $4
+                                         AND status NOT IN ('terminated', 'failed'))))",
             )
             .bind(service_id)
             .bind(integration_id)
             .bind(&context.name)
+            .bind(context.user_id)
             .fetch_one(&state.db)
             .await?;
             if taken {
-                anyhow::bail!("deze domeinnaam draait al op een ander pakket op deze server");
+                anyhow::bail!(
+                    "deze domeinnaam draait al op een ander pakket of hoort bij een andere klant"
+                );
             }
             let hosting = webhosting::Hosting::from_driver(&driver)
                 .ok_or_else(|| anyhow::anyhow!("deze koppeling kan geen webhosting maken"))?;
@@ -364,6 +369,37 @@ fn hostname(name: &str) -> String {
     } else {
         trimmed.chars().take(63).collect()
     }
+}
+
+async fn destroy_unfinished(
+    state: &AppState,
+    service_id: Uuid,
+    integration_id: Uuid,
+    vmid: u32,
+) -> anyhow::Result<()> {
+    let integrations::Driver::Proxmox(client) = integrations::driver(state, integration_id).await?
+    else {
+        return Ok(());
+    };
+    let shared: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM services, LATERAL (VALUES (external_id), (details->>'vmid'), (details->>'rebuild_scratch')) AS ids(id)
+                        WHERE integration_id = $1 AND services.id <> $2 AND kind = 'vps'
+                          AND status <> 'terminated' AND ids.id = $3)",
+    )
+    .bind(integration_id)
+    .bind(service_id)
+    .bind(vmid.to_string())
+    .fetch_one(&state.db)
+    .await?;
+    if !shared
+        && client
+            .description(vmid)
+            .await
+            .is_some_and(|description| created_for(&description, service_id))
+    {
+        client.destroy(vmid).await?;
+    }
+    Ok(())
 }
 
 fn created_for(description: &str, service_id: Uuid) -> bool {
@@ -1320,6 +1356,19 @@ pub async fn change_state_because(
             };
             result.map_err(|error| AppError::field("action", format!("{error:#}")))?;
         }
+    } else if kind == "vps"
+        && action == "terminate"
+        && external_id.is_none()
+        && let (Some(integration_id), Some(vmid)) = (
+            integration_id,
+            details["vmid"]
+                .as_u64()
+                .and_then(|vmid| u32::try_from(vmid).ok()),
+        )
+    {
+        destroy_unfinished(state, service_id, integration_id, vmid)
+            .await
+            .map_err(|error| AppError::field("action", format!("{error:#}")))?;
     } else if let (Some(integration_id), Some(external_id)) =
         (integration_id, external_id.as_deref())
     {
