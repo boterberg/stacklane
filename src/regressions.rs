@@ -1655,3 +1655,96 @@ async fn sessions_stay_small_and_few(db: PgPool) {
             .unwrap();
     assert_eq!((count, longest), (50, Some(256)));
 }
+
+async fn cancel(client: &Client, cookie: &str, subscription: uuid::Uuid) -> StatusCode {
+    let code: String = sqlx::query_scalar("SELECT code FROM subscriptions WHERE id = $1")
+        .bind(subscription)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    client
+        .send(
+            Method::POST,
+            &format!("/billing/subscriptions/{code}/cancel"),
+            Some(cookie),
+            None,
+        )
+        .await
+        .status
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn cancelling_keeps_the_invoice_for_days_already_used(db: PgPool) {
+    let client = Client::new(db);
+    let (user, cookie) = client.register("overdue@example.test").await;
+    let billing = open_invoice(&client, user).await;
+    sqlx::query("UPDATE subscriptions SET expires_at = now() - interval '5 days' WHERE id = $1")
+        .bind(billing.subscription)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE invoice_lines SET period_start = CURRENT_DATE - 5 WHERE invoice_id = $1")
+        .bind(billing.invoice)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(
+        cancel(&client, &cookie, billing.subscription).await,
+        StatusCode::OK
+    );
+    let status: String = sqlx::query_scalar("SELECT status FROM invoices WHERE id = $1")
+        .bind(billing.invoice)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(status, "open");
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn cancelling_an_unpaid_order_releases_it_at_once(db: PgPool) {
+    let client = Client::new(db);
+    let (user, cookie) = client.register("withdraw@example.test").await;
+    let billing = open_invoice(&client, user).await;
+    sqlx::query("UPDATE subscriptions SET status = 'pending', expires_at = now() WHERE id = $1")
+        .bind(billing.subscription)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    let service = crate::testing::service(
+        &client.state,
+        crate::testing::NewService {
+            user,
+            subscription: Some(billing.subscription),
+            kind: "domain",
+            status: "pending",
+            integration: None,
+            external_id: None,
+            details: json!({}),
+        },
+    )
+    .await;
+    assert_eq!(
+        cancel(&client, &cookie, billing.subscription).await,
+        StatusCode::OK
+    );
+    let state: (String, String, String) = sqlx::query_as(
+        "SELECT s.status, sv.status, v.status FROM subscriptions s, services sv, invoices v
+         WHERE s.id = $1 AND sv.id = $2 AND v.id = $3",
+    )
+    .bind(billing.subscription)
+    .bind(service)
+    .bind(billing.invoice)
+    .fetch_one(&client.state.db)
+    .await
+    .unwrap();
+    assert_eq!(
+        state,
+        (
+            "expired".to_owned(),
+            "terminated".to_owned(),
+            "cancelled".to_owned()
+        )
+    );
+}

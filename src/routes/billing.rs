@@ -384,19 +384,57 @@ pub async fn cancel_subscription(
             "Dit abonnement is al opgezegd.",
         ));
     }
-    sqlx::query("UPDATE subscriptions SET cancelled_at = now() WHERE id = $1")
+    let mut transaction = state.db.begin().await?;
+    crate::locks::transaction(&mut transaction, format!("subscription {id}")).await?;
+    if status == "pending" {
+        withdraw_order(&mut transaction, id).await?;
+    } else {
+        sqlx::query("UPDATE subscriptions SET cancelled_at = now() WHERE id = $1")
+            .bind(id)
+            .execute(&mut *transaction)
+            .await?;
+        sqlx::query(
+            "UPDATE invoices v SET status = 'cancelled' WHERE v.status = 'open'
+               AND EXISTS (SELECT 1 FROM invoice_lines l JOIN subscriptions s ON s.id = l.subscription_id
+                           WHERE l.invoice_id = v.id AND s.id = $1
+                             AND l.period_start >= GREATEST(s.expires_at::date, CURRENT_DATE))",
+        )
         .bind(id)
-        .execute(&state.db)
+        .execute(&mut *transaction)
         .await?;
-    sqlx::query(
+    }
+    transaction.commit().await?;
+    subscription(State(state), user, Path(code)).await
+}
+
+async fn withdraw_order(connection: &mut sqlx::PgConnection, id: Uuid) -> AppResult<()> {
+    let invoices: Vec<i64> = sqlx::query_scalar(
         "UPDATE invoices v SET status = 'cancelled' WHERE v.status = 'open'
-           AND EXISTS (SELECT 1 FROM invoice_lines l JOIN subscriptions s ON s.id = l.subscription_id
-                       WHERE l.invoice_id = v.id AND s.id = $1 AND l.period_start >= s.expires_at::date)",
+           AND EXISTS (SELECT 1 FROM invoice_lines l WHERE l.invoice_id = v.id AND l.subscription_id = $1)
+         RETURNING v.id",
     )
     .bind(id)
-    .execute(&state.db)
+    .fetch_all(&mut *connection)
     .await?;
-    subscription(State(state), user, Path(code)).await
+    let withdrawn: Vec<Uuid> = sqlx::query_scalar(
+        "UPDATE subscriptions s SET status = 'expired', cancelled_at = now()
+         WHERE s.status = 'pending'
+           AND (s.id = $1 OR EXISTS (SELECT 1 FROM invoice_lines l
+                                     WHERE l.subscription_id = s.id AND l.invoice_id = ANY($2)))
+         RETURNING s.id",
+    )
+    .bind(id)
+    .bind(&invoices)
+    .fetch_all(&mut *connection)
+    .await?;
+    sqlx::query(
+        "UPDATE services SET status = 'terminated', updated_at = now()
+         WHERE subscription_id = ANY($1) AND status = 'pending'",
+    )
+    .bind(&withdrawn)
+    .execute(&mut *connection)
+    .await?;
+    Ok(())
 }
 
 pub async fn resume_subscription(
@@ -448,12 +486,15 @@ pub async fn set_payment_method(
             ));
         }
     }
+    let mut transaction = state.db.begin().await?;
+    crate::locks::transaction(&mut transaction, format!("subscription {id}")).await?;
     sqlx::query(
         "UPDATE subscriptions SET mandate_id = $2, payment_mode = CASE WHEN $2::uuid IS NULL THEN 'manual' ELSE 'automatic' END WHERE id = $1",
     )
     .bind(id)
     .bind(input.mandate_id)
-    .execute(&state.db)
+    .execute(&mut *transaction)
     .await?;
+    transaction.commit().await?;
     subscription(State(state), user, Path(code)).await
 }
