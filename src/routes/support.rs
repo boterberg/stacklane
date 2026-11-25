@@ -390,6 +390,9 @@ pub async fn staff_reply(
     Path(number): Path<i64>,
     Json(input): Json<CreateReply>,
 ) -> AppResult<Json<TicketDetail>> {
+    state
+        .limits
+        .check(&crate::limits::TICKET_REPLY, &admin.id.to_string())?;
     let ticket = load_summary(&state, Scope::Staff, number).await?;
     let body = clean_body(&input.body_html)?;
     let text = crate::html::plain_text(&body);
