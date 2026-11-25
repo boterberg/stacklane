@@ -35,6 +35,10 @@ Stacklane is jong. Probeer het eerst naast je huidige panel: [importeer](/docs/g
 | Facturen in een valuta naar keuze | 1.3.0.0 |
 | Publieke catalogus van je pakketten voor je eigen website | 1.3.0.0 |
 | Activiteitenlog per gameserver | 1.3.0.0 |
+| Eigen thema: kant-en-klare thema's, grijstinten, hoeken en eigen CSS | 1.4.0.0 |
+| Medewerkers met rechten per onderdeel | 1.4.0.0 |
+| Gameservers delen met andere accounts | 1.4.0.0 |
+| Plugins en mods installeren vanuit Modrinth | 1.4.0.0 |
 | Nederlands en Engels, licht en donker | 1.0.0.0 |
 | Het commando `stacklane` met setup, update, status en import | 1.0.0.0 |
 
