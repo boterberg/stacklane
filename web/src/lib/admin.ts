@@ -138,6 +138,7 @@ export type AdminInvoice = {
   issued_at: string
   due_at: string
   total_cents: number
+  currency: string
   customer_name: string
   customer_email: string
 }
@@ -190,6 +191,7 @@ export type BillingSettings = {
   payment_term_days: number
   renewal_notice_days: number
   suspend_after_days: number
+  currency: string
 }
 
 export type PaymentSettings = {

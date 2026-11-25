@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from './api'
 import { applyPreferences, meQueryKey, syncPreferences, type Profile } from './auth'
+import { setCurrency } from './format'
 
 export type Company = {
   name: string
@@ -16,12 +17,21 @@ export type Meta = {
   demo: boolean
   next_reset_at: string | null
   company: Company | null
+  currency: string
 }
 
 export type DemoRole = 'customer' | 'admin'
 
 export function useMeta() {
-  return useQuery({ queryKey: ['meta'], queryFn: () => api<Meta>('/meta'), staleTime: 5 * 60_000 })
+  return useQuery({
+    queryKey: ['meta'],
+    queryFn: async () => {
+      const meta = await api<Meta>('/meta')
+      setCurrency(meta.currency)
+      return meta
+    },
+    staleTime: 5 * 60_000,
+  })
 }
 
 export function useDemoLogin() {

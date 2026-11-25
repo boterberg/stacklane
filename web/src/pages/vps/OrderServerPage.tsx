@@ -9,7 +9,7 @@ import { Checkbox, Field, Input, Select } from '../../components/ui/Field'
 import { PageHeader } from '../../components/ui/Heading'
 import { ApiError } from '../../lib/api'
 import { cn } from '../../lib/cn'
-import { formatEuro } from '../../lib/format'
+import { formatMoney } from '../../lib/format'
 import { t } from '../../lib/i18n'
 import { intervalLabels } from '../../lib/labels'
 import { specsLine, usePlaceOrder, useShopProducts, useSshKeys } from '../../lib/vps'
@@ -73,7 +73,7 @@ export function OrderServerPage() {
                 >
                   <p className="text-sm font-medium text-zinc-800 dark:text-white">{option.name}</p>
                   <p className="mt-1 text-sm text-zinc-500 dark:text-white/70">{specsLine(option.specs)}</p>
-                  <p className="mt-3 text-sm font-medium text-zinc-800 dark:text-white">{t('{price} per maand', { price: formatEuro(option.monthly_price_cents) })}</p>
+                  <p className="mt-3 text-sm font-medium text-zinc-800 dark:text-white">{t('{price} per maand', { price: formatMoney(option.monthly_price_cents) })}</p>
                 </Radio>
               ))}
             </RadioGroup>
@@ -140,11 +140,11 @@ export function OrderServerPage() {
                 <dl className="space-y-2 text-sm">
                   <div className="flex justify-between gap-4">
                     <dt className="text-zinc-500 dark:text-white/70">{product.name}</dt>
-                    <dd className="text-zinc-800 dark:text-white">{formatEuro(product.monthly_price_cents)}</dd>
+                    <dd className="text-zinc-800 dark:text-white">{formatMoney(product.monthly_price_cents)}</dd>
                   </div>
                   <div className="flex justify-between gap-4 border-t border-zinc-200 pt-2 font-medium dark:border-white/10">
                     <dt className="text-zinc-800 dark:text-white">{t('Te betalen')}</dt>
-                    <dd className="text-zinc-800 dark:text-white">{formatEuro(product.monthly_price_cents * months)}</dd>
+                    <dd className="text-zinc-800 dark:text-white">{formatMoney(product.monthly_price_cents * months)}</dd>
                   </div>
                   <p className="text-xs text-zinc-500 dark:text-white/60">{t('Inclusief btw.')}</p>
                 </dl>

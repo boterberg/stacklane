@@ -13,7 +13,7 @@ import { Modal } from '../../components/ui/Modal'
 import { DataTable, RowCard, RowCardList } from '../../components/ui/ResourceList'
 import { ApiError } from '../../lib/api'
 import { useFloatingIpAction, useFloatingIpOptions, useFloatingIps, useOrderFloatingIps, type FloatingIp } from '../../lib/floatingIps'
-import { formatEuro } from '../../lib/format'
+import { formatMoney } from '../../lib/format'
 import { t } from '../../lib/i18n'
 import { intervalLabels, serviceStatusColors, serviceStatusLabels } from '../../lib/labels'
 import { useVpsAccess } from '../../lib/vpsAccess'
@@ -61,7 +61,7 @@ function OrderFloatingIps({ open, left, onClose }: { open: boolean; left: number
       footer={
         <>
           <p className="text-sm text-zinc-500 dark:text-white/70">
-            {t('Totaal per maand')} <span className="font-medium text-zinc-800 dark:text-white">{formatEuro(price * Math.max(count, 0))}</span>
+            {t('Totaal per maand')} <span className="font-medium text-zinc-800 dark:text-white">{formatMoney(price * Math.max(count, 0))}</span>
           </p>
           <Button variant="primary" type="submit" form="order-floating-ips" disabled={!product || left === 0 || order.isPending}>
             {order.isPending ? t('Bezig...') : t('Bestellen')}
@@ -75,7 +75,7 @@ function OrderFloatingIps({ open, left, onClose }: { open: boolean; left: number
         <form id="order-floating-ips" onSubmit={submit} className="space-y-5" noValidate>
           <Field
             label={t("Aantal IP's")}
-            description={t('{price} per IP per maand. Je kunt er nog {left} bestellen.', { price: formatEuro(price), left })}
+            description={t('{price} per IP per maand. Je kunt er nog {left} bestellen.', { price: formatMoney(price), left })}
             error={errors.quantity}
           >
             {(id) => <Input id={id} icon={MapPinIcon} inputMode="numeric" invalid={!!errors.quantity} value={quantity} onChange={(event) => setQuantity(event.target.value)} />}

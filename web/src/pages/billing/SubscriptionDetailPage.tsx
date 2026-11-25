@@ -1,4 +1,4 @@
-import { ArrowPathIcon, ArrowUturnLeftIcon, CalendarIcon, ClockIcon, CurrencyEuroIcon, HashtagIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, ArrowUturnLeftIcon, BanknotesIcon, CalendarIcon, ClockIcon, HashtagIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { useState, type ReactNode } from 'react'
 import { useParams } from 'react-router'
 
@@ -10,7 +10,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { RowCard, RowCardList } from '../../components/ui/ResourceList'
 import { Tabs } from '../../components/ui/Tabs'
 import { expiryText, hasExpired, renewalText, useCancelSubscription, usePaymentOptions, useResumeSubscription, useSetPaymentMethod, useSubscription, type SubscriptionDetail } from '../../lib/billing'
-import { formatDate, formatEuro, formatRelative } from '../../lib/format'
+import { formatDate, formatMoney, formatRelative } from '../../lib/format'
 import { t } from '../../lib/i18n'
 import { intervalLabels, invoiceStatusColors, invoiceStatusLabels, subscriptionStatusColors, subscriptionStatusLabels } from '../../lib/labels'
 
@@ -123,8 +123,8 @@ export function SubscriptionDetailPage() {
               {expiryText(subscription)}
             </span>
             <span className="flex items-center gap-2">
-              <CurrencyEuroIcon className="size-4 text-zinc-400 dark:text-white/40" aria-hidden />
-              {t('{price} per maand', { price: formatEuro(subscription.monthly_total_cents).replace('€', '').trim() })}
+              <BanknotesIcon className="size-4 text-zinc-400 dark:text-white/40" aria-hidden />
+              {t('{price} per maand', { price: formatMoney(subscription.monthly_total_cents) })}
             </span>
             <span className="flex items-center gap-2">
               <ArrowPathIcon className="size-4 text-zinc-400 dark:text-white/40" aria-hidden />
@@ -170,13 +170,13 @@ export function SubscriptionDetailPage() {
                     <p className="text-sm font-medium text-zinc-800 dark:text-white">{item.description}</p>
                     {item.specs_line && <p className="mt-1 text-sm text-zinc-500 dark:text-white/70">{item.specs_line}</p>}
                   </div>
-                  <p className="text-sm text-zinc-500 dark:text-white/70">{formatEuro(item.monthly_price_cents)}</p>
+                  <p className="text-sm text-zinc-500 dark:text-white/70">{formatMoney(item.monthly_price_cents)}</p>
                 </li>
               ))}
             </ul>
             <p className="flex justify-end gap-3 border-t border-zinc-200 pt-4 text-sm dark:border-white/10">
               <span className="text-zinc-500 dark:text-white/70">{t('Totaal per maand')}</span>
-              <span className="font-medium text-zinc-800 dark:text-white">{formatEuro(subscription.monthly_total_cents)}</span>
+              <span className="font-medium text-zinc-800 dark:text-white">{formatMoney(subscription.monthly_total_cents)}</span>
             </p>
           </Card>
         </div>
@@ -192,7 +192,7 @@ export function SubscriptionDetailPage() {
               badge={<Badge color={invoiceStatusColors[invoice.status]}>{invoiceStatusLabels[invoice.status]}</Badge>}
               meta={[
                 { icon: CalendarIcon, label: formatDate(invoice.issued_at) },
-                { icon: CurrencyEuroIcon, label: formatEuro(invoice.total_cents).replace('€', '').trim() },
+                { icon: BanknotesIcon, label: formatMoney(invoice.total_cents, invoice.currency) },
               ]}
             />
           ))}

@@ -26,6 +26,7 @@ export type InvoiceSummary = {
   issued_at: string
   due_at: string
   total_cents: number
+  currency: string
 }
 
 export type SubscriptionDetail = SubscriptionSummary & {

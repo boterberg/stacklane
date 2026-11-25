@@ -8,7 +8,7 @@ import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { useCustomer } from '../../lib/admin'
 import { countries } from '../../lib/countries'
-import { formatDate, formatEuro } from '../../lib/format'
+import { formatDate, formatMoney } from '../../lib/format'
 import { t } from '../../lib/i18n'
 import {
   intervalLabels,
@@ -121,7 +121,7 @@ export function CustomerPage() {
                 <Line
                   key={subscription.id}
                   title={`${subscription.code} · ${subscription.description}`}
-                  detail={`${formatEuro(subscription.monthly_cents)} ${t('per maand')} · ${intervalLabels[subscription.billing_interval]} · ${t('Verloopt op')} ${formatDate(subscription.expires_at)}`}
+                  detail={`${formatMoney(subscription.monthly_cents)} ${t('per maand')} · ${intervalLabels[subscription.billing_interval]} · ${t('Verloopt op')} ${formatDate(subscription.expires_at)}`}
                   badge={<Badge color={subscriptionStatusColors[subscription.status]}>{subscriptionStatusLabels[subscription.status]}</Badge>}
                 />
               ))}
@@ -156,7 +156,7 @@ export function CustomerPage() {
                   key={invoice.id}
                   title={`#${invoice.id}`}
                   to={`/admin/invoices/${invoice.id}`}
-                  detail={`${formatEuro(invoice.total_cents)} · ${formatDate(invoice.issued_at)}`}
+                  detail={`${formatMoney(invoice.total_cents)} · ${formatDate(invoice.issued_at)}`}
                   badge={<Badge color={invoiceStatusColors[invoice.status]}>{invoiceStatusLabels[invoice.status]}</Badge>}
                 />
               ))}

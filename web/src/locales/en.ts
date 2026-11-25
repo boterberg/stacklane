@@ -1137,4 +1137,6 @@ export const en: Record<string, string> = {
   "{count} abonnementen": "{count} subscriptions",
   "1 abonnement": "1 subscription",
   "{amount} openstaand": "{amount} unpaid",
+  "Valuta": "Currency",
+  "Nieuwe facturen gebruiken deze valuta. Bestaande facturen houden hun eigen valuta.": "New invoices use this currency. Existing invoices keep their own currency.",
 }

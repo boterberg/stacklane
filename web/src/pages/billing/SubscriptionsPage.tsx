@@ -1,4 +1,4 @@
-import { ArrowPathIcon, ClockIcon, CurrencyEuroIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, BanknotesIcon, ClockIcon } from '@heroicons/react/24/outline'
 import { useState } from 'react'
 import { Link } from 'react-router'
 
@@ -8,7 +8,7 @@ import { PageHeader } from '../../components/ui/Heading'
 import { ListToolbar, MultiSelectFilter, PerPageSelect, SearchField, ToolbarSpacer, ViewToggle, type ListView } from '../../components/ui/ListToolbar'
 import { DataTable, PaginationFooter, RowCard, RowCardList } from '../../components/ui/ResourceList'
 import { expiryText, renewalText, useSubscriptions, type SubscriptionSummary } from '../../lib/billing'
-import { formatEuro, formatRelative } from '../../lib/format'
+import { formatMoney, formatRelative } from '../../lib/format'
 import { t } from '../../lib/i18n'
 import { subscriptionStatusColors, subscriptionStatuses, subscriptionStatusLabels } from '../../lib/labels'
 import { useStoredState } from '../../lib/useStoredState'
@@ -73,7 +73,7 @@ export function SubscriptionsPage() {
               badge={<StatusBadge status={subscription.status} />}
               meta={[
                 { icon: ClockIcon, label: expiryText(subscription) },
-                { icon: CurrencyEuroIcon, label: t('{price} per maand', { price: formatEuro(subscription.monthly_total_cents).replace('€', '').trim() }) },
+                { icon: BanknotesIcon, label: t('{price} per maand', { price: formatMoney(subscription.monthly_total_cents) }) },
                 { icon: ArrowPathIcon, label: renewalText(subscription) },
               ]}
             />
@@ -94,7 +94,7 @@ export function SubscriptionsPage() {
             },
             { header: t('Nummer'), cell: (subscription) => `#${subscription.code}` },
             { header: t('Status'), cell: (subscription) => <StatusBadge status={subscription.status} /> },
-            { header: t('Per maand'), cell: (subscription) => formatEuro(subscription.monthly_total_cents) },
+            { header: t('Per maand'), cell: (subscription) => formatMoney(subscription.monthly_total_cents) },
             { header: t('Verloopt'), cell: (subscription) => formatRelative(subscription.expires_at) },
           ]}
         />

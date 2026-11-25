@@ -8,7 +8,7 @@ import { ListToolbar, ToolbarSpacer } from '../../components/ui/ListToolbar'
 import { DataTable } from '../../components/ui/ResourceList'
 import { useVatReport, type VatRow } from '../../lib/admin'
 import { countries } from '../../lib/countries'
-import { formatEuro } from '../../lib/format'
+import { formatMoney } from '../../lib/format'
 import { intlLocale, t } from '../../lib/i18n'
 
 function schemeLabel(scheme: VatRow['scheme']) {
@@ -83,16 +83,16 @@ export function VatReportPage() {
               { header: t('Land'), cell: (row) => (row.country ? (names.get(row.country) ?? row.country) : '-') },
               { header: t('Tarief'), cell: (row) => `${(row.rate_basis_points / 100).toLocaleString(intlLocale())}%` },
               { header: t('Facturen'), cell: (row) => row.invoices },
-              { header: t('Zonder btw'), cell: (row) => formatEuro(row.net_cents) },
-              { header: t('Btw'), cell: (row) => formatEuro(row.vat_cents) },
-              { header: t('Totaal'), cell: (row) => formatEuro(row.gross_cents) },
+              { header: t('Zonder btw'), cell: (row) => formatMoney(row.net_cents) },
+              { header: t('Btw'), cell: (row) => formatMoney(row.vat_cents) },
+              { header: t('Totaal'), cell: (row) => formatMoney(row.gross_cents) },
             ]}
           />
           {oss.length > 0 && (
             <p className="mt-6 text-sm text-zinc-500 dark:text-white/70">
               {t('Voor je OSS-aangifte: {net} omzet en {vat} btw over {count} landen.', {
-                net: formatEuro(sum(oss, 'net_cents')),
-                vat: formatEuro(sum(oss, 'vat_cents')),
+                net: formatMoney(sum(oss, 'net_cents')),
+                vat: formatMoney(sum(oss, 'vat_cents')),
                 count: new Set(oss.map((row) => row.country)).size,
               })}
             </p>

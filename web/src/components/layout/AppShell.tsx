@@ -5,6 +5,7 @@ import { Link, Navigate, Outlet, useLocation } from 'react-router'
 
 import { useMe, type Profile } from '../../lib/auth'
 import { cn } from '../../lib/cn'
+import { useMeta } from '../../lib/meta'
 import { Logo } from '../ui/Logo'
 import { useNotifications } from '../../lib/notifications'
 import { t } from '../../lib/i18n'
@@ -73,6 +74,7 @@ function Sidebar({ profile, onSearch, onNotifications, onNavigate }: SidebarProp
 
 export function AppShell() {
   const { data: profile, isPending } = useMe()
+  const { isPending: metaPending } = useMeta()
   const location = useLocation()
   const [searchOpen, setSearchOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -89,7 +91,7 @@ export function AppShell() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  if (isPending) {
+  if (isPending || metaPending) {
     return null
   }
   if (!profile) {

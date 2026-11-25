@@ -7,7 +7,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button, ButtonLink } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { invoicePdfUrl, useInvoice, type InvoiceDetail } from '../../lib/billing'
-import { formatDate, formatEuro } from '../../lib/format'
+import { formatDate, formatMoney } from '../../lib/format'
 import { intlLocale, t } from '../../lib/i18n'
 import { invoiceStatusColors, invoiceStatusLabels } from '../../lib/labels'
 import { useMeta, type Company } from '../../lib/meta'
@@ -90,7 +90,7 @@ export function InvoiceSpecification({ invoice, company }: { invoice: InvoiceDet
                   )}
                   {line.subscription_code && <p className="text-zinc-500 dark:text-white/70">{t('Abonnement #{code}', { code: line.subscription_code })}</p>}
                 </td>
-                <td className="py-4 text-right text-zinc-800 dark:text-white">{formatEuro(line.amount_cents)}</td>
+                <td className="py-4 text-right text-zinc-800 dark:text-white">{formatMoney(line.amount_cents, invoice.currency)}</td>
               </tr>
             ))}
           </tbody>
@@ -98,9 +98,9 @@ export function InvoiceSpecification({ invoice, company }: { invoice: InvoiceDet
 
         <dl className="mt-6 grid grid-cols-[1fr_auto] justify-items-end gap-x-10 gap-y-2 text-sm">
           <dt className="font-medium text-zinc-800 dark:text-white">{t('Totaal')}</dt>
-          <dd className="font-medium text-zinc-800 dark:text-white">{formatEuro(invoice.total_cents)}</dd>
+          <dd className="font-medium text-zinc-800 dark:text-white">{formatMoney(invoice.total_cents, invoice.currency)}</dd>
           <dt className="text-zinc-500 dark:text-white/70">{t('Waarvan btw ({rate}%)', { rate: taxRate })}</dt>
-          <dd className="text-zinc-500 dark:text-white/70">{formatEuro(invoice.tax_cents)}</dd>
+          <dd className="text-zinc-500 dark:text-white/70">{formatMoney(invoice.tax_cents, invoice.currency)}</dd>
         </dl>
         {invoice.vat_scheme !== 'domestic' && (
           <p className="mt-6 text-sm text-zinc-500 dark:text-white/70">

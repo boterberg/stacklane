@@ -10,7 +10,7 @@ import { Checkbox, Field, Input, Select } from '../../components/ui/Field'
 import { PageHeader } from '../../components/ui/Heading'
 import { useDeleteDomainExtension, useDomainExtensions, useIntegrations, useSaveDomainExtension, type DomainExtension } from '../../lib/admin'
 import { ApiError } from '../../lib/api'
-import { formatEuro } from '../../lib/format'
+import { formatMoney } from '../../lib/format'
 import { t } from '../../lib/i18n'
 
 function euros(cents: number) {
@@ -144,9 +144,9 @@ export function DomainExtensionsPage() {
                     )}
                     <p className="text-zinc-500 dark:text-white/60">{extension.integration_name}</p>
                   </td>
-                  <td className="px-6 py-4 text-zinc-800 dark:text-white">{formatEuro(extension.register_cents)}</td>
-                  <td className="px-6 py-4 text-zinc-800 dark:text-white">{formatEuro(extension.renew_cents)}</td>
-                  <td className="px-6 py-4 text-zinc-800 dark:text-white">{formatEuro(extension.transfer_cents)}</td>
+                  <td className="px-6 py-4 text-zinc-800 dark:text-white">{formatMoney(extension.register_cents)}</td>
+                  <td className="px-6 py-4 text-zinc-800 dark:text-white">{formatMoney(extension.renew_cents)}</td>
+                  <td className="px-6 py-4 text-zinc-800 dark:text-white">{formatMoney(extension.transfer_cents)}</td>
                   <td className="px-6 py-4 text-zinc-800 dark:text-white">{extension.domains}</td>
                   <td className="px-6 py-4">
                     <div className="flex justify-end gap-2">

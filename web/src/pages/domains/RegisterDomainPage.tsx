@@ -9,7 +9,7 @@ import { PageHeader } from '../../components/ui/Heading'
 import { Tabs } from '../../components/ui/Tabs'
 import { ApiError } from '../../lib/api'
 import { holderName, useDomainSearch, useOrderDomain, useWhoisProfiles, type SearchResult } from '../../lib/domains'
-import { formatEuro } from '../../lib/format'
+import { formatMoney } from '../../lib/format'
 import { t } from '../../lib/i18n'
 
 type Mode = 'register' | 'transfer'
@@ -108,8 +108,8 @@ export function RegisterDomainPage() {
                     {orderable && (
                       <div className="flex items-center gap-4">
                         <div className="text-right text-sm">
-                          <p className="font-medium text-zinc-800 dark:text-white">{formatEuro(price)}</p>
-                          <p className="text-zinc-500 dark:text-white/60">{t('daarna {price} per jaar', { price: formatEuro(result.renew_cents) })}</p>
+                          <p className="font-medium text-zinc-800 dark:text-white">{formatMoney(price)}</p>
+                          <p className="text-zinc-500 dark:text-white/60">{t('daarna {price} per jaar', { price: formatMoney(result.renew_cents) })}</p>
                         </div>
                         <Button size="sm" variant={selected ? 'primary' : undefined} onClick={() => setChosen(result)}>
                           {selected ? t('Gekozen') : t('Kiezen')}
@@ -129,7 +129,7 @@ export function RegisterDomainPage() {
                 <div className="text-sm">
                   <p className="font-medium text-zinc-800 dark:text-white">{chosen.domain}</p>
                   <p className="mt-1 text-zinc-500 dark:text-white/60">
-                    {t('{price} voor het eerste jaar', { price: formatEuro(transfer ? chosen.transfer_cents : chosen.register_cents) })}
+                    {t('{price} voor het eerste jaar', { price: formatMoney(transfer ? chosen.transfer_cents : chosen.register_cents) })}
                   </p>
                 </div>
                 {profiles.length === 0 ? (

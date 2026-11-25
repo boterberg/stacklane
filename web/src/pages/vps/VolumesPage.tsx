@@ -12,7 +12,7 @@ import { PageHeader } from '../../components/ui/Heading'
 import { ListToolbar, SearchField, ToolbarSpacer, ViewToggle, type ListView } from '../../components/ui/ListToolbar'
 import { DataTable, RowCard, RowCardList } from '../../components/ui/ResourceList'
 import { ApiError } from '../../lib/api'
-import { formatEuro } from '../../lib/format'
+import { formatMoney } from '../../lib/format'
 import { t } from '../../lib/i18n'
 import { useVpsAccess } from '../../lib/vpsAccess'
 import { intervalLabels, serviceStatusColors, serviceStatusLabels } from '../../lib/labels'
@@ -61,7 +61,7 @@ function OrderVolume({ open, onClose }: { open: boolean; onClose: () => void }) 
       footer={
         <>
           <p className="text-sm text-zinc-500 dark:text-white/70">
-            {t('Totaal per maand')} <span className="font-medium text-zinc-800 dark:text-white">{formatEuro(perGb * sizeGb)}</span>
+            {t('Totaal per maand')} <span className="font-medium text-zinc-800 dark:text-white">{formatMoney(perGb * sizeGb)}</span>
           </p>
           <Button variant="primary" type="submit" form="order-volume" disabled={!option || order.isPending}>
             {order.isPending ? t('Bezig...') : t('Bestellen')}
@@ -104,7 +104,7 @@ function OrderVolume({ open, onClose }: { open: boolean; onClose: () => void }) 
               <Select id={id} value={interval} onChange={(event) => setInterval(event.target.value)}>
                 {intervals.map((item) => (
                   <option key={item.value} value={item.value}>
-                    {intervalLabels[item.value]} · {t('{price} per GB per maand', { price: formatEuro(perGb) })}
+                    {intervalLabels[item.value]} · {t('{price} per GB per maand', { price: formatMoney(perGb) })}
                   </option>
                 ))}
               </Select>

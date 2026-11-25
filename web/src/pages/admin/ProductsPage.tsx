@@ -1,4 +1,4 @@
-import { CpuChipIcon, CircleStackIcon, CurrencyEuroIcon, LinkIcon, PlusIcon } from '@heroicons/react/24/outline'
+import { BanknotesIcon, CircleStackIcon, CpuChipIcon, LinkIcon, PlusIcon } from '@heroicons/react/24/outline'
 import { useState, type FormEvent } from 'react'
 
 import { SlideOver } from '../../components/layout/SlideOver'
@@ -7,7 +7,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Field, Input, Select } from '../../components/ui/Field'
 import { PageHeader } from '../../components/ui/Heading'
 import { ApiError } from '../../lib/api'
-import { formatEuro, formatMegabytes } from '../../lib/format'
+import { formatMoney, formatMegabytes } from '../../lib/format'
 import { useCatalog, useCreateProduct, useIntegrations, useProducts } from '../../lib/admin'
 import { t } from '../../lib/i18n'
 
@@ -316,13 +316,13 @@ export function ProductsPage() {
               <p className="text-sm font-medium text-zinc-800 dark:text-white">{product.name}</p>
               <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-zinc-500 dark:text-white/70">
                 <span className="flex items-center gap-2">
-                  <CurrencyEuroIcon className="size-4 text-zinc-400 dark:text-white/40" />
+                  <BanknotesIcon className="size-4 text-zinc-400 dark:text-white/40" />
                   {product.kind === 'volume'
-                    ? t('{price} per GB per maand', { price: formatEuro(product.monthly_price_cents) })
+                    ? t('{price} per GB per maand', { price: formatMoney(product.monthly_price_cents) })
                     : product.kind === 'floating_ip'
-                      ? t('{price} per IP per maand', { price: formatEuro(product.monthly_price_cents) })
+                      ? t('{price} per IP per maand', { price: formatMoney(product.monthly_price_cents) })
                       : t('{price} per maand', {
-                        price: formatEuro(product.monthly_price_cents),
+                        price: formatMoney(product.monthly_price_cents),
                       })}
                 </span>
                 {product.provisioning.memory && (

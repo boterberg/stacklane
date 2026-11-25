@@ -7,7 +7,7 @@ import { PageHeader } from '../../components/ui/Heading'
 import { ApiError } from '../../lib/api'
 import { usePaymentSettings, useSavePaymentSettings, useSaveSettings, useSettings, type BillingSettings, type Company, type PaymentSettings, type SupportSettings } from '../../lib/admin'
 import { countries } from '../../lib/countries'
-import { t } from '../../lib/i18n'
+import { intlLocale, t } from '../../lib/i18n'
 
 function Saved({ show }: { show: boolean }) {
   return show ? <span className="text-sm text-zinc-500 dark:text-white/70">{t('Opgeslagen')}</span> : null
@@ -61,6 +61,13 @@ function CompanyForm({ initial }: { initial: Company }) {
   )
 }
 
+const currencies = ['EUR', 'USD', 'GBP', 'CHF', 'SEK', 'NOK', 'DKK', 'PLN', 'CZK', 'CAD', 'AUD']
+
+function currencyName(code: string) {
+  const name = new Intl.DisplayNames([intlLocale()], { type: 'currency' }).of(code) ?? code
+  return `${name} (${code})`
+}
+
 function BillingForm({ initial }: { initial: BillingSettings }) {
   const [billing, setBilling] = useState(initial)
   const save = useSaveSettings()
@@ -85,6 +92,17 @@ function BillingForm({ initial }: { initial: BillingSettings }) {
               {countries().map((country) => (
                 <option key={country.code} value={country.code}>
                   {country.name}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field label={t('Valuta')} description={t('Nieuwe facturen gebruiken deze valuta. Bestaande facturen houden hun eigen valuta.')} error={errors.currency}>
+          {(id) => (
+            <Select id={id} value={billing.currency} onChange={(event) => setBilling({ ...billing, currency: event.target.value })}>
+              {currencies.map((code) => (
+                <option key={code} value={code}>
+                  {currencyName(code)}
                 </option>
               ))}
             </Select>

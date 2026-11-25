@@ -9,7 +9,7 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { ApiError } from '../../lib/api'
 import { useAdminInvoice, useInvoiceAction } from '../../lib/admin'
-import { formatDate, formatEuro, formatRelative } from '../../lib/format'
+import { formatDate, formatMoney, formatRelative } from '../../lib/format'
 import { t } from '../../lib/i18n'
 import { invoiceStatusColors, invoiceStatusLabels } from '../../lib/labels'
 import { useMeta } from '../../lib/meta'
@@ -101,7 +101,7 @@ export function AdminInvoicePage() {
                     <p className="text-zinc-500 dark:text-white/70">{formatRelative(payment.created_at)}</p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-zinc-800 dark:text-white">{formatEuro(payment.amount_cents)}</span>
+                    <span className="text-zinc-800 dark:text-white">{formatMoney(payment.amount_cents, invoice.currency)}</span>
                     <Badge color={payment.status === 'paid' ? 'green' : payment.status === 'open' ? 'amber' : 'zinc'}>{t(paymentStatusLabels[payment.status] ?? payment.status)}</Badge>
                   </div>
                 </li>
@@ -120,7 +120,7 @@ export function AdminInvoicePage() {
         onConfirm={() => action.mutate('mark-paid', { onSettled: () => setConfirm(null) })}
       >
         {t('Doe dit als {amount} op je rekening staat. Abonnementen op deze factuur worden dan verlengd en opgeschorte diensten gaan weer aan.', {
-          amount: formatEuro(invoice.total_cents),
+          amount: formatMoney(invoice.total_cents, invoice.currency),
         })}
       </ConfirmDialog>
       <ConfirmDialog

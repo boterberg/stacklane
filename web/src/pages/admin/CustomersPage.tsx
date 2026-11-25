@@ -7,7 +7,7 @@ import { PageHeader } from '../../components/ui/Heading'
 import { ListToolbar, PerPageSelect, SearchField, ToolbarSpacer } from '../../components/ui/ListToolbar'
 import { PaginationFooter, RowCard, RowCardList } from '../../components/ui/ResourceList'
 import { useCustomers } from '../../lib/admin'
-import { formatDate, formatEuro } from '../../lib/format'
+import { formatDate, formatMoney } from '../../lib/format'
 import { t } from '../../lib/i18n'
 import { useStoredState } from '../../lib/useStoredState'
 
@@ -48,7 +48,7 @@ export function CustomersPage() {
                 ...(customer.company_name ? [{ icon: BuildingOfficeIcon, label: customer.company_name }] : []),
                 { icon: CreditCardIcon, label: customer.active_subscriptions === 1 ? t('1 abonnement') : t('{count} abonnementen', { count: customer.active_subscriptions }) },
                 { icon: ServerStackIcon, label: customer.active_services === 1 ? t('1 dienst') : t('{count} diensten', { count: customer.active_services }) },
-                ...(customer.open_cents > 0 ? [{ icon: DocumentTextIcon, label: t('{amount} openstaand', { amount: formatEuro(customer.open_cents) }) }] : []),
+                ...(customer.open_cents > 0 ? [{ icon: DocumentTextIcon, label: t('{amount} openstaand', { amount: formatMoney(customer.open_cents) }) }] : []),
                 { icon: CalendarIcon, label: t('Klant sinds {date}', { date: formatDate(customer.created_at) }) },
               ]}
             />

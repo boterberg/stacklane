@@ -1,5 +1,5 @@
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react'
-import { ArrowDownTrayIcon, CalendarIcon, CurrencyEuroIcon, EllipsisHorizontalIcon, EyeIcon } from '@heroicons/react/24/outline'
+import { ArrowDownTrayIcon, BanknotesIcon, CalendarIcon, EllipsisHorizontalIcon, EyeIcon } from '@heroicons/react/24/outline'
 import { useState } from 'react'
 import { Link } from 'react-router'
 
@@ -9,7 +9,7 @@ import { PageHeader } from '../../components/ui/Heading'
 import { ListToolbar, PerPageSelect, SearchField, ToolbarSpacer, ViewToggle, type ListView } from '../../components/ui/ListToolbar'
 import { DataTable, PaginationFooter, RowCard, RowCardList } from '../../components/ui/ResourceList'
 import { invoicePdfUrl, useInvoices, type InvoiceSummary } from '../../lib/billing'
-import { formatDate, formatEuro } from '../../lib/format'
+import { formatDate, formatMoney } from '../../lib/format'
 import { t } from '../../lib/i18n'
 import { invoiceStatusColors, invoiceStatusLabels } from '../../lib/labels'
 import { useStoredState } from '../../lib/useStoredState'
@@ -83,7 +83,7 @@ export function InvoicesPage() {
               badge={<Badge color={invoiceStatusColors[invoice.status]}>{invoiceStatusLabels[invoice.status]}</Badge>}
               meta={[
                 { icon: CalendarIcon, label: formatDate(invoice.issued_at) },
-                { icon: CurrencyEuroIcon, label: formatEuro(invoice.total_cents).replace('€', '').trim() },
+                { icon: BanknotesIcon, label: formatMoney(invoice.total_cents, invoice.currency) },
               ]}
               aside={<InvoiceMenu invoice={invoice} />}
             />
@@ -105,7 +105,7 @@ export function InvoicesPage() {
             { header: t('Status'), cell: (invoice) => <Badge color={invoiceStatusColors[invoice.status]}>{invoiceStatusLabels[invoice.status]}</Badge> },
             { header: t('Factuurdatum'), cell: (invoice) => formatDate(invoice.issued_at) },
             { header: t('Vervaldatum'), cell: (invoice) => formatDate(invoice.due_at) },
-            { header: t('Bedrag'), cell: (invoice) => formatEuro(invoice.total_cents) },
+            { header: t('Bedrag'), cell: (invoice) => formatMoney(invoice.total_cents, invoice.currency) },
             { header: '', cell: (invoice) => <InvoiceMenu invoice={invoice} />, className: 'w-12 text-right' },
           ]}
         />

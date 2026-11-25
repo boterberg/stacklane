@@ -1,4 +1,4 @@
-import { CalendarIcon, CurrencyEuroIcon, UserIcon } from '@heroicons/react/24/outline'
+import { BanknotesIcon, CalendarIcon, UserIcon } from '@heroicons/react/24/outline'
 import { useState } from 'react'
 
 import { Badge } from '../../components/ui/Badge'
@@ -7,7 +7,7 @@ import { PageHeader } from '../../components/ui/Heading'
 import { ListToolbar, MultiSelectFilter, PerPageSelect, SearchField, ToolbarSpacer } from '../../components/ui/ListToolbar'
 import { PaginationFooter, RowCard, RowCardList } from '../../components/ui/ResourceList'
 import { useAdminInvoices } from '../../lib/admin'
-import { formatDate, formatEuro } from '../../lib/format'
+import { formatDate, formatMoney } from '../../lib/format'
 import { t } from '../../lib/i18n'
 import { invoiceStatusColors, invoiceStatusLabels } from '../../lib/labels'
 import { useStoredState } from '../../lib/useStoredState'
@@ -59,7 +59,7 @@ export function AdminInvoicesPage() {
               meta={[
                 { icon: UserIcon, label: invoice.customer_name },
                 { icon: CalendarIcon, label: formatDate(invoice.issued_at) },
-                { icon: CurrencyEuroIcon, label: formatEuro(invoice.total_cents).replace('€', '').trim() },
+                { icon: BanknotesIcon, label: formatMoney(invoice.total_cents, invoice.currency) },
               ]}
             />
           ))}

@@ -25,8 +25,14 @@ export function formatRelative(value: string) {
   return t('zojuist')
 }
 
-export function formatEuro(cents: number) {
-  return new Intl.NumberFormat(intlLocale(), { style: 'currency', currency: 'EUR' }).format(cents / 100)
+let defaultCurrency = 'EUR'
+
+export function setCurrency(currency: string) {
+  defaultCurrency = currency
+}
+
+export function formatMoney(cents: number, currency = defaultCurrency) {
+  return new Intl.NumberFormat(intlLocale(), { style: 'currency', currency }).format(cents / 100)
 }
 
 function formatNumber(value: number, digits: number) {

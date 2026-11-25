@@ -8,7 +8,7 @@ import { Checkbox } from '../../components/ui/Field'
 import { ApiError } from '../../lib/api'
 import { usePayInvoice, usePaymentOptions, type InvoiceDetail } from '../../lib/billing'
 import { cn } from '../../lib/cn'
-import { formatDate, formatEuro } from '../../lib/format'
+import { formatDate, formatMoney } from '../../lib/format'
 import { t } from '../../lib/i18n'
 
 type Provider = 'mollie' | 'stripe'
@@ -31,7 +31,7 @@ export function PayInvoicePanel({ invoice, open, onClose }: { invoice: InvoiceDe
       open={open}
       onClose={onClose}
       title={t('Factuur #{number} betalen', { number: invoice.id })}
-      description={t('Te betalen: {amount}', { amount: formatEuro(invoice.total_cents) })}
+      description={t('Te betalen: {amount}', { amount: formatMoney(invoice.total_cents) })}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -78,7 +78,7 @@ export function PayInvoicePanel({ invoice, open, onClose }: { invoice: InvoiceDe
               <p className="font-medium text-zinc-800 dark:text-white">{t('Liever zelf overmaken?')}</p>
               <p className="mt-1 text-zinc-500 dark:text-white/70">
                 {t('Maak {amount} over naar {iban} ten name van {holder}, onder vermelding van factuur {number}, voor {date}.', {
-                  amount: formatEuro(invoice.total_cents),
+                  amount: formatMoney(invoice.total_cents),
                   iban: options.iban,
                   holder: options.account_holder ?? '',
                   number: invoice.id,
