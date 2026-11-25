@@ -168,6 +168,12 @@ async fn serve() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(&state.config.bind_addr).await?;
     tracing::info!("listening on {}", state.config.bind_addr);
+    if std::env::var("PUBLIC_URL").is_err() {
+        tracing::warn!(
+            "PUBLIC_URL is not set, so Stacklane assumes {} and refuses signed-in writes from any other address; set it in /etc/stacklane/stacklane.env",
+            state.config.public_url
+        );
+    }
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
