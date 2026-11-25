@@ -260,8 +260,8 @@ pub async fn shared_member(
     rights: &[&str],
 ) -> String {
     let (member, cookie) = client.register(email).await;
-    sqlx::query("UPDATE users SET email_verified_at = now() WHERE id = $1")
-        .bind(member)
+    sqlx::query("UPDATE users SET email_verified_at = now() WHERE id = ANY($1)")
+        .bind([member, owner])
         .execute(&client.state.db)
         .await
         .unwrap();
@@ -283,4 +283,12 @@ pub async fn shared_member(
         )
         .await;
     cookie
+}
+
+pub async fn verify(client: &Client, users: &[Uuid]) {
+    sqlx::query("UPDATE users SET email_verified_at = now() WHERE id = ANY($1)")
+        .bind(users)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
 }

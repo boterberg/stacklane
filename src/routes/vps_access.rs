@@ -293,17 +293,35 @@ pub async fn create(
     if email.is_empty() {
         return Err(AppError::field("email", "Vul een e-mailadres in."));
     }
-    let user: Option<Uuid> =
-        sqlx::query_scalar("SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL")
-            .bind(email)
-            .fetch_optional(&state.db)
+    let owner_verified: bool =
+        sqlx::query_scalar("SELECT email_verified_at IS NOT NULL FROM users WHERE id = $1")
+            .bind(actor.owner)
+            .fetch_one(&state.db)
             .await?;
-    let Some(user) = user else {
+    if !owner_verified {
+        return Err(AppError::field(
+            "email",
+            "Bevestig eerst je eigen e-mailadres voordat je iemand toegang geeft.",
+        ));
+    }
+    let user: Option<(Uuid, bool)> = sqlx::query_as(
+        "SELECT id, email_verified_at IS NOT NULL FROM users WHERE email = $1 AND deleted_at IS NULL",
+    )
+    .bind(email)
+    .fetch_optional(&state.db)
+    .await?;
+    let Some((user, verified)) = user else {
         return Err(AppError::field(
             "email",
             "Er is geen account met dit e-mailadres. Vraag de persoon eerst een account aan te maken.",
         ));
     };
+    if !verified {
+        return Err(AppError::field(
+            "email",
+            "Deze persoon heeft het e-mailadres nog niet bevestigd. Vraag dat eerst te doen.",
+        ));
+    }
     if user == actor.owner {
         return Err(AppError::field(
             "email",
@@ -424,8 +442,10 @@ pub async fn accept(
         return Err(AppError::Forbidden);
     }
     let accepted = sqlx::query(
-        "UPDATE vps_members SET accepted_at = now(), updated_at = now()
-         WHERE owner_id = $1 AND user_id = $2 AND accepted_at IS NULL",
+        "UPDATE vps_members m SET accepted_at = now(), updated_at = now()
+         FROM users u
+         WHERE m.owner_id = $1 AND m.user_id = $2 AND m.accepted_at IS NULL
+           AND u.id = m.user_id AND u.email_verified_at IS NOT NULL",
     )
     .bind(owner)
     .bind(user.id)

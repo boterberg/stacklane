@@ -482,6 +482,12 @@ fn english(message: &str) -> Option<&'static str> {
         "Bestel floating IPs onder VPS, Floating IPs." => {
             "Order floating IPs under VPS, Floating IPs."
         }
+        "Bevestig eerst je eigen e-mailadres voordat je iemand toegang geeft." => {
+            "Confirm your own email address before you give someone access."
+        }
+        "Deze persoon heeft het e-mailadres nog niet bevestigd. Vraag dat eerst te doen." => {
+            "This person has not confirmed their email address yet. Ask them to do that first."
+        }
         _ => return None,
     })
 }

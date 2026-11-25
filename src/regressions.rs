@@ -751,7 +751,28 @@ async fn billing_runs_never_overlap(db: PgPool) {
 async fn shared_access_needs_consent_and_ends_with_the_owner(db: PgPool) {
     let client = Client::new(db);
     let (owner, owner_cookie) = client.register("vps-owner@example.test").await;
-    let (_, member_cookie) = client.register("vps-member@example.test").await;
+    let (member, member_cookie) = client.register("vps-member@example.test").await;
+    let unverified = client
+        .send(
+            Method::POST,
+            "/vps/members",
+            Some(&owner_cookie),
+            Some(json!({ "email": "vps-member@example.test", "permissions": ["servers.view"] })),
+        )
+        .await;
+    assert_eq!(unverified.status, StatusCode::UNPROCESSABLE_ENTITY);
+    crate::testing::verify(&client, &[owner]).await;
+    let unverified = client
+        .send(
+            Method::POST,
+            "/vps/members",
+            Some(&owner_cookie),
+            Some(json!({ "email": "vps-member@example.test", "permissions": ["servers.view"] })),
+        )
+        .await;
+    assert_eq!(unverified.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(unverified.body["errors"]["email"].is_string());
+    crate::testing::verify(&client, &[member]).await;
     let invited = client
         .send(
             Method::POST,
@@ -1487,7 +1508,8 @@ async fn deliver_a_proxmox_vps(client: Client, invite_first: bool) {
     .unwrap();
     let (user, cookie) = client.register("delivered@example.test").await;
     if invite_first {
-        client.register("helper@example.test").await;
+        let (helper, _) = client.register("helper@example.test").await;
+        crate::testing::verify(&client, &[user, helper]).await;
         let invited = client
             .send(
                 Method::POST,
