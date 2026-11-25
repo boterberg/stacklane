@@ -65,6 +65,11 @@ pub const RDNS: Rule = Rule {
     max: 30,
     window: Duration::from_secs(60 * 60),
 };
+pub const UNKNOWN_PAYMENT: Rule = Rule {
+    name: "unknown-payment",
+    max: 60,
+    window: Duration::from_secs(60 * 60),
+};
 pub const DOMAIN_SEARCH: Rule = Rule {
     name: "domain-search",
     max: 30,

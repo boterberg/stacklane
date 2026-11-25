@@ -135,15 +135,50 @@ async fn handle_mollie(state: &AppState, external_id: &str) -> AppResult<()> {
     .bind(external_id)
     .fetch_optional(&state.db)
     .await?;
-    let Some((payment_id, save_mandate, user_id)) = found else {
-        return Ok(());
-    };
     let providers = payments::providers(state).await?;
     let client = providers.mollie.ok_or(AppError::NotFound)?;
-    let payment = client
-        .payment(external_id)
-        .await
-        .map_err(AppError::Internal)?;
+    let (payment_id, save_mandate, user_id, payment) = match found {
+        Some((payment_id, save_mandate, user_id)) => {
+            let payment = client
+                .payment(external_id)
+                .await
+                .map_err(AppError::Internal)?;
+            (payment_id, save_mandate, user_id, payment)
+        }
+        None => {
+            if !looks_like_mollie_payment(external_id) {
+                return Ok(());
+            }
+            state
+                .limits
+                .check(&crate::limits::UNKNOWN_PAYMENT, "mollie")?;
+            let payment = client
+                .payment(external_id)
+                .await
+                .map_err(AppError::Internal)?;
+            let Some(local) = payment
+                .metadata
+                .get("payment_id")
+                .and_then(Value::as_str)
+                .and_then(|id| id.parse::<Uuid>().ok())
+            else {
+                return Ok(());
+            };
+            let claimed: Option<(Uuid, bool, Uuid)> = sqlx::query_as(
+                "UPDATE payments p SET external_id = $2 FROM invoices v
+                 WHERE p.id = $1 AND v.id = p.invoice_id AND p.provider = 'mollie' AND p.external_id IS NULL
+                 RETURNING p.id, p.save_mandate, v.user_id",
+            )
+            .bind(local)
+            .bind(external_id)
+            .fetch_optional(&state.db)
+            .await?;
+            let Some((payment_id, save_mandate, user_id)) = claimed else {
+                return Ok(());
+            };
+            (payment_id, save_mandate, user_id, payment)
+        }
+    };
     let status = mollie::map_status(&payment.status);
     let method = payment.describe_method();
     if status == "paid"
@@ -156,6 +191,12 @@ async fn handle_mollie(state: &AppState, external_id: &str) -> AppResult<()> {
         .await?;
     }
     payments::update_payment(state, payment_id, status, Some(&method)).await
+}
+
+fn looks_like_mollie_payment(id: &str) -> bool {
+    id.strip_prefix("tr_").is_some_and(|rest| {
+        (1..=32).contains(&rest.len()) && rest.chars().all(|c| c.is_ascii_alphanumeric())
+    })
 }
 
 pub async fn stripe_webhook(
@@ -376,4 +417,24 @@ pub async fn update_admin_settings(
     stored.bank_transfer_enabled = input.bank_transfer_enabled;
     settings::set(&state.db, "payments", &stored).await?;
     Ok(Json(view(&state, &stored)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::looks_like_mollie_payment;
+
+    #[test]
+    fn only_mollie_payment_ids_reach_the_provider() {
+        assert!(looks_like_mollie_payment("tr_WDqYK6vllg"));
+        for id in [
+            "",
+            "tr_",
+            "cst_abc",
+            "tr_../x",
+            "tr_a b",
+            &format!("tr_{}", "a".repeat(33)),
+        ] {
+            assert!(!looks_like_mollie_payment(id), "{id}");
+        }
+    }
 }
