@@ -91,6 +91,12 @@ pub async fn register(
     headers: HeaderMap,
     Json(input): Json<RegisterRequest>,
 ) -> AppResult<(CookieJar, Json<Profile>)> {
+    if state.config.demo_mode {
+        return Err(AppError::field(
+            "email",
+            "In de demo kun je geen eigen account aanmaken. Log in als klant of beheerder.",
+        ));
+    }
     state.limits.check(&limits::REGISTER, &ip)?;
     let email = input.email.trim().to_lowercase();
     let mut errors = BTreeMap::new();

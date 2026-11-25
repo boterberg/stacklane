@@ -476,6 +476,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Vul de server-ID van PowerDNS in, meestal localhost." => {
             "Enter the PowerDNS server ID, usually localhost."
         }
+        "In de demo kun je geen eigen account aanmaken. Log in als klant of beheerder." => {
+            "You cannot create your own account in the demo. Sign in as a customer or as an administrator."
+        }
         _ => return None,
     })
 }

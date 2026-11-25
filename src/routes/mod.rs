@@ -463,6 +463,9 @@ async fn security_headers(
 }
 
 fn demo_allows(method: &axum::http::Method, path: &str) -> bool {
+    if path == "/api/auth/register" {
+        return false;
+    }
     let Some(admin) = path.strip_prefix("/api/admin/") else {
         return true;
     };
@@ -596,5 +599,6 @@ mod tests {
             "/api/admin/invoices/100001/mark-paid"
         ));
         assert!(demo_allows(&Method::POST, "/api/auth/login"));
+        assert!(!demo_allows(&Method::POST, "/api/auth/register"));
     }
 }
