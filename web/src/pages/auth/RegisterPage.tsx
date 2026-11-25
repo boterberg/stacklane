@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 
 import { Button } from '../../components/ui/Button'
 import { Checkbox, Field, FormError, Input, Select } from '../../components/ui/Field'
@@ -23,6 +23,7 @@ export function RegisterPage() {
   const [form, setForm] = useState<RegisterInput>({ name: '', email: '', password: '', country: 'NL', is_business: false, company_name: '' })
   const register = useAuthMutation<RegisterInput>('/auth/register')
   const navigate = useNavigate()
+  const location = useLocation()
   const { data: meta } = useMeta()
   const errors = register.error instanceof ApiError ? register.error.fieldErrors : {}
 
@@ -32,7 +33,7 @@ export function RegisterPage() {
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    register.mutate(form, { onSuccess: () => navigate('/', { replace: true }) })
+    register.mutate(form, { onSuccess: () => navigate((location.state as { from?: string } | null)?.from ?? '/', { replace: true }) })
   }
 
   return (

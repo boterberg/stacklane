@@ -38,9 +38,9 @@ export function AuthFooter({ children }: { children: ReactNode }) {
   return <p className="mt-6 text-center text-sm text-zinc-500 dark:text-white/70">{children}</p>
 }
 
-export function TextLink({ to, children }: { to: string; children: ReactNode }) {
+export function TextLink({ to, state, children }: { to: string; state?: unknown; children: ReactNode }) {
   return (
-    <Link to={to} className="font-medium text-zinc-800 underline decoration-zinc-800/20 underline-offset-4 hover:decoration-current dark:text-white dark:decoration-white/20">
+    <Link to={to} state={state} className="font-medium text-zinc-800 underline decoration-zinc-800/20 underline-offset-4 hover:decoration-current dark:text-white dark:decoration-white/20">
       {children}
     </Link>
   )

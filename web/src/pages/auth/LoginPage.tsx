@@ -118,7 +118,7 @@ export function LoginPage() {
       </form>
       {!meta?.demo && (
         <AuthFooter>
-          {t('Nog geen account?')} <TextLink to="/register">{t('Maak een account aan')}</TextLink>
+          {t('Nog geen account?')} <TextLink to="/register" state={location.state}>{t('Maak een account aan')}</TextLink>
         </AuthFooter>
       )}
     </>

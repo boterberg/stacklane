@@ -1,6 +1,6 @@
 import { Radio, RadioGroup } from '@headlessui/react'
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -26,7 +26,8 @@ export function OrderServerPage() {
   const { data: keys } = useSshKeys()
   const place = usePlaceOrder()
   const navigate = useNavigate()
-  const [productId, setProductId] = useState<string | null>(null)
+  const [searchParams] = useSearchParams()
+  const [productId, setProductId] = useState<string | null>(searchParams.get('product'))
   const [interval, setInterval] = useState('monthly')
   const [name, setName] = useState('')
   const [image, setImage] = useState<string | null>(null)

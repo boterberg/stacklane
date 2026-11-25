@@ -1,6 +1,6 @@
 import { Radio, RadioGroup } from '@headlessui/react'
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -25,7 +25,8 @@ export function OrderWebhostingPage() {
   const { data: products, isPending } = useShopProducts('webhosting')
   const place = usePlaceOrder()
   const navigate = useNavigate()
-  const [productId, setProductId] = useState<string | null>(null)
+  const [searchParams] = useSearchParams()
+  const [productId, setProductId] = useState<string | null>(searchParams.get('product'))
   const [interval, setInterval] = useState('monthly')
   const [name, setName] = useState('')
   const errors = place.error instanceof ApiError ? place.error.fieldErrors : {}
