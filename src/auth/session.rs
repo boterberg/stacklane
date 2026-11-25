@@ -28,11 +28,17 @@ pub fn hash_token(token: &str) -> String {
 const USER_AGENT_CHARS: usize = 256;
 const MAX_SESSIONS: i64 = 50;
 
+pub struct Credentials<'a> {
+    pub password_hash: &'a str,
+    pub totp_secret: Option<&'a str>,
+}
+
 pub async fn create_session(
     state: &AppState,
     user_id: Uuid,
     remember: bool,
     user_agent: Option<String>,
+    checked: Option<Credentials<'_>>,
 ) -> Result<(String, Option<Duration>), AppError> {
     let token = hex::encode(rand::random::<[u8; 32]>());
     let lifetime = if remember {
@@ -43,6 +49,22 @@ pub async fn create_session(
     let user_agent =
         user_agent.map(|agent| agent.chars().take(USER_AGENT_CHARS).collect::<String>());
     let mut transaction = state.db.begin().await?;
+    let current: Option<(String, Option<String>)> =
+        sqlx::query_as("SELECT password_hash, totp_secret FROM users WHERE id = $1 FOR UPDATE")
+            .bind(user_id)
+            .fetch_optional(&mut *transaction)
+            .await?;
+    let Some((password_hash, totp_secret)) = current else {
+        return Err(AppError::Unauthenticated);
+    };
+    if let Some(checked) = checked
+        && (checked.password_hash != password_hash || checked.totp_secret != totp_secret.as_deref())
+    {
+        return Err(AppError::field(
+            "email",
+            "Deze gegevens kloppen niet met onze administratie.",
+        ));
+    }
     sqlx::query("INSERT INTO sessions (token_hash, user_id, user_agent, expires_at) VALUES ($1, $2, $3, $4)")
         .bind(hash_token(&token))
         .bind(user_id)

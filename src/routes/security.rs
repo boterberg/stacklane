@@ -29,30 +29,29 @@ fn yes() -> bool {
 }
 
 async fn sign_out_elsewhere(
-    state: &AppState,
+    connection: &mut sqlx::PgConnection,
     user: &CurrentUser,
     revoke_tokens: bool,
 ) -> AppResult<()> {
-    let mut transaction = state.db.begin().await?;
+    auth::lock_live_session(&mut *connection, user.id, &user.token_hash).await?;
     sqlx::query("DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2")
         .bind(user.id)
         .bind(&user.token_hash)
-        .execute(&mut *transaction)
+        .execute(&mut *connection)
         .await?;
     sqlx::query(
         "DELETE FROM email_verifications v USING users u
          WHERE v.user_id = $1 AND u.id = v.user_id AND v.email <> u.email",
     )
     .bind(user.id)
-    .execute(&mut *transaction)
+    .execute(&mut *connection)
     .await?;
     if revoke_tokens {
         sqlx::query("DELETE FROM api_tokens WHERE user_id = $1")
             .bind(user.id)
-            .execute(&mut *transaction)
+            .execute(&mut *connection)
             .await?;
     }
-    transaction.commit().await?;
     Ok(())
 }
 
@@ -96,16 +95,19 @@ pub async fn change_password(
             format!("Je wachtwoord moet minstens {MIN_PASSWORD_LENGTH} tekens lang zijn."),
         ));
     }
+    let hash = auth::hash(&input.password).await?;
+    let mut transaction = state.db.begin().await?;
+    sign_out_elsewhere(&mut transaction, &user, input.revoke_tokens).await?;
     sqlx::query("UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1")
         .bind(user.id)
-        .bind(auth::hash(&input.password).await?)
-        .execute(&state.db)
+        .bind(hash)
+        .execute(&mut *transaction)
         .await?;
     sqlx::query("DELETE FROM password_resets WHERE user_id = $1")
         .bind(user.id)
-        .execute(&state.db)
+        .execute(&mut *transaction)
         .await?;
-    sign_out_elsewhere(&state, &user, input.revoke_tokens).await?;
+    transaction.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -115,6 +117,8 @@ pub async fn logout_other_sessions(
     Json(input): Json<Confirm>,
 ) -> AppResult<StatusCode> {
     check_password(&state, &user, &input.password, "password").await?;
-    sign_out_elsewhere(&state, &user, input.revoke_tokens).await?;
+    let mut transaction = state.db.begin().await?;
+    sign_out_elsewhere(&mut transaction, &user, input.revoke_tokens).await?;
+    transaction.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }

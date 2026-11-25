@@ -255,7 +255,7 @@ pub async fn update(
     .execute(&state.db)
     .await?;
     if changing {
-        super::email_verification::send(&state, user.id, &email).await?;
+        super::email_verification::send(&state, user.id, &email, Some(&user.token_hash)).await?;
     }
     Ok(Json(load(&state, user.id).await?))
 }

@@ -76,7 +76,7 @@ pub async fn login(
         .get("user-agent")
         .and_then(|value| value.to_str().ok())
         .map(str::to_owned);
-    let (token, max_age) = auth::create_session(&state, user_id, false, user_agent).await?;
+    let (token, max_age) = auth::create_session(&state, user_id, false, user_agent, None).await?;
     let profile = load_profile(&state, user_id).await?;
     Ok((
         jar.add(auth::session_cookie(&state, token, max_age)),

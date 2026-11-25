@@ -166,10 +166,10 @@ pub async fn register(
     .bind(input.company_name.filter(|_| input.is_business))
     .execute(&state.db)
     .await?;
-    super::email_verification::send(&state, user_id, &email).await?;
+    super::email_verification::send(&state, user_id, &email, None).await?;
 
     let (token, max_age) =
-        auth::create_session(&state, user_id, false, user_agent(&headers)).await?;
+        auth::create_session(&state, user_id, false, user_agent(&headers), None).await?;
     let profile = load_profile(&state, user_id).await?;
     Ok((
         jar.add(auth::session_cookie(&state, token, max_age)),
@@ -206,19 +206,28 @@ pub async fn login(
         account.as_ref().map(|(_, hash, _)| hash.as_str()),
     )
     .await?;
-    let user_id = match account {
+    let (user_id, checked_hash, totp_secret) = match account {
         Some((id, hash, totp_secret)) if matches => {
-            if let Some(sealed) = totp_secret {
-                two_factor::check_login_code(&state, id, &sealed, input.code.as_deref()).await?;
+            if let Some(sealed) = &totp_secret {
+                two_factor::check_login_code(&state, id, sealed, input.code.as_deref()).await?;
             }
-            if auth::needs_rehash(&hash) {
-                sqlx::query("UPDATE users SET password_hash = $2 WHERE id = $1")
-                    .bind(id)
-                    .bind(auth::hash(&input.password).await?)
-                    .execute(&state.db)
-                    .await?;
+            let mut checked_hash = hash;
+            if auth::needs_rehash(&checked_hash) {
+                let rehashed = auth::hash(&input.password).await?;
+                let updated = sqlx::query(
+                    "UPDATE users SET password_hash = $3 WHERE id = $1 AND password_hash = $2",
+                )
+                .bind(id)
+                .bind(&checked_hash)
+                .bind(&rehashed)
+                .execute(&state.db)
+                .await?
+                .rows_affected();
+                if updated == 1 {
+                    checked_hash = rehashed;
+                }
             }
-            id
+            (id, checked_hash, totp_secret)
         }
         _ => {
             return Err(AppError::field(
@@ -228,8 +237,17 @@ pub async fn login(
         }
     };
 
-    let (token, max_age) =
-        auth::create_session(&state, user_id, input.remember, user_agent(&headers)).await?;
+    let (token, max_age) = auth::create_session(
+        &state,
+        user_id,
+        input.remember,
+        user_agent(&headers),
+        Some(auth::Credentials {
+            password_hash: &checked_hash,
+            totp_secret: totp_secret.as_deref(),
+        }),
+    )
+    .await?;
     let profile = load_profile(&state, user_id).await?;
     Ok((
         jar.add(auth::session_cookie(&state, token, max_age)),

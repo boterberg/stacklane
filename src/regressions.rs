@@ -81,12 +81,31 @@ async fn a_new_address_counts_only_after_its_link_is_used(db: PgPool) {
     .await
     .unwrap();
     let token = verification_token(&client, user, "new@example.test").await;
+    let (_, stranger) = client.register("stranger@example.test").await;
 
-    let verified = client
+    let anonymous = client
         .send(
             Method::POST,
             "/auth/verify-email",
             None,
+            Some(json!({ "token": token })),
+        )
+        .await;
+    assert_eq!(anonymous.status, StatusCode::UNAUTHORIZED);
+    let foreign = client
+        .send(
+            Method::POST,
+            "/auth/verify-email",
+            Some(&stranger),
+            Some(json!({ "token": token })),
+        )
+        .await;
+    assert_eq!(foreign.status, StatusCode::UNPROCESSABLE_ENTITY);
+    let verified = client
+        .send(
+            Method::POST,
+            "/auth/verify-email",
+            Some(&cookie),
             Some(json!({ "token": token })),
         )
         .await;
@@ -108,7 +127,7 @@ async fn a_new_address_counts_only_after_its_link_is_used(db: PgPool) {
         .send(
             Method::POST,
             "/auth/verify-email",
-            None,
+            Some(&cookie),
             Some(json!({ "token": token })),
         )
         .await;
@@ -305,7 +324,7 @@ async fn a_password_change_revokes_api_tokens_and_reset_links(db: PgPool) {
         .send(
             Method::POST,
             "/auth/verify-email",
-            None,
+            Some(&cookie),
             Some(json!({ "token": parked })),
         )
         .await;
@@ -1643,7 +1662,7 @@ async fn sessions_stay_small_and_few(db: PgPool) {
     let client = Client::new(db);
     let (user, _) = client.register("sessions@example.test").await;
     for _ in 0..55 {
-        auth::create_session(&client.state, user, true, Some("x".repeat(300_000)))
+        auth::create_session(&client.state, user, true, Some("x".repeat(300_000)), None)
             .await
             .unwrap();
     }
@@ -3386,4 +3405,145 @@ async fn an_admin_token_cannot_change_the_team(db: PgPool) {
         .await
         .unwrap();
     assert_eq!(role, "admin");
+}
+
+async fn during_a_revocation(
+    client: &Client,
+    user: uuid::Uuid,
+    request: impl std::future::Future<Output = crate::testing::Reply>,
+) -> crate::testing::Reply {
+    let mut revocation = client.state.db.begin().await.unwrap();
+    sqlx::query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE")
+        .bind(user)
+        .execute(&mut *revocation)
+        .await
+        .unwrap();
+    let revoke = async move {
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        sqlx::query("DELETE FROM sessions WHERE user_id = $1")
+            .bind(user)
+            .execute(&mut *revocation)
+            .await
+            .unwrap();
+        revocation.commit().await.unwrap();
+    };
+    let (reply, ()) = tokio::join!(request, revoke);
+    reply
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_revocation_wins_over_requests_already_in_flight(db: PgPool) {
+    let client = Client::new(db);
+    let (user, cookie) = client.register("in-flight@example.test").await;
+    let minted = during_a_revocation(
+        &client,
+        user,
+        client.send(
+            Method::POST,
+            "/account/api-tokens",
+            Some(&cookie),
+            Some(json!({ "name": "late", "scopes": ["vps:read"], "expires_in_days": null })),
+        ),
+    )
+    .await;
+    assert_eq!(minted.status, StatusCode::UNAUTHORIZED, "{}", minted.body);
+    let tokens: i64 = sqlx::query_scalar("SELECT count(*) FROM api_tokens WHERE user_id = $1")
+        .bind(user)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(tokens, 0);
+
+    let cookie = client
+        .login("in-flight@example.test", PASSWORD, None)
+        .await
+        .cookie
+        .expect("session cookie");
+    let mut account = client
+        .send(Method::GET, "/account", Some(&cookie), None)
+        .await
+        .body;
+    account["email"] = json!("in-flight-attacker@example.test");
+    account["current_password"] = json!(PASSWORD);
+    let changed = during_a_revocation(
+        &client,
+        user,
+        client.send(Method::PUT, "/account", Some(&cookie), Some(account)),
+    )
+    .await;
+    assert_eq!(changed.status, StatusCode::UNAUTHORIZED, "{}", changed.body);
+    let pending: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM email_verifications WHERE user_id = $1 AND email = 'in-flight-attacker@example.test'")
+            .bind(user)
+            .fetch_one(&client.state.db)
+            .await
+            .unwrap();
+    assert_eq!(pending, 0);
+
+    let (checked, sessions_before): (String, i64) = sqlx::query_as(
+        "SELECT password_hash, (SELECT count(*) FROM sessions WHERE user_id = $1) FROM users WHERE id = $1",
+    )
+    .bind(user)
+    .fetch_one(&client.state.db)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE users SET password_hash = $2 WHERE id = $1")
+        .bind(user)
+        .bind(auth::hash("Another-pass-678").await.unwrap())
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    let late = auth::create_session(
+        &client.state,
+        user,
+        false,
+        None,
+        Some(auth::Credentials {
+            password_hash: &checked,
+            totp_secret: None,
+        }),
+    )
+    .await;
+    assert!(late.is_err());
+    let sessions_after: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM sessions WHERE user_id = $1")
+            .bind(user)
+            .fetch_one(&client.state.db)
+            .await
+            .unwrap();
+    assert_eq!(sessions_after, sessions_before);
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn one_address_gets_one_confirmation_mail_at_a_time(db: PgPool) {
+    let client = Client::new(db);
+    let (user, cookie) = client.register("one-mail@example.test").await;
+    sqlx::query("DELETE FROM email_verifications WHERE user_id = $1")
+        .bind(user)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    let resend = || client.send(Method::POST, "/account/email/resend", Some(&cookie), None);
+    let replies = tokio::join!(resend(), resend(), resend(), resend(), resend(), resend());
+    let sent = [
+        replies.0, replies.1, replies.2, replies.3, replies.4, replies.5,
+    ]
+    .iter()
+    .filter(|reply| reply.status == StatusCode::ACCEPTED)
+    .count();
+    assert_eq!(sent, 1);
+    let (other, other_cookie) = client.register("one-mail-other@example.test").await;
+    crate::testing::verify(&client, &[other]).await;
+    let mut account = client
+        .send(Method::GET, "/account", Some(&other_cookie), None)
+        .await
+        .body;
+    account["email"] = json!("one-mail@example.test");
+    account["current_password"] = json!(PASSWORD);
+    let taken_over = client
+        .send(Method::PUT, "/account", Some(&other_cookie), Some(account))
+        .await;
+    assert_eq!(taken_over.status, StatusCode::UNPROCESSABLE_ENTITY);
 }

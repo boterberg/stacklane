@@ -172,20 +172,23 @@ pub async fn enable(
             "Deze code klopt niet. Kijk of de tijd op je telefoon goed staat.",
         )
     })?;
+    let mut transaction = state.db.begin().await?;
+    crate::auth::lock_live_session(&mut transaction, user.id, &user.token_hash).await?;
     sqlx::query(
         "UPDATE users SET totp_secret = totp_pending, totp_pending = NULL, totp_last_step = $2, two_factor_enabled_at = now()
          WHERE id = $1",
     )
     .bind(user.id)
     .bind(step)
-    .execute(&state.db)
+    .execute(&mut *transaction)
     .await?;
-    let recovery_codes = replace_recovery_codes(&state, user.id).await?;
     sqlx::query("DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2")
         .bind(user.id)
         .bind(&user.token_hash)
-        .execute(&state.db)
+        .execute(&mut *transaction)
         .await?;
+    transaction.commit().await?;
+    let recovery_codes = replace_recovery_codes(&state, user.id).await?;
     crate::renewals::notify(
         &state,
         user.id,

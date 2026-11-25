@@ -115,9 +115,11 @@ pub async fn create(
             ));
         }
     };
+    let mut transaction = state.db.begin().await?;
+    crate::auth::lock_live_session(&mut transaction, user.id, &user.token_hash).await?;
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM api_tokens WHERE user_id = $1")
         .bind(user.id)
-        .fetch_one(&state.db)
+        .fetch_one(&mut *transaction)
         .await?;
     if count >= MAX_TOKENS {
         return Err(AppError::field(
@@ -140,8 +142,9 @@ pub async fn create(
     .bind(prefix)
     .bind(&scopes)
     .bind(expires_at)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *transaction)
     .await?;
+    transaction.commit().await?;
     Ok((StatusCode::CREATED, Json(CreatedToken { token, secret })))
 }
 
