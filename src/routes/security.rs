@@ -39,6 +39,13 @@ async fn sign_out_elsewhere(
         .bind(&user.token_hash)
         .execute(&mut *transaction)
         .await?;
+    sqlx::query(
+        "DELETE FROM email_verifications v USING users u
+         WHERE v.user_id = $1 AND u.id = v.user_id AND v.email <> u.email",
+    )
+    .bind(user.id)
+    .execute(&mut *transaction)
+    .await?;
     if revoke_tokens {
         sqlx::query("DELETE FROM api_tokens WHERE user_id = $1")
             .bind(user.id)

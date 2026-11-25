@@ -284,6 +284,7 @@ async fn a_password_change_revokes_api_tokens_and_reset_links(db: PgPool) {
     .execute(&client.state.db)
     .await
     .unwrap();
+    let parked = verification_token(&client, user, "parked@example.test").await;
     let changed = client
         .send(
             Method::PUT,
@@ -300,6 +301,63 @@ async fn a_password_change_revokes_api_tokens_and_reset_links(db: PgPool) {
         .await
         .unwrap();
     assert_eq!(resets, 0);
+    let moved = client
+        .send(
+            Method::POST,
+            "/auth/verify-email",
+            None,
+            Some(json!({ "token": parked })),
+        )
+        .await;
+    assert_eq!(moved.status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn recovering_a_squatted_address_drops_what_the_squatter_left(db: PgPool) {
+    let client = Client::new(db);
+    let (squatted, _) = client.register("squatted@example.test").await;
+    let (helper, _) = client.register("squatter@example.test").await;
+    sqlx::query(
+        "INSERT INTO vps_members (id, owner_id, user_id, permissions, accepted_at)
+         VALUES ($1, $2, $3, '{servers.console}', now())",
+    )
+    .bind(uuid::Uuid::new_v4())
+    .bind(squatted)
+    .bind(helper)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE users SET totp_secret = 'planted' WHERE id = $1")
+        .bind(squatted)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES ($1, $2, now() + interval '1 hour')",
+    )
+    .bind(auth::hash_token("recover"))
+    .bind(squatted)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    let reset = client
+        .send(
+            Method::POST,
+            "/auth/reset-password",
+            None,
+            Some(json!({ "token": "recover", "password": "Another-pass-678" })),
+        )
+        .await;
+    assert_eq!(reset.status, StatusCode::NO_CONTENT);
+    let (members, totp): (i64, Option<String>) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM vps_members WHERE owner_id = $1), totp_secret FROM users WHERE id = $1",
+    )
+    .bind(squatted)
+    .fetch_one(&client.state.db)
+    .await
+    .unwrap();
+    assert_eq!((members, totp), (0, None));
 }
 
 #[sqlx::test]
