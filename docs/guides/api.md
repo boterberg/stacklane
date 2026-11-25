@@ -18,7 +18,7 @@ Beheren geeft ook leesrechten. Het token zie je maar één keer; Stacklane bewaa
 
 Een token kan nooit tokens maken of verwijderen, je wachtwoord wijzigen of andere sessies uitloggen. Daarvoor moet je echt ingelogd zijn.
 
-Alles wat een wachtwoord of een directe ingang tot een server geeft, gaat ook niet met een token: het rootwachtwoord, de rescue-modus, een ISO koppelen, de login voor het VirtFusion- of hostingpanel, de autorisatiecode van een domein, de console en de downloadlink van een backup van een gameserver.
+Alles wat een wachtwoord of een directe ingang tot een server geeft, gaat ook niet met een token: het rootwachtwoord, de rescue-modus, een ISO koppelen, de login voor het VirtFusion- of hostingpanel en de autorisatiecode van een domein.
 
 ## Aanroepen
 
