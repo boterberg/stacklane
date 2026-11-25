@@ -179,6 +179,9 @@ pub async fn websocket(
     user: CurrentUser,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Value>> {
+    if user.via_api_token {
+        return Err(AppError::Forbidden);
+    }
     let (client, identifier) = panel(&state, &user, id).await?;
     Ok(Json(client.websocket(&identifier).await.map_err(upstream)?))
 }
@@ -267,6 +270,9 @@ pub async fn download_backup(
     user: CurrentUser,
     Path((id, backup)): Path<(Uuid, Uuid)>,
 ) -> AppResult<Json<Value>> {
+    if user.via_api_token {
+        return Err(AppError::Forbidden);
+    }
     let (client, identifier) = panel(&state, &user, id).await?;
     let url = client
         .backup_download(&identifier, &backup.to_string())
