@@ -504,6 +504,22 @@ pub async fn attach(
         .bind(actor.owner)
         .fetch_optional(&state.db)
         .await?;
+        let Some((Some(_), Some(_))) = target else {
+            return Err(AppError::field(
+                "server_id",
+                "Kies een van je actieve servers.",
+            ));
+        };
+        let _guard = crate::locks::service(&state.db, input.server_id).await?;
+        let target: Option<(Option<Uuid>, Option<String>)> = sqlx::query_as(
+            "SELECT integration_id, external_id FROM services
+             WHERE id = $1 AND user_id = $2 AND kind = 'vps' AND status = 'active'
+               AND NOT details ? 'rebuilding'",
+        )
+        .bind(input.server_id)
+        .bind(actor.owner)
+        .fetch_optional(&state.db)
+        .await?;
         let Some((Some(integration_id), Some(server))) = target else {
             return Err(AppError::field(
                 "server_id",
@@ -586,6 +602,7 @@ pub async fn detach(
     actor.require("networks.detach")?;
     crate::locks::exclusive(format!("network {id}"), async {
         let network = owned(&state, &actor, id).await?;
+        let _guard = crate::locks::service(&state.db, server_id).await?;
         let (port, server, status): (String, Option<String>, String) = sqlx::query_as(
             "SELECT m.port, s.external_id, s.status FROM vps_network_servers m
              JOIN services s ON s.id = m.service_id

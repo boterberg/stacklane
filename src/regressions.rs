@@ -3547,3 +3547,64 @@ async fn one_address_gets_one_confirmation_mail_at_a_time(db: PgPool) {
         .await;
     assert_eq!(taken_over.status, StatusCode::UNPROCESSABLE_ENTITY);
 }
+
+fn quiet_node(_: &str, _: &str, _: &str) -> (u16, serde_json::Value) {
+    (200, json!({ "data": null }))
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_power_action_waits_for_a_suspension_in_progress(db: PgPool) {
+    use crate::testing::{NewService, fake_api, proxmox_integration, service};
+    let client = Client::new(db);
+    let (user, cookie) = client.register("vps-suspend-race@example.test").await;
+    let (base, calls) = fake_api(quiet_node).await;
+    let integration = proxmox_integration(&client.state, &base).await;
+    let server = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "active",
+            integration: Some(integration),
+            external_id: Some("741"),
+            details: json!({ "vmid": 741 }),
+        },
+    )
+    .await;
+    let suspension = crate::locks::service(&client.state.db, server)
+        .await
+        .unwrap();
+    let db = client.state.db.clone();
+    let suspend = async move {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        sqlx::query("UPDATE services SET status = 'suspended' WHERE id = $1")
+            .bind(server)
+            .execute(&db)
+            .await
+            .unwrap();
+        suspension.commit().await.unwrap();
+    };
+    let path = format!("/vps/servers/{server}/power");
+    let start = client.send(
+        Method::POST,
+        &path,
+        Some(&cookie),
+        Some(json!({ "action": "start" })),
+    );
+    let (started, ()) = tokio::join!(start, suspend);
+    assert_eq!(
+        started.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        started.body
+    );
+    assert!(
+        !calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|call| call.contains("/status/start"))
+    );
+}

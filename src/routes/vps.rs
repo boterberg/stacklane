@@ -63,6 +63,15 @@ async fn machine(state: &AppState, owner: Uuid, id: Uuid) -> AppResult<vps::Mach
     machine_of(state, owner, id).await
 }
 
+type ServiceLock = sqlx::Transaction<'static, sqlx::Postgres>;
+
+async fn locked(state: &AppState, owner: Uuid, id: Uuid) -> AppResult<(ServiceLock, vps::Machine)> {
+    machine_of(state, owner, id).await?;
+    let guard = crate::locks::service(&state.db, id).await?;
+    let machine = machine_of(state, owner, id).await?;
+    Ok((guard, machine))
+}
+
 pub(crate) async fn machine_of(
     state: &AppState,
     user_id: Uuid,
@@ -182,7 +191,7 @@ pub async fn power(
     if input.action != "start" {
         actor.require("servers.stop")?;
     }
-    let machine = machine(&state, actor.owner, id).await?;
+    let (_guard, machine) = locked(&state, actor.owner, id).await?;
     machine.power(&input.action).await.map_err(failed)?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -200,7 +209,7 @@ pub async fn enter_rescue(
     actor.browser_only()?;
     actor.require("servers.rescue")?;
     crate::locks::exclusive(format!("server {id}"), async {
-        let machine = machine(&state, actor.owner, id).await?;
+        let (_guard, machine) = locked(&state, actor.owner, id).await?;
         if !machine.features().rescue {
             return Err(AppError::field(
                 "server",
@@ -246,7 +255,7 @@ pub async fn leave_rescue(
 ) -> AppResult<StatusCode> {
     actor.require("servers.rescue")?;
     crate::locks::exclusive(format!("server {id}"), async {
-        let machine = machine(&state, actor.owner, id).await?;
+        let (_guard, machine) = locked(&state, actor.owner, id).await?;
         let rescued: bool =
             sqlx::query_scalar("SELECT details ? 'rescue' FROM services WHERE id = $1")
                 .bind(id)
@@ -512,7 +521,7 @@ async fn take_snapshot(
     id: Uuid,
     input: NewSnapshot,
 ) -> AppResult<StatusCode> {
-    let machine = machine(state, actor.owner, id).await?;
+    let (_guard, machine) = locked(state, actor.owner, id).await?;
     if machine.snapshots().await.map_err(failed)?.len() >= MAX_SNAPSHOTS {
         return Err(AppError::field(
             "description",
@@ -550,7 +559,7 @@ pub async fn rollback_snapshot(
     Path((id, name)): Path<(Uuid, String)>,
 ) -> AppResult<StatusCode> {
     actor.require("servers.restore")?;
-    let machine = machine(&state, actor.owner, id).await?;
+    let (_guard, machine) = locked(&state, actor.owner, id).await?;
     let held: bool = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM services WHERE kind IN ('volume', 'floating_ip')
                         AND status = 'suspended' AND details->>'suspended_from' = $1::text)",
@@ -598,7 +607,7 @@ pub async fn delete_snapshot(
     Path((id, name)): Path<(Uuid, String)>,
 ) -> AppResult<StatusCode> {
     actor.require("snapshots.delete")?;
-    let machine = machine(&state, actor.owner, id).await?;
+    let (_guard, machine) = locked(&state, actor.owner, id).await?;
     machine
         .delete_snapshot(identifier(&name)?)
         .await
