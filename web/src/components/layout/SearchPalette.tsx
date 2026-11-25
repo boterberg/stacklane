@@ -9,11 +9,11 @@ import { t } from '../../lib/i18n'
 type SearchPaletteProps = {
   open: boolean
   onClose: () => void
-  isAdmin: boolean
+  grants: string[]
 }
 
-export function SearchPalette({ open, onClose, isAdmin }: SearchPaletteProps) {
-  const flatNavigation = flatNavigationFor(isAdmin)
+export function SearchPalette({ open, onClose, grants }: SearchPaletteProps) {
+  const flatNavigation = flatNavigationFor(grants)
   const [query, setQuery] = useState('')
   const navigate = useNavigate()
   const normalized = query.trim().toLowerCase()

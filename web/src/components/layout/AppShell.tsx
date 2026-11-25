@@ -3,7 +3,7 @@ import { Bars2Icon, BellIcon, ExclamationTriangleIcon, MagnifyingGlassIcon, XMar
 import { useEffect, useState } from 'react'
 import { Link, Navigate, Outlet, useLocation } from 'react-router'
 
-import { useMe, type Profile } from '../../lib/auth'
+import { grantsOf, useMe, type Profile } from '../../lib/auth'
 import { cn } from '../../lib/cn'
 import { useMeta } from '../../lib/meta'
 import { BrandLogo } from '../ui/BrandLogo'
@@ -45,7 +45,7 @@ function Sidebar({ profile, onSearch, onNotifications, onNavigate }: SidebarProp
         <kbd className="font-sans text-xs text-zinc-400/75">Ctrl+K</kbd>
       </button>
       <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
-        <NavList isAdmin={profile.role === 'admin'} onNavigate={onNavigate} />
+        <NavList grants={grantsOf(profile)} onNavigate={onNavigate} />
       </div>
       <div className="mt-4 space-y-4.5">
         {(update?.available || updating) && (
@@ -141,7 +141,7 @@ export function AppShell() {
         </div>
       </main>
 
-      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} isAdmin={profile.role === 'admin'} />
+      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} grants={grantsOf(profile)} />
       <NotificationsPanel open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
     </div>
   )

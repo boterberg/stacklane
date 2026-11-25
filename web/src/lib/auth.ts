@@ -11,13 +11,19 @@ export type Profile = {
   last_name: string
   company_name: string | null
   is_business: boolean
-  role: 'customer' | 'admin'
+  role: 'customer' | 'staff' | 'admin'
+  permissions: string[]
   country: string
   theme: Theme
   locale: string
   timezone: string
   email_verified: boolean
   pending_email: string | null
+}
+
+export function grantsOf(profile: Profile | null | undefined): string[] {
+  if (!profile) return []
+  return profile.role === 'admin' ? ['admin', ...profile.permissions] : profile.permissions
 }
 
 export const meQueryKey = ['me'] as const

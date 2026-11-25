@@ -98,13 +98,13 @@ function SectionNav({ section, onNavigate }: { section: NavSection; onNavigate?:
   )
 }
 
-export function NavList({ isAdmin, onNavigate }: { isAdmin: boolean; onNavigate?: () => void }) {
+export function NavList({ grants, onNavigate }: { grants: string[]; onNavigate?: () => void }) {
   const { pathname } = useLocation()
   const section = sectionFor(pathname)
   if (section) return <SectionNav section={section} onNavigate={onNavigate} />
   return (
     <nav className="space-y-0.5">
-      {navigationFor(isAdmin).map((entry) =>
+      {navigationFor(grants).map((entry) =>
         isGroup(entry) ? <GroupItem key={entry.label} group={entry} onNavigate={onNavigate} /> : <LeafItem key={entry.label} item={entry} onNavigate={onNavigate} />,
       )}
     </nav>
