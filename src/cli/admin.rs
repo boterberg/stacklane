@@ -69,9 +69,11 @@ pub async fn create(args: &[String]) -> anyhow::Result<()> {
         }
         Action::Reset => {
             let id = existing.map(|(id, _)| id).unwrap_or_default();
+            crate::auth::forget_unproven_holder(&mut transaction, id).await?;
             sqlx::query(
                 "UPDATE users SET password_hash = $2, role = 'admin', totp_secret = NULL, totp_pending = NULL,
-                     totp_last_step = NULL, two_factor_enabled_at = NULL, updated_at = now()
+                     totp_last_step = NULL, two_factor_enabled_at = NULL,
+                     email_verified_at = COALESCE(email_verified_at, now()), updated_at = now()
                  WHERE id = $1",
             )
             .bind(id)

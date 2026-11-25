@@ -360,6 +360,15 @@ pub async fn reset_password(
             "Deze link is verlopen of al gebruikt. Vraag een nieuwe aan.",
         )
     })?;
+    let was_verified: bool = sqlx::query_scalar(
+        "SELECT email_verified_at IS NOT NULL FROM users WHERE id = $1 FOR UPDATE",
+    )
+    .bind(user_id)
+    .fetch_one(&mut *transaction)
+    .await?;
+    if !was_verified {
+        crate::auth::forget_unproven_holder(&mut transaction, user_id).await?;
+    }
     sqlx::query(
         "UPDATE users SET password_hash = $2, email_verified_at = COALESCE(email_verified_at, now()),
                 updated_at = now()
