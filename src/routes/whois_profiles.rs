@@ -122,10 +122,19 @@ fn clean(input: ProfileInput) -> Result<ProfileInput, AppError> {
         }
     }
     let at = input.email.find('@');
-    if !at.is_some_and(|at| at > 0 && input.email[at + 1..].contains('.')) {
+    if input.email.len() > 254
+        || !at.is_some_and(|at| at > 0 && input.email[at + 1..].contains('.'))
+    {
         errors.insert("email", "Vul een geldig e-mailadres in.".to_owned());
     }
-    if openprovider::split_phone(&input.phone).is_none() {
+    if input
+        .company
+        .as_ref()
+        .is_some_and(|company| company.chars().count() > 100)
+    {
+        errors.insert("company", "Gebruik hoogstens 100 tekens.".to_owned());
+    }
+    if input.phone.len() > 32 || openprovider::split_phone(&input.phone).is_none() {
         errors.insert(
             "phone",
             "Vul een telefoonnummer in met landcode, zoals +31 612345678.".to_owned(),
