@@ -40,6 +40,20 @@ pub struct Settings {
     pub verify_tls: bool,
     #[serde(default)]
     pub images: Vec<Image>,
+    #[serde(default)]
+    pub private_bridge: Option<String>,
+    #[serde(default = "default_vlan_from")]
+    pub vlan_from: u16,
+    #[serde(default = "default_vlan_to")]
+    pub vlan_to: u16,
+}
+
+fn default_vlan_from() -> u16 {
+    2000
+}
+
+fn default_vlan_to() -> u16 {
+    2999
 }
 
 fn default_verify_tls() -> bool {
@@ -227,13 +241,21 @@ impl Proxmox {
             .request(Method::GET, "/cluster/firewall/options", None)
             .await
             .unwrap_or_default();
-        let warning = if firewall["enable"].as_i64() == Some(1) {
-            ""
-        } else {
-            ", let op: de firewall van het datacenter staat uit, zet die aan zodat servers elkaars IP-adres niet kunnen overnemen"
-        };
+        let mut warnings = String::new();
+        if firewall["enable"].as_i64() != Some(1) {
+            warnings.push_str(", let op: de firewall van het datacenter staat uit, zet die aan zodat servers elkaars IP-adres niet kunnen overnemen");
+        }
+        if let Some(bridge) = self.private_bridge() {
+            self.request(
+                Method::GET,
+                &format!("/nodes/{}/network/{bridge}", self.settings.node),
+                None,
+            )
+            .await
+            .with_context(|| format!("bridge {bridge} niet gevonden"))?;
+        }
         Ok(format!(
-            "Proxmox VE {}{warning}",
+            "Proxmox VE {}{warnings}",
             version["version"].as_str().unwrap_or("?")
         ))
     }
@@ -373,6 +395,61 @@ impl Proxmox {
         )
         .await?;
         Ok(())
+    }
+
+    pub fn private_bridge(&self) -> Option<&str> {
+        self.settings
+            .private_bridge
+            .as_deref()
+            .map(str::trim)
+            .filter(|bridge| !bridge.is_empty())
+    }
+
+    pub async fn attach_network(
+        &self,
+        vmid: u32,
+        vlan: u16,
+        address: &str,
+    ) -> anyhow::Result<String> {
+        let bridge = self
+            .private_bridge()
+            .context("er is geen bridge voor privénetwerken ingesteld")?;
+        let path = format!("{}/config", self.vm_path(vmid));
+        let config = self.request(Method::GET, &path, None).await?;
+        let index = (1..=7)
+            .find(|index| config.get(format!("net{index}")).is_none())
+            .context("deze server heeft geen vrije netwerkkaart meer")?;
+        self.run(
+            Method::POST,
+            &path,
+            &[
+                (
+                    &format!("net{index}"),
+                    format!("virtio,bridge={bridge},tag={vlan}"),
+                ),
+                (&format!("ipconfig{index}"), format!("ip={address}")),
+            ],
+        )
+        .await?;
+        Ok(format!("net{index}"))
+    }
+
+    pub async fn detach_network(&self, vmid: u32, port: &str) -> anyhow::Result<()> {
+        let index = port
+            .strip_prefix("net")
+            .filter(|index| matches!(*index, "1" | "2" | "3" | "4" | "5" | "6" | "7"))
+            .context("onbekende netwerkkaart")?;
+        let path = format!("{}/config", self.vm_path(vmid));
+        let config = self.request(Method::GET, &path, None).await?;
+        let present: Vec<String> = [format!("net{index}"), format!("ipconfig{index}")]
+            .into_iter()
+            .filter(|key| config.get(key).is_some())
+            .collect();
+        if present.is_empty() {
+            return Ok(());
+        }
+        self.run(Method::POST, &path, &[("delete", present.join(","))])
+            .await
     }
 
     pub async fn unbind_address(&self, vmid: u32, ipv4: Ipv4Addr) -> anyhow::Result<()> {
