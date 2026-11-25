@@ -95,7 +95,7 @@ export function DashboardPage() {
         </div>
         <div className="space-y-6">
           <LinkCard href={links.helpCenter} title={t('Helpcentrum')} description={t('Bekijk ons uitgebreide helpcentrum voor stapsgewijze handleidingen en documentatie.')} />
-          <LinkCard href={links.statusPage} title={t('Statuspagina')} description={t('Bekijk actuele storingen en gepland onderhoud.')} />
+          {links.statusPage && <LinkCard href={links.statusPage} title={t('Statuspagina')} description={t('Bekijk actuele storingen en gepland onderhoud.')} />}
         </div>
       </div>
     </>
