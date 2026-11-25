@@ -1371,3 +1371,51 @@ async fn iso_files_nobody_owns_are_removed(db: PgPool) {
     assert_eq!(deletes.len(), 1, "{deletes:?}");
     assert!(deletes[0].contains("stacklane-0rphan.iso"));
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn one_server_cannot_collect_unlimited_firewall_rules(db: PgPool) {
+    use crate::testing::{NewService, fake_api, proxmox_integration, service};
+    let client = Client::new(db);
+    let (base, _) = fake_api(steady_node).await;
+    let integration = proxmox_integration(&client.state, &base).await;
+    let (user, cookie) = client.register("fw-crowd@example.test").await;
+    let server = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "active",
+            integration: Some(integration),
+            external_id: Some("300"),
+            details: json!({}),
+        },
+    )
+    .await;
+    let ports: String = (1000..1015)
+        .map(|port| port.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let rules: Vec<_> = (0..4)
+        .map(|_| json!({ "type": "in", "action": "ACCEPT", "proto": "tcp", "dport": ports }))
+        .collect();
+    let save = |name: &str| {
+        let body = json!({ "name": name, "rules": rules, "server_ids": [server] });
+        let (client, cookie) = (&client, cookie.clone());
+        async move {
+            client
+                .send(Method::POST, "/vps/firewalls", Some(&cookie), Some(body))
+                .await
+        }
+    };
+    let first = save("first").await;
+    assert_eq!(first.status, StatusCode::CREATED, "{}", first.body);
+    let second = save("second").await;
+    assert_eq!(
+        second.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        second.body
+    );
+}

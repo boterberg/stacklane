@@ -368,8 +368,36 @@ async fn store(
             .await?;
         }
     }
+    let crowded: Option<Uuid> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT fs.service_id FROM vps_firewall_servers fs
+         JOIN vps_firewall_rules r ON r.firewall_id = fs.firewall_id
+         WHERE fs.service_id IN (SELECT service_id FROM vps_firewall_servers WHERE firewall_id = $1)
+         GROUP BY fs.service_id HAVING sum({ENTRIES}) > $2 LIMIT 1"
+    )))
+    .bind(id)
+    .bind(SERVER_ENTRIES)
+    .fetch_optional(&mut *transaction)
+    .await?;
+    if crowded.is_some() {
+        return Err(AppError::field(
+            "server_ids",
+            "Een server kan samen hoogstens 100 poorten of reeksen uit firewalls krijgen. Koppel minder firewalls aan deze server.",
+        ));
+    }
     transaction.commit().await?;
     Ok(detached)
+}
+
+const SERVER_ENTRIES: i64 = 100;
+const ENTRIES: &str = "coalesce(array_length(string_to_array(r.dport, ','), 1), 1)";
+
+async fn entries(state: &AppState, filter: &str, id: Uuid) -> anyhow::Result<i64> {
+    Ok(sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT coalesce(sum({ENTRIES}), 0)::bigint FROM vps_firewall_rules r {filter}"
+    )))
+    .bind(id)
+    .fetch_one(&state.db)
+    .await?)
 }
 
 fn rule_key(rule: &FirewallRule) -> String {
@@ -598,6 +626,17 @@ pub async fn apply_automatic(state: &AppState, service_id: Uuid) -> anyhow::Resu
     .fetch_all(&state.db)
     .await?;
     for firewall_id in firewalls {
+        let used = entries(
+            state,
+            "JOIN vps_firewall_servers fs ON fs.firewall_id = r.firewall_id WHERE fs.service_id = $1",
+            service_id,
+        )
+        .await?;
+        let adds = entries(state, "WHERE r.firewall_id = $1", firewall_id).await?;
+        if used + adds > SERVER_ENTRIES {
+            tracing::warn!(%service_id, %firewall_id, "skipping an automatic firewall, the server has too many rules");
+            continue;
+        }
         sqlx::query(
             "INSERT INTO vps_firewall_servers (firewall_id, service_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
         )

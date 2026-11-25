@@ -388,6 +388,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Hier loopt al een actie. Probeer het over een paar seconden opnieuw." => {
             "Something is already running here. Try again in a few seconds."
         }
+        "Een server kan samen hoogstens 100 poorten of reeksen uit firewalls krijgen. Koppel minder firewalls aan deze server." => {
+            "A server can get at most 100 ports or ranges from firewalls in total. Attach fewer firewalls to this server."
+        }
         _ => return None,
     })
 }
