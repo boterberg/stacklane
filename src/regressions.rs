@@ -3,7 +3,7 @@ use serde_json::json;
 use sqlx::PgPool;
 
 use crate::auth;
-use crate::testing::{Client, PASSWORD};
+use crate::testing::{Client, PASSWORD, shared_member};
 use tower::ServiceExt;
 
 async fn verification_token(client: &Client, user: uuid::Uuid, email: &str) -> String {
@@ -804,34 +804,6 @@ async fn shared_access_needs_consent_and_ends_with_the_owner(db: PgPool) {
         .await;
     assert_eq!(deleted.status, StatusCode::NO_CONTENT, "{}", deleted.body);
     assert_eq!(as_member(member_cookie).await, StatusCode::FORBIDDEN);
-}
-
-async fn shared_member(
-    client: &Client,
-    owner_cookie: &str,
-    owner: uuid::Uuid,
-    email: &str,
-    rights: &[&str],
-) -> String {
-    let (_, cookie) = client.register(email).await;
-    let invited = client
-        .send(
-            Method::POST,
-            "/vps/members",
-            Some(owner_cookie),
-            Some(json!({ "email": email, "permissions": rights })),
-        )
-        .await;
-    assert_eq!(invited.status, StatusCode::CREATED, "{}", invited.body);
-    client
-        .send(
-            Method::POST,
-            &format!("/account/shared-access/{owner}/accept"),
-            Some(&cookie),
-            None,
-        )
-        .await;
-    cookie
 }
 
 #[sqlx::test]

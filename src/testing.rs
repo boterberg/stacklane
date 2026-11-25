@@ -251,3 +251,36 @@ pub async fn make_admin(state: &AppState, user: Uuid) {
         .await
         .expect("admin");
 }
+
+pub async fn shared_member(
+    client: &Client,
+    owner_cookie: &str,
+    owner: Uuid,
+    email: &str,
+    rights: &[&str],
+) -> String {
+    let (member, cookie) = client.register(email).await;
+    sqlx::query("UPDATE users SET email_verified_at = now() WHERE id = $1")
+        .bind(member)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    let invited = client
+        .send(
+            Method::POST,
+            "/vps/members",
+            Some(owner_cookie),
+            Some(json!({ "email": email, "permissions": rights })),
+        )
+        .await;
+    assert_eq!(invited.status, StatusCode::CREATED, "{}", invited.body);
+    client
+        .send(
+            Method::POST,
+            &format!("/account/shared-access/{owner}/accept"),
+            Some(&cookie),
+            None,
+        )
+        .await;
+    cookie
+}

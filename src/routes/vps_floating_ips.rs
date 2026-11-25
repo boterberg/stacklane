@@ -206,6 +206,9 @@ pub async fn attach(
         if current == Some(input.server_id.to_string().as_str()) {
             return Ok(StatusCode::NO_CONTENT);
         }
+        if current.is_some() {
+            actor.require("floating_ips.detach")?;
+        }
         let target: Option<(Option<Uuid>, Option<String>)> = sqlx::query_as(
             "SELECT integration_id, external_id FROM services
              WHERE id = $1 AND user_id = $2 AND kind = 'vps' AND status = 'active'",
@@ -455,6 +458,26 @@ mod tests {
             .await;
         assert_eq!(reply.status, StatusCode::NO_CONTENT, "{}", reply.body);
         assert!(ipset("610").is_empty());
+        assert_eq!(ipset("611"), ["192.0.2.12"]);
+
+        let helper = crate::testing::shared_member(
+            &client,
+            &cookie,
+            user,
+            "fip-helper@example.test",
+            &["floating_ips.view", "floating_ips.attach"],
+        )
+        .await;
+        let moved = client
+            .send_with(
+                Method::POST,
+                &format!("{path}/attach"),
+                Some(&helper),
+                Some(attach(first)),
+                &[("x-vps-owner", &user.to_string())],
+            )
+            .await;
+        assert_eq!(moved.status, StatusCode::FORBIDDEN);
         assert_eq!(ipset("611"), ["192.0.2.12"]);
 
         let listed = client
