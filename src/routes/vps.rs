@@ -354,6 +354,7 @@ pub async fn rebuild(
     Path(id): Path<Uuid>,
     Json(input): Json<RebuildInput>,
 ) -> AppResult<StatusCode> {
+    actor.browser_only()?;
     actor.require("servers.rebuild")?;
     if !actor.is_owner() && !input.ssh_key_ids.is_empty() {
         actor.require("ssh_keys.view")?;

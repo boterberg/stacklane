@@ -479,6 +479,9 @@ async fn place_order(
     input: NewOrder,
 ) -> AppResult<(StatusCode, Json<OrderPlaced>)> {
     let state = state.clone();
+    if user.via_api_token && !input.ssh_key_ids.is_empty() {
+        return Err(AppError::Forbidden);
+    }
     if state.config.demo_mode {
         return Err(AppError::field(
             "product_id",

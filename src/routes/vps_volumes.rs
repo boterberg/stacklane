@@ -193,6 +193,7 @@ pub async fn attach(
     Path(id): Path<Uuid>,
     Json(input): Json<Attach>,
 ) -> AppResult<StatusCode> {
+    actor.browser_only()?;
     actor.require("volumes.attach")?;
     let _guard = crate::locks::service(&state.db, id).await?;
     let volume = owned(&state, &actor, id).await?;

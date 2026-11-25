@@ -78,6 +78,7 @@ pub async fn create(
     actor: VpsActor,
     Json(input): Json<NewKey>,
 ) -> AppResult<(StatusCode, Json<SshKey>)> {
+    actor.browser_only()?;
     actor.require("ssh_keys.create")?;
     let name = input.name.trim();
     if name.is_empty() || name.chars().count() > 60 {

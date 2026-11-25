@@ -200,6 +200,7 @@ pub async fn attach(
     Path(id): Path<Uuid>,
     Json(input): Json<Attach>,
 ) -> AppResult<StatusCode> {
+    actor.browser_only()?;
     actor.require("floating_ips.attach")?;
     let _guard = crate::locks::service(&state.db, id).await?;
     crate::locks::exclusive(format!("floating-ip {id}"), async {

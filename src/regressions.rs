@@ -1792,7 +1792,7 @@ async fn an_api_token_never_opens_rescue_or_an_iso(db: PgPool) {
             Method::POST,
             "/account/api-tokens",
             Some(&cookie),
-            Some(json!({ "name": "script", "scopes": ["vps:write"], "expires_in_days": null })),
+            Some(json!({ "name": "script", "scopes": ["vps:write", "billing:write"], "expires_in_days": null })),
         )
         .await;
     assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
@@ -1803,6 +1803,30 @@ async fn an_api_token_never_opens_rescue_or_an_iso(db: PgPool) {
         (
             format!("/vps/servers/{server}/iso"),
             json!({ "iso_id": uuid::Uuid::new_v4() }),
+        ),
+        (
+            format!("/vps/servers/{server}/rebuild"),
+            json!({ "image": "debian-12", "ssh_key_ids": [] }),
+        ),
+        (
+            "/ssh-keys".to_owned(),
+            json!({ "name": "script", "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl script" }),
+        ),
+        (
+            format!("/vps/volumes/{server}/attach"),
+            json!({ "server_id": server }),
+        ),
+        (
+            format!("/vps/floating-ips/{server}/attach"),
+            json!({ "server_id": server }),
+        ),
+        (
+            format!("/vps/networks/{server}/servers"),
+            json!({ "server_id": server }),
+        ),
+        (
+            "/orders".to_owned(),
+            json!({ "product_id": server, "billing_interval": "month", "name": "x", "ssh_key_ids": [server] }),
         ),
     ] {
         let reply = client

@@ -492,6 +492,7 @@ pub async fn attach(
     Path(id): Path<Uuid>,
     Json(input): Json<Attach>,
 ) -> AppResult<StatusCode> {
+    actor.browser_only()?;
     actor.require("networks.attach")?;
     crate::locks::exclusive(format!("network {id}"), async {
         let network = owned(&state, &actor, id).await?;
