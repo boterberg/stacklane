@@ -6,6 +6,7 @@ pub mod networks;
 pub mod openprovider;
 pub mod openstack;
 pub mod plesk;
+pub mod powerdns;
 pub mod proxmox;
 pub mod pterodactyl;
 pub mod virtfusion;
@@ -22,7 +23,7 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
-pub const KINDS: [&str; 8] = [
+pub const KINDS: [&str; 9] = [
     "pterodactyl",
     "proxmox",
     "openstack",
@@ -31,6 +32,7 @@ pub const KINDS: [&str; 8] = [
     "plesk",
     "openprovider",
     "cpanel",
+    "powerdns",
 ];
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -56,6 +58,7 @@ pub enum Driver {
     OpenStack(openstack::OpenStack),
     VirtFusion(virtfusion::VirtFusion),
     Openprovider(openprovider::Openprovider),
+    PowerDns(powerdns::PowerDns),
 }
 
 fn wrong_kind() -> AppError {
@@ -93,6 +96,7 @@ impl Driver {
             Self::OpenStack(client) => client.test().await,
             Self::VirtFusion(client) => client.test().await,
             Self::Openprovider(client) => client.test().await,
+            Self::PowerDns(client) => client.test().await,
         }
     }
 
@@ -105,7 +109,7 @@ impl Driver {
             Self::Cpanel(client) => client.suspend(external_id).await,
             Self::OpenStack(client) => client.suspend(external_id).await,
             Self::VirtFusion(client) => client.suspend(external_id).await,
-            Self::Openprovider(_) => Ok(()),
+            Self::Openprovider(_) | Self::PowerDns(_) => Ok(()),
         }
     }
 
@@ -122,7 +126,7 @@ impl Driver {
             Self::Cpanel(client) => client.unsuspend(external_id).await,
             Self::OpenStack(client) => client.unsuspend(external_id).await,
             Self::VirtFusion(client) => client.unsuspend(external_id).await,
-            Self::Openprovider(_) => Ok(()),
+            Self::Openprovider(_) | Self::PowerDns(_) => Ok(()),
         }
     }
 
@@ -138,7 +142,7 @@ impl Driver {
             Self::Cpanel(client) => client.terminate(external_id).await,
             Self::OpenStack(client) => client.destroy(external_id).await,
             Self::VirtFusion(client) => client.destroy(external_id).await,
-            Self::Openprovider(_) => Ok(()),
+            Self::Openprovider(_) | Self::PowerDns(_) => Ok(()),
         }
     }
 }
@@ -226,6 +230,17 @@ pub fn build(kind: &str, base_url: &str, credentials: &[u8], settings: Value) ->
             let settings =
                 serde_json::from_value(settings).context("ongeldige VirtFusion-instellingen")?;
             Ok(Driver::VirtFusion(virtfusion::VirtFusion::new(
+                base_url,
+                credentials,
+                settings,
+            )?))
+        }
+        "powerdns" => {
+            let credentials =
+                serde_json::from_slice(credentials).context("ongeldige PowerDNS-sleutel")?;
+            let settings =
+                serde_json::from_value(settings).context("ongeldige PowerDNS-instellingen")?;
+            Ok(Driver::PowerDns(powerdns::PowerDns::new(
                 base_url,
                 credentials,
                 settings,
