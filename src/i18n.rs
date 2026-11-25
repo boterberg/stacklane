@@ -522,6 +522,12 @@ fn english(message: &str) -> Option<&'static str> {
             "You already have 20 profiles. Delete one first."
         }
         "Kies hoogstens 10 SSH-sleutels." => "Choose at most 10 SSH keys.",
+        "Gebruik hoogstens 32 tekens." => "Use at most 32 characters.",
+        "Gebruik hoogstens 20 tekens." => "Use at most 20 characters.",
+        "Gebruik hoogstens 200 tekens." => "Use at most 200 characters.",
+        "Je hebt al 10 bestellingen die nog niet betaald zijn. Betaal of annuleer die eerst." => {
+            "You already have 10 orders that are not paid yet. Pay or cancel those first."
+        }
         _ => return None,
     })
 }

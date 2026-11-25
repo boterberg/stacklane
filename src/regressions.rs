@@ -2028,3 +2028,34 @@ async fn ssh_keys_stay_few_and_small(db: PgPool) {
         .await;
     assert_eq!(full.status, StatusCode::UNPROCESSABLE_ENTITY);
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn account_details_that_land_on_invoices_stay_short(db: PgPool) {
+    let client = Client::new(db);
+    let (_, cookie) = client.register("long-address@example.test").await;
+    let mut account = client
+        .send(Method::GET, "/account", Some(&cookie), None)
+        .await
+        .body;
+    account["city"] = json!("x".repeat(101));
+    let refused = client
+        .send(
+            Method::PUT,
+            "/account",
+            Some(&cookie),
+            Some(account.clone()),
+        )
+        .await;
+    assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        refused.body["errors"]["city"].is_string(),
+        "{}",
+        refused.body
+    );
+    account["city"] = json!("Utrecht");
+    let saved = client
+        .send(Method::PUT, "/account", Some(&cookie), Some(account))
+        .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
+}

@@ -128,6 +128,22 @@ pub async fn update(
             return Err(AppError::field(field, "Gebruik hoogstens 100 tekens."));
         }
     }
+    for (field, value, max) in [
+        ("phone", input.phone.as_deref(), 32),
+        ("coc_number", input.coc_number.as_deref(), 32),
+        ("tax_id", input.tax_id.as_deref(), 20),
+        ("address_line1", input.address_line1.as_deref(), 200),
+        ("address_line2", input.address_line2.as_deref(), 200),
+        ("postal_code", input.postal_code.as_deref(), 20),
+        ("city", input.city.as_deref(), 100),
+    ] {
+        if value.is_some_and(|value| value.trim().chars().count() > max) {
+            return Err(AppError::field(
+                field,
+                format!("Gebruik hoogstens {max} tekens."),
+            ));
+        }
+    }
     if input.is_business && company_name.is_none() {
         return Err(AppError::field(
             "company_name",
@@ -194,19 +210,24 @@ pub async fn update(
         }
         None => false,
         Some(_) if unchanged && previous.2 => true,
-        Some((code, number)) => match vat::check_vies(&code, &number).await {
-            Ok(true) => true,
-            Ok(false) => {
-                return Err(AppError::field(
-                    "tax_id",
-                    "Dit btw-nummer is niet geldig volgens VIES.",
-                ));
+        Some((code, number)) => {
+            state
+                .limits
+                .check(&crate::limits::VAT_CHECK, &user.id.to_string())?;
+            match vat::check_vies(&code, &number).await {
+                Ok(true) => true,
+                Ok(false) => {
+                    return Err(AppError::field(
+                        "tax_id",
+                        "Dit btw-nummer is niet geldig volgens VIES.",
+                    ));
+                }
+                Err(error) => {
+                    tracing::warn!(error = %format!("{error:#}"), "checking a VAT number failed");
+                    false
+                }
             }
-            Err(error) => {
-                tracing::warn!(error = %format!("{error:#}"), "checking a VAT number failed");
-                false
-            }
-        },
+        }
     };
     sqlx::query(
         "UPDATE users SET first_name = $2, last_name = $3, email = $4, invoice_email = $5, phone = $6, is_business = $7,
