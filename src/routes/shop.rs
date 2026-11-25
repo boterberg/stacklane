@@ -559,6 +559,12 @@ async fn place_order(
         (None, Some(first)) if product.kind == "vps" => Some(first.id.clone()),
         _ => None,
     };
+    if input.ssh_key_ids.len() > crate::services::MAX_KEYS_PER_SERVER {
+        return Err(AppError::field(
+            "ssh_key_ids",
+            "Kies hoogstens 10 SSH-sleutels.",
+        ));
+    }
     let owned: i64 =
         sqlx::query_scalar("SELECT count(*) FROM ssh_keys WHERE user_id = $1 AND id = ANY($2)")
             .bind(user.id)

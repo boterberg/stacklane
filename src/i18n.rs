@@ -515,6 +515,13 @@ fn english(message: &str) -> Option<&'static str> {
         "Deze DNS-server beheert nog reverse DNS van actieve adressen. Zeg die eerst op of wacht tot de opruiming klaar is." => {
             "This DNS server still manages reverse DNS for active addresses. Terminate those first or wait until the cleanup has finished."
         }
+        "Je hebt al 50 SSH-sleutels. Verwijder er eerst een." => {
+            "You already have 50 SSH keys. Delete one first."
+        }
+        "Je hebt al 20 profielen. Verwijder er eerst een." => {
+            "You already have 20 profiles. Delete one first."
+        }
+        "Kies hoogstens 10 SSH-sleutels." => "Choose at most 10 SSH keys.",
         _ => return None,
     })
 }

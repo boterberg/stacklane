@@ -33,6 +33,8 @@ async fn mark_failed(state: &AppState, service_id: Uuid, error: &anyhow::Error) 
     .await;
 }
 
+pub const MAX_KEYS_PER_SERVER: usize = 10;
+
 pub async fn recover_interrupted(state: &AppState) -> anyhow::Result<()> {
     let services = sqlx::query(
         "UPDATE services SET status = 'failed',
@@ -575,6 +577,12 @@ pub async fn start_rebuild(
         }
     }
     .ok_or_else(|| AppError::field("image", "Kies een besturingssysteem."))?;
+    if request.ssh_key_ids.len() > crate::services::MAX_KEYS_PER_SERVER {
+        return Err(AppError::field(
+            "ssh_key_ids",
+            "Kies hoogstens 10 SSH-sleutels.",
+        ));
+    }
     let keys: Vec<String> =
         sqlx::query_scalar("SELECT public_key FROM ssh_keys WHERE user_id = $1 AND id = ANY($2)")
             .bind(owner)
