@@ -93,6 +93,15 @@ pub struct NewServer<'a> {
     pub description: &'a str,
 }
 
+pub struct Rebuild<'a> {
+    pub vmid: u32,
+    pub scratch: u32,
+    pub template: u32,
+    pub password: &'a str,
+    pub ssh_keys: &'a [String],
+    pub disk_gb: u32,
+}
+
 pub struct Proxmox {
     base_url: String,
     credentials: Credentials,
@@ -348,6 +357,92 @@ impl Proxmox {
         .await?;
         self.bind_address(server.vmid, server.ipv4).await?;
         self.power(server.vmid, "start").await
+    }
+
+    pub async fn rebuild(&self, rebuild: &Rebuild<'_>) -> anyhow::Result<()> {
+        let vmid = rebuild.vmid;
+        if self
+            .status(vmid)
+            .await
+            .map(|status| status.state == "running")
+            .unwrap_or(false)
+        {
+            self.power(vmid, "stop").await?;
+        }
+        let cloned = self
+            .run(
+                Method::POST,
+                &format!("{}/clone", self.vm_path(rebuild.template)),
+                &[
+                    ("newid", rebuild.scratch.to_string()),
+                    ("name", format!("stacklane-rebuild-{vmid}")),
+                    ("full", "1".to_owned()),
+                    ("storage", self.settings.storage.clone()),
+                ],
+            )
+            .await;
+        let swapped = match cloned {
+            Ok(()) => self.swap_system_disk(rebuild).await,
+            Err(error) => Err(error),
+        };
+        if let Err(error) = self.destroy(rebuild.scratch).await {
+            tracing::warn!(vmid = rebuild.scratch, error = %format!("{error:#}"), "removing the rebuild clone failed");
+        }
+        swapped?;
+        self.power(vmid, "start").await
+    }
+
+    async fn swap_system_disk(&self, rebuild: &Rebuild<'_>) -> anyhow::Result<()> {
+        let vmid = rebuild.vmid;
+        let config = self.config(vmid).await?;
+        let old = config["scsi0"]
+            .as_str()
+            .and_then(|value| value.split(',').next())
+            .context("de server heeft geen systeemschijf")?
+            .to_owned();
+        self.config(rebuild.scratch).await?["scsi0"]
+            .as_str()
+            .context("de nieuwe systeemschijf ontbreekt")?;
+        let path = format!("{}/config", self.vm_path(vmid));
+        self.run(Method::POST, &path, &[("delete", "scsi0".to_owned())])
+            .await?;
+        let moved = self
+            .run(
+                Method::POST,
+                &format!("{}/move_disk", self.vm_path(rebuild.scratch)),
+                &[
+                    ("disk", "scsi0".to_owned()),
+                    ("target-vmid", vmid.to_string()),
+                    ("target-disk", "scsi0".to_owned()),
+                ],
+            )
+            .await;
+        if let Err(error) = moved {
+            self.run(Method::POST, &path, &[("scsi0", old)]).await.ok();
+            return Err(error);
+        }
+        if let Some(unused) = disk_key(&self.config(vmid).await?, &old) {
+            self.run(Method::POST, &path, &[("delete", unused)]).await?;
+        }
+        let mut options = vec![("cipassword", rebuild.password.to_owned())];
+        if rebuild.ssh_keys.is_empty() {
+            if config.get("sshkeys").is_some() {
+                options.push(("delete", "sshkeys".to_owned()));
+            }
+        } else {
+            options.push(("sshkeys", encode_ssh_keys(rebuild.ssh_keys)));
+        }
+        self.request(Method::POST, &path, Some(&options)).await?;
+        self.request(
+            Method::PUT,
+            &format!("{}/resize", self.vm_path(vmid)),
+            Some(&[
+                ("disk", "scsi0".to_owned()),
+                ("size", format!("{}G", rebuild.disk_gb)),
+            ]),
+        )
+        .await?;
+        Ok(())
     }
 
     pub async fn bind_address(&self, vmid: u32, ipv4: Ipv4Addr) -> anyhow::Result<()> {
@@ -1016,6 +1111,129 @@ mod tests {
             "POST /api2/json/nodes/pve/qemu/101/config onboot=0"
         );
         assert!(calls.contains(&"POST /api2/json/nodes/pve/qemu/101/status/stop".to_owned()));
+    }
+
+    static REBUILT: std::sync::Mutex<
+        std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
+    > = std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+    fn rebuilding_node(method: &str, path: &str, body: &str) -> (u16, serde_json::Value) {
+        let Some(rest) = path.strip_prefix("/api2/json/nodes/pve/qemu/") else {
+            return (200, json!({ "data": null }));
+        };
+        let (vm, action) = rest.split_once('/').unwrap_or((rest, ""));
+        let form: std::collections::BTreeMap<String, String> =
+            url::form_urlencoded::parse(body.as_bytes())
+                .into_owned()
+                .collect();
+        let mut vms = REBUILT.lock().unwrap();
+        match (method, action) {
+            ("GET", "status/current") => {
+                return (200, json!({ "data": { "status": "running" } }));
+            }
+            ("POST", "clone") => {
+                let id = form["newid"].clone();
+                let disk = format!("local:vm-{id}-disk-0,size=2G");
+                vms.insert(id, [("scsi0".to_owned(), disk)].into());
+            }
+            ("GET", "config") => {
+                return (
+                    200,
+                    json!({ "data": vms.get(vm).cloned().unwrap_or_default() }),
+                );
+            }
+            ("POST", "config") => {
+                let config = vms.entry(vm.to_owned()).or_default();
+                for (key, value) in form {
+                    if key == "delete" {
+                        for gone in value.split(',') {
+                            if let Some(old) = config.remove(gone)
+                                && gone.starts_with("scsi")
+                            {
+                                let volid = old.split(',').next().unwrap().to_owned();
+                                config.insert("unused0".to_owned(), volid);
+                            }
+                        }
+                    } else {
+                        config.retain(|key, existing| {
+                            !(key.starts_with("unused") && existing == &value)
+                        });
+                        config.insert(key, value);
+                    }
+                }
+            }
+            ("POST", "move_disk") => {
+                let disk = vms.get_mut(vm).unwrap().remove(&form["disk"]).unwrap();
+                vms.entry(form["target-vmid"].clone())
+                    .or_default()
+                    .insert(form["target-disk"].clone(), disk);
+            }
+            ("DELETE", "") => {
+                vms.remove(vm.split('?').next().unwrap());
+            }
+            _ => {}
+        }
+        (200, json!({ "data": null }))
+    }
+
+    #[tokio::test]
+    async fn a_rebuild_swaps_only_the_system_disk() {
+        REBUILT.lock().unwrap().insert(
+            "700".to_owned(),
+            [
+                (
+                    "scsi0".to_owned(),
+                    "local:vm-700-disk-0,size=20G".to_owned(),
+                ),
+                (
+                    "scsi1".to_owned(),
+                    "local:vm-700-disk-1,size=50G".to_owned(),
+                ),
+                (
+                    "net0".to_owned(),
+                    "virtio,bridge=vmbr0,firewall=1".to_owned(),
+                ),
+            ]
+            .into(),
+        );
+        let (base, calls) = crate::testing::fake_api(rebuilding_node).await;
+        let credentials = Credentials {
+            token_id: "t".into(),
+            token_secret: "s".into(),
+        };
+        let client = Proxmox::new(&base, credentials, settings()).unwrap();
+        client
+            .rebuild(&Rebuild {
+                vmid: 700,
+                scratch: 701,
+                template: 9000,
+                password: "nieuw-geheim",
+                ssh_keys: &["ssh-ed25519 AAAA jan".to_owned()],
+                disk_gb: 20,
+            })
+            .await
+            .unwrap();
+
+        let vms = REBUILT.lock().unwrap().clone();
+        let server = &vms["700"];
+        assert_eq!(server["scsi0"], "local:vm-701-disk-0,size=2G");
+        assert_eq!(server["scsi1"], "local:vm-700-disk-1,size=50G");
+        assert_eq!(server["net0"], "virtio,bridge=vmbr0,firewall=1");
+        assert_eq!(server["cipassword"], "nieuw-geheim");
+        assert!(server.contains_key("sshkeys"));
+        assert!(!server.keys().any(|key| key.starts_with("unused")));
+        assert!(!vms.contains_key("701"));
+        let calls = calls.lock().unwrap().clone();
+        assert!(calls.iter().any(
+            |call| call.starts_with("PUT /api2/json/nodes/pve/qemu/700/resize")
+                && call.contains("size=20G")
+        ));
+        assert!(
+            calls
+                .last()
+                .unwrap()
+                .starts_with("POST /api2/json/nodes/pve/qemu/700/status/start")
+        );
     }
 
     fn settings() -> Settings {
