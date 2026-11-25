@@ -20,6 +20,7 @@ const kindLabels: Record<string, string> = {
   plesk: 'Plesk',
   cpanel: 'cPanel & WHM',
   openprovider: 'Openprovider',
+  powerdns: 'PowerDNS',
 }
 
 const emptyForm = {
@@ -47,6 +48,7 @@ const emptyForm = {
   wh_username: '',
   wh_secret: '',
   wh_ip: '',
+  dns_server: 'localhost',
   credential_id: '',
   credential_secret: '',
   region: '',
@@ -106,6 +108,9 @@ function payload(form: typeof emptyForm): IntegrationInput {
       credentials: { username: form.wh_username.trim(), login_key: form.wh_secret.trim() },
       settings: { ip: form.wh_ip.trim() },
     }
+  }
+  if (form.kind === 'powerdns') {
+    return { kind: form.kind, name: form.name, base_url: form.base_url, credentials: { api_key: form.wh_secret.trim() }, settings: { server_id: form.dns_server.trim() || 'localhost' } }
   }
   if (form.kind === 'plesk') {
     return { kind: form.kind, name: form.name, base_url: form.base_url, credentials: { api_key: form.wh_secret.trim() }, settings: { ip: form.wh_ip.trim() } }
@@ -220,6 +225,7 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
               <option value="openstack">{t('OpenStack (VPS)')}</option>
               <option value="virtfusion">{t('VirtFusion (VPS)')}</option>
               <option value="openprovider">{t('Openprovider (domeinen)')}</option>
+              <option value="powerdns">{t('PowerDNS (reverse DNS)')}</option>
             </Select>
           )}
         </Field>
@@ -245,6 +251,8 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
                         ? 'https://server.jouwbedrijf.nl:2222'
                         : form.kind === 'plesk'
                           ? 'https://server.jouwbedrijf.nl:8443'
+                          : form.kind === 'powerdns'
+                            ? 'https://dns.jouwbedrijf.nl:8081'
                           : t('https://panel.jouwbedrijf.nl')
               }
               value={form.base_url}
@@ -332,7 +340,17 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
             </Field>
           </>
         )}
-        {form.kind === 'openstack' || form.kind === 'virtfusion' || form.kind === 'openprovider' ? null : form.kind === 'cpanel' || form.kind === 'directadmin' || form.kind === 'plesk' ? (
+        {form.kind === 'powerdns' && (
+          <>
+            <Field label={t('API-sleutel')} description={t('De api-key uit pdns.conf. Stacklane zet alleen PTR-records in reverse-zones die al bestaan.')} error={errors.credentials}>
+              {(id) => <Input id={id} type="password" autoComplete="off" value={form.wh_secret} onChange={(event) => setForm({ ...form, wh_secret: event.target.value })} />}
+            </Field>
+            <Field label={t('Server-ID')} description={t('Meestal localhost.')} error={errors.settings}>
+              {(id) => <Input id={id} value={form.dns_server} onChange={(event) => setForm({ ...form, dns_server: event.target.value })} />}
+            </Field>
+          </>
+        )}
+        {form.kind === 'openstack' || form.kind === 'virtfusion' || form.kind === 'openprovider' || form.kind === 'powerdns' ? null : form.kind === 'cpanel' || form.kind === 'directadmin' || form.kind === 'plesk' ? (
           <>
             {(form.kind === 'cpanel' || form.kind === 'directadmin') && (
               <Field

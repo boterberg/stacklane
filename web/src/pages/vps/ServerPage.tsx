@@ -36,11 +36,12 @@ import { RuleForm, RuleList } from './FirewallRules'
 import { LinkedCard, ServerFloatingIps, ServerNetworks, ServerVolumes } from './ServerAttached'
 import { ServerGraphs } from './ServerGraphs'
 import { ServerIso } from './ServerIso'
+import { ServerRdns } from './ServerRdns'
 import { ServerRebuild } from './ServerRebuild'
 import { ServerRescue } from './ServerRescue'
 import { useCan, useVpsAccess } from '../../lib/vpsAccess'
 
-type Tab = 'overview' | 'graphs' | 'networks' | 'firewall' | 'floating' | 'volumes' | 'snapshots' | 'rebuild' | 'rescue' | 'iso'
+type Tab = 'overview' | 'graphs' | 'networks' | 'firewall' | 'rdns' | 'floating' | 'volumes' | 'snapshots' | 'rebuild' | 'rescue' | 'iso'
 
 function errorText(error: Error | null) {
   return error instanceof ApiError ? (Object.values(error.fieldErrors)[0] ?? error.message) : error?.message
@@ -363,6 +364,7 @@ export function VpsServerPage() {
               ...(server.features?.graphs ? [{ id: 'graphs' as const, label: 'Grafieken' }] : []),
               ...(linked.networks ? [{ id: 'networks' as const, label: 'Netwerken' }] : []),
               ...(server.features?.firewall === false || !can('firewalls.view') ? [] : [{ id: 'firewall' as const, label: 'Firewalls' }]),
+              ...(server.features?.panel ? [] : [{ id: 'rdns' as const, label: 'Reverse DNS' }]),
               ...(linked.floating ? [{ id: 'floating' as const, label: 'Floating IPs' }] : []),
               ...(linked.volumes ? [{ id: 'volumes' as const, label: 'Volumes' }] : []),
               ...(server.features?.snapshots === false || !can('snapshots.view') ? [] : [{ id: 'snapshots' as const, label: 'Snapshots' }]),
@@ -377,6 +379,7 @@ export function VpsServerPage() {
           {tab === 'graphs' && <ServerGraphs serverId={server.id} />}
           {tab === 'networks' && <ServerNetworks serverId={server.id} />}
           {tab === 'firewall' && <Firewall server={server} />}
+          {tab === 'rdns' && <ServerRdns serverId={server.id} />}
           {tab === 'floating' && <ServerFloatingIps serverId={server.id} />}
           {tab === 'volumes' && <ServerVolumes serverId={server.id} />}
           {tab === 'snapshots' && <Snapshots server={server} />}
