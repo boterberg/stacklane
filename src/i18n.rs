@@ -442,6 +442,19 @@ fn english(message: &str) -> Option<&'static str> {
         "Deze server zit al in drie netwerken." => "This server is already in three networks.",
         "Het IP-bereik van dit netwerk klopt niet." => "The IP range of this network is not valid.",
         "Dit netwerk heeft geen vrije adressen meer." => "This network has no free addresses left.",
+        "Herbouwen is mislukt. Probeer het opnieuw of neem contact op met support." => {
+            "Rebuilding failed. Try again or contact support."
+        }
+        "Stacklane werd herstart tijdens het herbouwen. Probeer het opnieuw." => {
+            "Stacklane restarted while rebuilding. Please try again."
+        }
+        "Deze server kun je alleen in het panel van VirtFusion herbouwen." => {
+            "You can only rebuild this server in the VirtFusion panel."
+        }
+        "Deze server wordt al herbouwd." => "This server is already being rebuilt.",
+        "Deze server wordt herbouwd. Wacht tot dat klaar is." => {
+            "This server is being rebuilt. Wait until it is done."
+        }
         _ => return None,
     })
 }

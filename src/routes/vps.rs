@@ -62,14 +62,35 @@ pub(crate) async fn machine_of(
     user_id: Uuid,
     id: Uuid,
 ) -> AppResult<vps::Machine> {
-    let (integration_id, external_id, status): (Option<Uuid>, Option<String>, String) = sqlx::query_as(
-        "SELECT integration_id, external_id, status FROM services WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
+    connect(state, user_id, id, false).await
+}
+
+async fn connect(
+    state: &AppState,
+    user_id: Uuid,
+    id: Uuid,
+    while_rebuilding: bool,
+) -> AppResult<vps::Machine> {
+    let (integration_id, external_id, status, rebuilding): (
+        Option<Uuid>,
+        Option<String>,
+        String,
+        bool,
+    ) = sqlx::query_as(
+        "SELECT integration_id, external_id, status, details ? 'rebuilding' FROM services
+         WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
     )
     .bind(id)
     .bind(user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound)?;
+    if rebuilding && !while_rebuilding {
+        return Err(AppError::field(
+            "server",
+            "Deze server wordt herbouwd. Wacht tot dat klaar is.",
+        ));
+    }
     if status != "active" {
         return Err(AppError::field(
             "server",
@@ -116,7 +137,7 @@ pub async fn show(
 ) -> AppResult<Json<ServerDetail>> {
     actor.require("servers.view")?;
     let server = load(&state, actor.owner, id).await?;
-    let (live, features) = match machine(&state, actor.owner, id).await {
+    let (live, features) = match connect(&state, actor.owner, id, true).await {
         Ok(machine) => (machine.status().await.ok(), Some(machine.features())),
         Err(_) => (None, None),
     };
@@ -153,6 +174,83 @@ pub async fn power(
     let machine = machine(&state, actor.owner, id).await?;
     machine.power(&input.action).await.map_err(failed)?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize)]
+pub struct ImageChoice {
+    id: String,
+    name: String,
+}
+
+pub async fn images(
+    State(state): State<AppState>,
+    actor: VpsActor,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Vec<ImageChoice>>> {
+    actor.require("servers.rebuild")?;
+    let integration_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT integration_id FROM services WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
+    )
+    .bind(id)
+    .bind(actor.owner)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    let Some(integration_id) = integration_id else {
+        return Ok(Json(Vec::new()));
+    };
+    let choices = match integrations::driver(&state, integration_id).await? {
+        integrations::Driver::Proxmox(client) => client
+            .settings()
+            .images
+            .iter()
+            .map(|image| ImageChoice {
+                id: image.template.to_string(),
+                name: image.name.clone(),
+            })
+            .collect(),
+        integrations::Driver::OpenStack(client) => client
+            .settings()
+            .images
+            .iter()
+            .map(|image| ImageChoice {
+                id: image.id.clone(),
+                name: image.name.clone(),
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    Ok(Json(choices))
+}
+
+#[derive(Deserialize)]
+pub struct RebuildInput {
+    image: String,
+    #[serde(default)]
+    ssh_key_ids: Vec<Uuid>,
+}
+
+pub async fn rebuild(
+    State(state): State<AppState>,
+    actor: VpsActor,
+    Path(id): Path<Uuid>,
+    Json(input): Json<RebuildInput>,
+) -> AppResult<StatusCode> {
+    actor.require("servers.rebuild")?;
+    if !actor.is_owner() && !input.ssh_key_ids.is_empty() {
+        actor.require("ssh_keys.view")?;
+    }
+    crate::services::start_rebuild(
+        &state,
+        id,
+        actor.owner,
+        crate::services::RebuildRequest {
+            image: input.image,
+            ssh_key_ids: input.ssh_key_ids,
+        },
+    )
+    .await?;
+    Ok(StatusCode::ACCEPTED)
 }
 
 #[derive(Serialize)]
@@ -510,5 +608,84 @@ mod tests {
         assert!(valid_source("10.0.0.0/8"));
         assert!(!valid_source("10.0.0.0/40"));
         assert!(!valid_source("example.com"));
+    }
+}
+
+#[cfg(test)]
+mod rebuilds {
+    use axum::http::{Method, StatusCode};
+    use serde_json::json;
+    use sqlx::PgPool;
+
+    use crate::testing::{Client, NewService, fake_api, proxmox_integration, service};
+
+    fn node(_: &str, _: &str, _: &str) -> (u16, serde_json::Value) {
+        (200, json!({ "data": { "status": "running" } }))
+    }
+
+    #[sqlx::test]
+    #[ignore = "needs DATABASE_URL"]
+    async fn a_server_being_rebuilt_takes_no_other_actions(db: PgPool) {
+        let client = Client::new(db);
+        let (base, _) = fake_api(node).await;
+        let integration = proxmox_integration(&client.state, &base).await;
+        let (user, cookie) = client.register("rebuild@example.test").await;
+        let server = service(
+            &client.state,
+            NewService {
+                user,
+                subscription: None,
+                kind: "vps",
+                status: "active",
+                integration: Some(integration),
+                external_id: Some("710"),
+                details: json!({ "rebuilding": true }),
+            },
+        )
+        .await;
+
+        let power = client
+            .send(
+                Method::POST,
+                &format!("/vps/servers/{server}/power"),
+                Some(&cookie),
+                Some(json!({ "action": "reboot" })),
+            )
+            .await;
+        assert_eq!(power.status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(power.body["errors"]["server"].is_string());
+
+        let again = client
+            .send(
+                Method::POST,
+                &format!("/vps/servers/{server}/rebuild"),
+                Some(&cookie),
+                Some(json!({ "image": "nonexistent" })),
+            )
+            .await;
+        assert_eq!(again.status, StatusCode::UNPROCESSABLE_ENTITY);
+
+        let shown = client
+            .send(
+                Method::GET,
+                &format!("/vps/servers/{server}"),
+                Some(&cookie),
+                None,
+            )
+            .await;
+        assert_eq!(shown.status, StatusCode::OK);
+        assert_eq!(shown.body["details"]["rebuilding"], true);
+        assert_eq!(shown.body["features"]["rebuild"], true);
+
+        let (_, stranger) = client.register("rebuild-other@example.test").await;
+        let foreign = client
+            .send(
+                Method::GET,
+                &format!("/vps/servers/{server}/images"),
+                Some(&stranger),
+                None,
+            )
+            .await;
+        assert_eq!(foreign.status, StatusCode::NOT_FOUND);
     }
 }

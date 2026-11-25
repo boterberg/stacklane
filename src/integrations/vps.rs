@@ -45,6 +45,7 @@ pub struct Features {
     pub volumes: bool,
     pub floating_ips: bool,
     pub networks: bool,
+    pub rebuild: bool,
     pub panel: bool,
 }
 
@@ -75,6 +76,7 @@ impl Machine {
                 Self::OpenStack(..) => true,
                 Self::VirtFusion(..) => false,
             },
+            rebuild: !virtfusion,
             panel: virtfusion,
         }
     }

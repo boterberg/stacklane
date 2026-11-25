@@ -49,10 +49,20 @@ pub async fn recover_interrupted(state: &AppState) -> anyhow::Result<()> {
     .execute(&state.db)
     .await?
     .rows_affected();
-    if services + isos > 0 {
+    let rebuilds = sqlx::query(
+        "UPDATE services SET details = details - 'rebuilding' - 'rebuild_scratch',
+                last_error = $1, updated_at = now()
+         WHERE details ? 'rebuilding'",
+    )
+    .bind(REBUILD_INTERRUPTED)
+    .execute(&state.db)
+    .await?
+    .rows_affected();
+    if services + isos + rebuilds > 0 {
         tracing::warn!(
             services,
             isos,
+            rebuilds,
             "marked work interrupted by a restart as failed"
         );
     }
@@ -402,7 +412,7 @@ async fn provision_vps(
         .execute(&mut *transaction)
         .await?;
     let recorded: Vec<String> = sqlx::query_scalar(
-        "SELECT ids.id FROM services, LATERAL (VALUES (external_id), (details->>'vmid')) AS ids(id)
+        "SELECT ids.id FROM services, LATERAL (VALUES (external_id), (details->>'vmid'), (details->>'rebuild_scratch')) AS ids(id)
          WHERE integration_id = $1 AND services.id <> $2 AND kind = 'vps'
            AND status <> 'terminated' AND ids.id IS NOT NULL",
     )
@@ -481,6 +491,191 @@ async fn provision_vps(
         external_id: vmid.to_string(),
         details,
     })
+}
+
+pub const REBUILD_FAILED: &str =
+    "Herbouwen is mislukt. Probeer het opnieuw of neem contact op met support.";
+pub const REBUILD_INTERRUPTED: &str =
+    "Stacklane werd herstart tijdens het herbouwen. Probeer het opnieuw.";
+
+pub struct RebuildRequest {
+    pub image: String,
+    pub ssh_key_ids: Vec<Uuid>,
+}
+
+pub async fn start_rebuild(
+    state: &AppState,
+    service_id: Uuid,
+    owner: Uuid,
+    request: RebuildRequest,
+) -> AppResult<()> {
+    let row: Option<(Uuid, String, Value)> = sqlx::query_as(
+        "SELECT integration_id, external_id, details FROM services
+         WHERE id = $1 AND user_id = $2 AND kind = 'vps' AND status = 'active'
+           AND integration_id IS NOT NULL AND external_id IS NOT NULL",
+    )
+    .bind(service_id)
+    .bind(owner)
+    .fetch_optional(&state.db)
+    .await?;
+    let (integration_id, external_id, details) =
+        row.ok_or_else(|| AppError::field("server", "Deze server is nu niet beschikbaar."))?;
+    let driver = integrations::driver(state, integration_id).await?;
+    let image_name = match &driver {
+        integrations::Driver::Proxmox(client) => client
+            .settings()
+            .images
+            .iter()
+            .find(|image| image.template.to_string() == request.image)
+            .map(|image| image.name.clone()),
+        integrations::Driver::OpenStack(client) => client
+            .settings()
+            .images
+            .iter()
+            .find(|image| image.id == request.image)
+            .map(|image| image.name.clone()),
+        _ => {
+            return Err(AppError::field(
+                "image",
+                "Deze server kun je alleen in het panel van VirtFusion herbouwen.",
+            ));
+        }
+    }
+    .ok_or_else(|| AppError::field("image", "Kies een besturingssysteem."))?;
+    let keys: Vec<String> =
+        sqlx::query_scalar("SELECT public_key FROM ssh_keys WHERE user_id = $1 AND id = ANY($2)")
+            .bind(owner)
+            .bind(&request.ssh_key_ids)
+            .fetch_all(&state.db)
+            .await?;
+    if keys.len() != request.ssh_key_ids.len() {
+        return Err(AppError::field(
+            "ssh_key_ids",
+            "Kies je eigen SSH-sleutels.",
+        ));
+    }
+    let claimed = sqlx::query(
+        "UPDATE services SET details = details || '{\"rebuilding\": true}'::jsonb, last_error = NULL, updated_at = now()
+         WHERE id = $1 AND status = 'active' AND NOT details ? 'rebuilding'",
+    )
+    .bind(service_id)
+    .execute(&state.db)
+    .await?
+    .rows_affected();
+    if claimed == 0 {
+        return Err(AppError::field("server", "Deze server wordt al herbouwd."));
+    }
+    let state = state.clone();
+    tokio::spawn(async move {
+        let result = rebuild(
+            &state,
+            service_id,
+            integration_id,
+            &driver,
+            &external_id,
+            &details,
+            &request.image,
+            &keys,
+        )
+        .await;
+        let outcome = match result {
+            Ok(password) => {
+                let concealed = crate::payments::conceal(&state, &password).ok();
+                sqlx::query(
+                    "UPDATE services SET details = (details - 'rebuilding' - 'rebuild_scratch')
+                            || jsonb_build_object('image', $2::text)
+                            || CASE WHEN $3::text IS NULL THEN '{}'::jsonb
+                                    ELSE jsonb_build_object('root_password', $3::text) END,
+                            updated_at = now()
+                     WHERE id = $1",
+                )
+                .bind(service_id)
+                .bind(&image_name)
+                .bind(concealed)
+                .execute(&state.db)
+                .await
+            }
+            Err(error) => {
+                tracing::warn!(%service_id, error = %format!("{error:#}"), "rebuilding a server failed");
+                sqlx::query(
+                    "UPDATE services SET details = details - 'rebuilding' - 'rebuild_scratch',
+                            last_error = $2, updated_at = now()
+                     WHERE id = $1",
+                )
+                .bind(service_id)
+                .bind(REBUILD_FAILED)
+                .execute(&state.db)
+                .await
+            }
+        };
+        if let Err(error) = outcome {
+            tracing::error!(%service_id, ?error, "recording a rebuild failed");
+        }
+    });
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn rebuild(
+    state: &AppState,
+    service_id: Uuid,
+    integration_id: Uuid,
+    driver: &integrations::Driver,
+    external_id: &str,
+    details: &Value,
+    image: &str,
+    keys: &[String],
+) -> anyhow::Result<String> {
+    let password = root_password();
+    match driver {
+        integrations::Driver::Proxmox(client) => {
+            let vmid: u32 = external_id.parse()?;
+            let template: u32 = image.parse()?;
+            let mut transaction = state.db.begin().await?;
+            sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1::text))")
+                .bind(integration_id)
+                .execute(&mut *transaction)
+                .await?;
+            let recorded: Vec<String> = sqlx::query_scalar(
+                "SELECT ids.id FROM services, LATERAL (VALUES (external_id), (details->>'vmid'), (details->>'rebuild_scratch')) AS ids(id)
+                 WHERE integration_id = $1 AND kind = 'vps' AND status <> 'terminated' AND ids.id IS NOT NULL",
+            )
+            .bind(integration_id)
+            .fetch_all(&mut *transaction)
+            .await?;
+            let recorded: Vec<u32> = recorded.iter().filter_map(|id| id.parse().ok()).collect();
+            let scratch = client.free_vmid(&recorded).await?;
+            sqlx::query(
+                "UPDATE services SET details = details || jsonb_build_object('rebuild_scratch', $2::text) WHERE id = $1",
+            )
+            .bind(service_id)
+            .bind(scratch.to_string())
+            .execute(&mut *transaction)
+            .await?;
+            transaction.commit().await?;
+            client
+                .rebuild(&proxmox::Rebuild {
+                    vmid,
+                    scratch,
+                    template,
+                    password: &password,
+                    ssh_keys: keys,
+                    disk_gb: details["disk_gb"]
+                        .as_u64()
+                        .and_then(|size| u32::try_from(size).ok())
+                        .unwrap_or(10),
+                })
+                .await?;
+        }
+        integrations::Driver::OpenStack(client) => {
+            let hostname = details["hostname"].as_str().unwrap_or("server");
+            client
+                .rebuild(external_id, image, hostname, &password, keys)
+                .await?;
+        }
+        _ => anyhow::bail!("deze koppeling kan geen servers herbouwen"),
+    }
+    Ok(password)
 }
 
 async fn customer_keys(
