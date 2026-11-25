@@ -62,6 +62,14 @@ Onder **Grafieken** ziet de klant het processor-, geheugen-, netwerk- en schijfg
 
 Onder **Rescue** start een klant zijn server in een tijdelijke herstelomgeving, met een eenmalig wachtwoord om met SSH in te loggen. De eigen schijf blijft gekoppeld, zodat hij een kapotte configuratie kan repareren of bestanden kan terughalen. Dit werkt op OpenStack (de *rescue*-actie van Nova); rescue en een gekoppelde ISO sluiten elkaar uit, omdat OpenStack beide met dezelfde rescue-modus doet. Op Proxmox VE en VirtFusion is er nog geen rescue-modus.
 
+### Reverse DNS
+
+Klanten zetten onder **Reverse DNS** op de serverpagina zelf een PTR-record voor het IP-adres van hun server en voor de floating IPs die eraan gekoppeld zijn. Daarvoor koppel je onder **Beheer → Koppelingen** een **PowerDNS**-server: het adres van de API (bijvoorbeeld `https://dns.jouwbedrijf.nl:8081`), de `api-key` uit `pdns.conf` en de server-ID (meestal `localhost`). Zet de API alleen open voor het panel en bij voorkeur achter https.
+
+Stacklane maakt zelf geen zones aan. Het zoekt bij elk IP-adres de reverse-zone die PowerDNS al beheert (bijvoorbeeld `2.0.192.in-addr.arpa.`) en zet daarin alleen het PTR-record van dat ene adres. Voor IP-adressen zonder zo'n zone ziet de klant dat het via support gaat.
+
+Een klant kan alleen een hostnaam instellen die met een A-record naar hetzelfde IP-adres wijst; zo kan niemand een PTR-record naar andermans domein laten wijzen. Wordt een server of floating IP opgeheven, dan haalt Stacklane het PTR-record weg, zodat de volgende klant met dat adres schoon begint.
+
 ### Firewalls
 
 Onder **VPS → Firewalls** maakt een klant een firewall: een set regels met een naam, die hij aan een of meer servers koppelt. Past hij de regels aan, dan zet Stacklane ze meteen op alle gekoppelde servers. Met **Automatisch toewijzen** krijgt elke nieuwe server de firewall vanzelf zodra hij klaar is.
