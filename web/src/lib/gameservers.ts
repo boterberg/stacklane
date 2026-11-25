@@ -123,3 +123,16 @@ export async function backupDownloadUrl(id: string, backup: string) {
 export async function consoleToken(id: string) {
   return api<{ token: string; socket: string }>(`/gameservers/${id}/websocket`)
 }
+
+export type ActivityEntry = {
+  id: string
+  action: string
+  detail: string | null
+  actor: string | null
+  ip: string | null
+  created_at: string
+}
+
+export function useActivity(id: string) {
+  return useQuery({ queryKey: ['gameserver', id, 'activity'], queryFn: () => api<ActivityEntry[]>(`/gameservers/${id}/activity`) })
+}

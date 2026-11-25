@@ -9,12 +9,13 @@ import { Tabs } from '../../components/ui/Tabs'
 import { formatBytes, formatDuration, formatMegabytes } from '../../lib/format'
 import { useGameServer, usePower, type GameServerDetail } from '../../lib/gameservers'
 import { powerStateColors, powerStateLabels, serviceStatusColors, serviceStatusLabels } from '../../lib/labels'
+import { ServerActivity } from './ServerActivity'
 import { ServerBackups } from './ServerBackups'
 import { ServerConsole } from './ServerConsole'
 import { ServerFiles } from './ServerFiles'
 import { t } from '../../lib/i18n'
 
-type Tab = 'console' | 'files' | 'backups'
+type Tab = 'console' | 'files' | 'backups' | 'activity'
 
 function Address({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)
@@ -147,6 +148,7 @@ export function GameServerPage() {
               { id: 'console', label: 'Console' },
               { id: 'files', label: 'Bestanden' },
               { id: 'backups', label: 'Back-ups' },
+              { id: 'activity', label: 'Activiteit' },
             ]}
             active={tab}
             onChange={setTab}
@@ -154,6 +156,7 @@ export function GameServerPage() {
           {tab === 'console' && <ServerConsole serverId={server.id} />}
           {tab === 'files' && <ServerFiles serverId={server.id} />}
           {tab === 'backups' && <ServerBackups serverId={server.id} />}
+          {tab === 'activity' && <ServerActivity serverId={server.id} />}
         </>
       )}
     </>
