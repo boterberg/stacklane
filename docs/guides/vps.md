@@ -56,6 +56,12 @@ Onder **Herbouwen** op de serverpagina installeert een klant de server opnieuw m
 | OpenStack | De *rebuild*-actie van Nova (API 2.57 of nieuwer), met nieuwe cloud-init-gegevens. |
 | VirtFusion | Herbouwen gaat in het panel van VirtFusion. |
 
+### Grafieken en rescue
+
+Onder **Grafieken** ziet de klant het processor-, geheugen-, netwerk- en schijfgebruik van het afgelopen uur, de afgelopen dag, week of maand. Stacklane haalt die cijfers bij Proxmox VE op (`rrddata`); OpenStack en VirtFusion geven ze niet door.
+
+Onder **Rescue** start een klant zijn server in een tijdelijke herstelomgeving, met een eenmalig wachtwoord om met SSH in te loggen. De eigen schijf blijft gekoppeld, zodat hij een kapotte configuratie kan repareren of bestanden kan terughalen. Dit werkt op OpenStack (de *rescue*-actie van Nova); rescue en een gekoppelde ISO sluiten elkaar uit, omdat OpenStack beide met dezelfde rescue-modus doet. Op Proxmox VE en VirtFusion is er nog geen rescue-modus.
+
 ### Firewalls
 
 Onder **VPS → Firewalls** maakt een klant een firewall: een set regels met een naam, die hij aan een of meer servers koppelt. Past hij de regels aan, dan zet Stacklane ze meteen op alle gekoppelde servers. Met **Automatisch toewijzen** krijgt elke nieuwe server de firewall vanzelf zodra hij klaar is.
