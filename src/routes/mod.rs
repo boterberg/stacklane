@@ -1,5 +1,6 @@
 mod account;
 mod admin_billing;
+mod admin_customers;
 mod admin_domains;
 mod admin_mail;
 mod admin_provisioning;
@@ -304,6 +305,8 @@ pub fn router(state: AppState) -> Router {
             post(admin_provisioning::service_action),
         )
         .route("/admin/customers", get(admin_provisioning::customers))
+        .route("/admin/customers/all", get(admin_customers::index))
+        .route("/admin/customers/{id}", get(admin_customers::show))
         .route("/admin/invoices", get(admin_billing::index))
         .route("/admin/reports/vat", get(admin_vat::report))
         .route("/admin/mail-log", get(admin_mail::index))

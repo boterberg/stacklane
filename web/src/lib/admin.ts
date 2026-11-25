@@ -4,6 +4,7 @@ import { api } from './api'
 import type { InvoiceDetail } from './billing'
 import type { Paginated } from './pagination'
 import type { ServiceStatus } from './gameservers'
+import type { TicketStatus } from './labels'
 
 export type Integration = {
   id: string
@@ -310,4 +311,57 @@ export function useMailLog({ q, statuses, page, perPage }: { q: string; statuses
     queryFn: () => api<Paginated<MailEntry>>(`/admin/mail-log?${params}`),
     placeholderData: keepPreviousData,
   })
+}
+
+export type CustomerRow = {
+  id: string
+  name: string
+  email: string
+  company_name: string | null
+  active_subscriptions: number
+  active_services: number
+  open_invoices: number
+  open_cents: number
+  created_at: string
+}
+
+export type CustomerDetail = {
+  profile: {
+    id: string
+    email: string
+    first_name: string
+    last_name: string
+    company_name: string | null
+    is_business: boolean
+    coc_number: string | null
+    tax_id: string | null
+    phone: string | null
+    address_line1: string | null
+    address_line2: string | null
+    postal_code: string | null
+    city: string | null
+    country: string
+    locale: string
+    two_factor: boolean
+    email_verified_at: string | null
+    created_at: string
+  }
+  subscriptions: Array<{ id: string; code: string; status: string; description: string; billing_interval: string; payment_mode: string; monthly_cents: number; expires_at: string }>
+  services: Array<{ id: string; kind: string; name: string; status: string; created_at: string }>
+  invoices: Array<{ id: number; status: string; total_cents: number; issued_at: string; due_at: string }>
+  tickets: Array<{ number: number; subject: string; status: TicketStatus; last_reply_at: string }>
+}
+
+export function useCustomers({ q, page, perPage }: { q: string; page: number; perPage: number }) {
+  const params = new URLSearchParams({ page: String(page), per_page: String(perPage) })
+  if (q.trim()) params.set('search', q.trim())
+  return useQuery({
+    queryKey: ['admin', 'customers', params.toString()],
+    queryFn: () => api<Paginated<CustomerRow>>(`/admin/customers/all?${params}`),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useCustomer(id: string) {
+  return useQuery({ queryKey: ['admin', 'customer', id], queryFn: () => api<CustomerDetail>(`/admin/customers/${id}`) })
 }

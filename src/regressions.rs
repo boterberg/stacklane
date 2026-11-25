@@ -2194,3 +2194,64 @@ async fn staff_replies_reach_the_customer_and_quiet_tickets_close(db: PgPool) {
         .unwrap();
     assert_eq!(status, "closed");
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn admins_see_customers_with_their_services_but_customers_do_not(db: PgPool) {
+    use crate::testing::make_admin;
+    let client = Client::new(db);
+    let (user, cookie) = client.register("overview-klant@example.test").await;
+    let (admin, admin_cookie) = client.register("overview-staff@example.test").await;
+    make_admin(&client.state, admin).await;
+    let billing = open_invoice(&client, user).await;
+    let list = client
+        .send(
+            Method::GET,
+            "/admin/customers/all?search=overview-klant",
+            Some(&admin_cookie),
+            None,
+        )
+        .await;
+    assert_eq!(list.status, StatusCode::OK, "{}", list.body);
+    let rows = list.body["data"].as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["open_invoices"], 1);
+    let detail = client
+        .send(
+            Method::GET,
+            &format!("/admin/customers/{user}"),
+            Some(&admin_cookie),
+            None,
+        )
+        .await;
+    assert_eq!(detail.status, StatusCode::OK, "{}", detail.body);
+    assert_eq!(
+        detail.body["subscriptions"][0]["id"],
+        billing.subscription.to_string()
+    );
+    assert!(detail.body["invoices"][0]["issued_at"].is_string());
+    assert_eq!(
+        client
+            .send(
+                Method::GET,
+                &format!("/admin/customers/{admin}"),
+                Some(&admin_cookie),
+                None
+            )
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+    for path in [
+        "/admin/customers/all".to_owned(),
+        format!("/admin/customers/{user}"),
+    ] {
+        assert_eq!(
+            client
+                .send(Method::GET, &path, Some(&cookie), None)
+                .await
+                .status,
+            StatusCode::FORBIDDEN
+        );
+    }
+}

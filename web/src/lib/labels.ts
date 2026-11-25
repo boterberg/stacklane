@@ -99,3 +99,13 @@ export const intervalLabels: Record<string, string> = translated({
   half_yearly: 'Per half jaar',
   yearly: 'Jaarlijks',
 })
+
+export const serviceKindLabels: Record<string, string> = translated({
+  vps: 'VPS',
+  gameserver: 'Gameserver',
+  webhosting: 'Webhosting',
+  domain: 'Domein',
+  volume: 'Volume',
+  floating_ip: 'Floating IP',
+  other: 'Overig',
+})

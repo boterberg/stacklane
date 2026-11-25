@@ -44,6 +44,8 @@ import { SharedAccessPage } from '../pages/account/SharedAccessPage'
 import { IntegrationsPage } from '../pages/admin/IntegrationsPage'
 import { AdminInvoicePage } from '../pages/admin/InvoicePage'
 import { AdminInvoicesPage } from '../pages/admin/InvoicesPage'
+import { CustomerPage } from '../pages/admin/CustomerPage'
+import { CustomersPage } from '../pages/admin/CustomersPage'
 import { MailLogPage } from '../pages/admin/MailLogPage'
 import { VatReportPage } from '../pages/admin/VatReportPage'
 import { SettingsPage } from '../pages/admin/SettingsPage'
@@ -117,6 +119,8 @@ export const router = createBrowserRouter([
       { path: '/admin/settings', element: <SettingsPage /> },
       { path: '/admin/vat', element: <VatReportPage /> },
       { path: '/admin/mail-log', element: <MailLogPage /> },
+      { path: '/admin/customers', element: <CustomersPage /> },
+      { path: '/admin/customers/:id', element: <CustomerPage /> },
       { path: '/admin/invoices', element: <AdminInvoicesPage /> },
       { path: '/admin/invoices/:id', element: <AdminInvoicePage /> },
       { path: '/admin/tickets', element: <TicketsPage scope="staff" /> },

@@ -100,6 +100,7 @@ export const adminNavigation: NavGroup = {
   label: 'Beheer',
   icon: WrenchScrewdriverIcon,
   children: [
+    { label: 'Klanten', to: '/admin/customers', icon: UsersIcon },
     { label: 'Alle tickets', to: '/admin/tickets', icon: InboxStackIcon },
     { label: 'Alle facturen', to: '/admin/invoices', icon: DocumentDuplicateIcon },
     { label: 'Btw-overzicht', to: '/admin/vat', icon: ReceiptPercentIcon },
