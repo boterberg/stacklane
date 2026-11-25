@@ -46,6 +46,16 @@ Onder **Beheer → Producten** kies je als soort **VPS**, de koppeling, en het a
 - tot drie snapshots maken, terugzetten en verwijderen
 - firewallregels toevoegen en verwijderen, per server of via een firewall voor meerdere servers
 
+### Herbouwen
+
+Onder **Herbouwen** op de serverpagina installeert een klant de server opnieuw met een van de besturingssystemen uit de koppeling, met eventueel nieuwe SSH-sleutels. Alles op de systeemschijf gaat verloren; de klant krijgt een nieuw rootwachtwoord. Volumes, IP-adressen, floating IPs, netwerken en firewallregels blijven staan. Tijdens het herbouwen kan de klant niets anders met de server doen.
+
+| Platform | Hoe het werkt |
+| --- | --- |
+| Proxmox VE | Stacklane kloont de template naar een tijdelijke VM, zet de schijf daarvan als `scsi0` in de server en verwijdert pas daarna de oude schijf. Mislukt het verplaatsen, dan komt de oude schijf terug. De tijdelijke VM wordt altijd opgeruimd. |
+| OpenStack | De *rebuild*-actie van Nova (API 2.57 of nieuwer), met nieuwe cloud-init-gegevens. |
+| VirtFusion | Herbouwen gaat in het panel van VirtFusion. |
+
 ### Firewalls
 
 Onder **VPS → Firewalls** maakt een klant een firewall: een set regels met een naam, die hij aan een of meer servers koppelt. Past hij de regels aan, dan zet Stacklane ze meteen op alle gekoppelde servers. Met **Automatisch toewijzen** krijgt elke nieuwe server de firewall vanzelf zodra hij klaar is.
