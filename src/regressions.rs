@@ -947,6 +947,17 @@ async fn concurrent_iso_imports_respect_the_quota(db: PgPool) {
         }
     }
     assert_eq!(created, 2);
+    for _ in 0..100 {
+        let importing: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM vps_isos WHERE status = 'importing'")
+                .fetch_one(&client.state.db)
+                .await
+                .unwrap();
+        if importing == 0 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
 }
 
 #[sqlx::test]
