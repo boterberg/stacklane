@@ -1529,27 +1529,6 @@ async fn release_volumes(
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn only_claims_its_own_vm() {
-        let service = Uuid::from_u128(1);
-        let other = Uuid::from_u128(2);
-        assert!(created_for(
-            &format!("Stacklane {service} (jan@example.test)"),
-            service
-        ));
-        assert!(!created_for(
-            &format!("Stacklane {other} (piet@example.test)"),
-            service
-        ));
-        assert!(!created_for(&format!("Klant {service}"), service));
-        assert!(!created_for("", service));
-    }
-}
-
 async fn panel_integrations(state: &AppState, user_id: Uuid) -> sqlx::Result<Vec<Uuid>> {
     sqlx::query_scalar(
         "SELECT DISTINCT s.integration_id FROM services s JOIN integrations i ON i.id = s.integration_id
@@ -1591,5 +1570,26 @@ pub async fn forget_panel_users(state: &AppState, user_id: Uuid) {
         if let Err(error) = result {
             tracing::warn!(%user_id, %integration_id, error = %format!("{error:#}"), "removing a panel user failed");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_claims_its_own_vm() {
+        let service = Uuid::from_u128(1);
+        let other = Uuid::from_u128(2);
+        assert!(created_for(
+            &format!("Stacklane {service} (jan@example.test)"),
+            service
+        ));
+        assert!(!created_for(
+            &format!("Stacklane {other} (piet@example.test)"),
+            service
+        ));
+        assert!(!created_for(&format!("Klant {service}"), service));
+        assert!(!created_for("", service));
     }
 }
