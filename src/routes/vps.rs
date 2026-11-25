@@ -534,6 +534,19 @@ pub async fn rollback_snapshot(
 ) -> AppResult<StatusCode> {
     actor.require("servers.restore")?;
     let machine = machine(&state, actor.owner, id).await?;
+    let held: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM services WHERE kind IN ('volume', 'floating_ip')
+                        AND status = 'suspended' AND details->>'suspended_from' = $1::text)",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await?;
+    if held {
+        return Err(AppError::field(
+            "snapshot",
+            "Er hangt een geblokkeerd volume of IP-adres aan deze server. Terugzetten kan pas als dat weer actief is.",
+        ));
+    }
     machine
         .rollback_snapshot(identifier(&name)?)
         .await
