@@ -322,7 +322,11 @@ fn cross_site(state: &AppState, request: &axum::extract::Request) -> bool {
         *request.method(),
         Method::GET | Method::HEAD | Method::OPTIONS
     ) || request.uri().path().starts_with("/api/webhooks/")
-        || request.headers().contains_key(header::AUTHORIZATION)
+        || request
+            .headers()
+            .get(header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.starts_with("Bearer stl_"))
     {
         return false;
     }
@@ -335,9 +339,7 @@ fn cross_site(state: &AppState, request: &axum::extract::Request) -> bool {
     if !has_session {
         return false;
     }
-    let Some(expected) = origin_of(&state.config.public_url) else {
-        return false;
-    };
+    let expected = origin_of(&state.config.public_url);
     let sent = request
         .headers()
         .get(header::ORIGIN)
@@ -350,7 +352,25 @@ fn cross_site(state: &AppState, request: &axum::extract::Request) -> bool {
                 .and_then(|value| value.to_str().ok())
                 .and_then(origin_of)
         });
-    sent.is_none_or(|sent| !sent.eq_ignore_ascii_case(&expected))
+    let Some(sent) = sent else {
+        return true;
+    };
+    match expected {
+        Some(expected) => !sent.eq_ignore_ascii_case(&expected),
+        None => {
+            let host = request
+                .headers()
+                .get(header::HOST)
+                .and_then(|value| value.to_str().ok());
+            let sent_host = url::Url::parse(&sent).ok().and_then(|url| {
+                url.host_str().map(|host| match url.port() {
+                    Some(port) => format!("{host}:{port}"),
+                    None => host.to_owned(),
+                })
+            });
+            host.is_none_or(|host| sent_host.is_none_or(|sent| !sent.eq_ignore_ascii_case(host)))
+        }
+    }
 }
 
 async fn same_origin(
@@ -450,6 +470,69 @@ mod tests {
     use axum::http::Method;
 
     use super::demo_allows;
+
+    fn request(headers: &[(&str, &str)]) -> axum::extract::Request {
+        let mut builder = axum::http::Request::builder()
+            .method(Method::POST)
+            .uri("/api/auth/logout")
+            .header("cookie", "stacklane_session=abc");
+        for (name, value) in headers {
+            builder = builder.header(*name, *value);
+        }
+        builder.body(axum::body::Body::empty()).unwrap()
+    }
+
+    fn state_with(public_url: &str) -> crate::state::AppState {
+        let mut state = crate::testing::state(
+            sqlx::PgPool::connect_lazy("postgres://unused@127.0.0.1/unused").unwrap(),
+        );
+        let mut config = (*state.config).clone();
+        config.public_url = public_url.to_owned();
+        state.config = std::sync::Arc::new(config);
+        state
+    }
+
+    #[tokio::test]
+    async fn cross_site_writes_are_refused_even_without_a_public_url() {
+        let configured = state_with("https://panel.example.test");
+        assert!(super::cross_site(
+            &configured,
+            &request(&[("origin", "https://evil.example.test")])
+        ));
+        assert!(!super::cross_site(
+            &configured,
+            &request(&[("origin", "https://panel.example.test")])
+        ));
+        assert!(super::cross_site(
+            &configured,
+            &request(&[
+                ("origin", "https://evil.example.test"),
+                ("authorization", "Basic dXNlcjpwYXNz")
+            ])
+        ));
+        assert!(!super::cross_site(
+            &configured,
+            &request(&[
+                ("origin", "https://evil.example.test"),
+                ("authorization", "Bearer stl_abc")
+            ])
+        ));
+        let unset = state_with("");
+        assert!(super::cross_site(
+            &unset,
+            &request(&[
+                ("origin", "https://evil.example.test"),
+                ("host", "panel.example.test")
+            ])
+        ));
+        assert!(!super::cross_site(
+            &unset,
+            &request(&[
+                ("origin", "https://panel.example.test"),
+                ("host", "panel.example.test")
+            ])
+        ));
+    }
 
     #[test]
     fn the_demo_keeps_admins_away_from_configuration() {
