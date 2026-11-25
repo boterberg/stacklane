@@ -76,6 +76,27 @@ Na betaling maakt Stacklane het volume aan en koppelt het aan de server. De klan
 
 Vergroten kan nog niet. Een volume opzeggen gaat via het abonnement.
 
+### Floating IPs
+
+Een floating IP is een vast IP-adres dat de klant van de ene server naar de andere verplaatst, bijvoorbeeld om zonder DNS-wijziging naar een nieuwe server over te stappen. Maak onder **Beheer → Producten** een product van de soort **Floating IP** op een Proxmox- of OpenStack-koppeling, met een prijs per IP per maand. De klant bestelt onder **VPS → Floating IPs** een of meer adressen; elk adres krijgt een eigen abonnement, zodat hij ze los kan opzeggen. Een klant heeft hoogstens tien floating IPs.
+
+Na betaling reserveert Stacklane het adres. De klant koppelt het aan een server, verplaatst het naar een andere server op dezelfde koppeling, of koppelt het los. Een losgekoppeld adres blijft van de klant zolang het abonnement loopt. Bij opschorten haalt Stacklane het adres van de server en zet het terug zodra de dienst weer actief is.
+
+| Platform | Hoe het werkt |
+| --- | --- |
+| Proxmox VE | Het adres komt uit dezelfde IP-reeks als de servers; Stacklane geeft het nooit aan een nieuwe server. Koppelen zet het adres in het IP-filter (`ipfilter-net0`) van de VM, zodat alleen die VM het mag gebruiken. De klant stelt het adres zelf in op de server; het panel toont de commando's. |
+| OpenStack | Een floating IP in Neutron op het **externe netwerk voor floating IPs** uit de koppeling, gekoppeld aan de poort van de server. Daarvoor moet het servernetwerk via een router aan dat externe netwerk hangen. De klant hoeft op de server niets in te stellen. Zonder extern netwerk in de koppeling verkoopt Stacklane op OpenStack geen floating IPs. |
+| VirtFusion | Geen floating IPs. VirtFusion geeft een losgekoppeld adres meteen terug aan de pool, dus Stacklane kan het niet voor de klant vasthouden. |
+
+Op Proxmox stelt de klant het adres zo in, met het eigen adres in plaats van het voorbeeld:
+
+```sh
+ip address add 192.0.2.15/32 dev eth0
+arping -U -c 3 -I eth0 192.0.2.15
+```
+
+Het tweede commando laat de router weten dat het adres nu bij deze server zit; zonder dat kan het na een verplaatsing even duren voordat verkeer aankomt.
+
 ### ISO's
 
 Een klant kan onder **VPS → ISO's** twee eigen ISO's importeren via een publieke https-link, met BIOS of UEFI. Stacklane haalt de ISO op de achtergrond binnen. Daarna kiest de klant op de serverpagina onder **ISO** welke ISO hij koppelt; de server herstart en start vanaf de ISO. Na het loskoppelen start hij weer van de eigen schijf.
@@ -107,10 +128,11 @@ Je hebt nodig:
 
 - een **application credential** van het project waarin de servers komen: `openstack application credential create stacklane`
 - de ID van het netwerk waaraan de servers komen: `openstack network list`
+- voor floating IPs: de ID van het externe netwerk waar ze vandaan komen: `openstack network list --external`
 - de ID's van de images die klanten mogen kiezen: `openstack image list`
 - een of meer flavors
 
-Koppel onder **Beheer → Koppelingen** met als platform **OpenStack**. Vul het adres van Keystone in, bijvoorbeeld `https://keystone.jouwbedrijf.nl:5000/v3`, de credential, eventueel de regio, het netwerk, en per regel een image-ID met de naam die klanten zien. Bij een VPS-product op deze koppeling kies je daarna een flavor; Stacklane haalt de lijst live op.
+Koppel onder **Beheer → Koppelingen** met als platform **OpenStack**. Vul het adres van Keystone in, bijvoorbeeld `https://keystone.jouwbedrijf.nl:5000/v3`, de credential, eventueel de regio, het netwerk, eventueel het externe netwerk voor floating IPs, en per regel een image-ID met de naam die klanten zien. Bij een VPS-product op deze koppeling kies je daarna een flavor; Stacklane haalt de lijst live op.
 
 Verschillen met Proxmox:
 
