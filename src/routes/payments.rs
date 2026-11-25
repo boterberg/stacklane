@@ -124,10 +124,13 @@ pub async fn mollie_webhook(
     State(state): State<AppState>,
     Form(input): Form<MollieWebhook>,
 ) -> StatusCode {
-    if let Err(error) = handle_mollie(&state, &input.id).await {
-        tracing::warn!(payment = %input.id, ?error, "processing a Mollie webhook failed");
+    match handle_mollie(&state, &input.id).await {
+        Ok(()) | Err(AppError::NotFound) => StatusCode::OK,
+        Err(error) => {
+            tracing::warn!(payment = %input.id, ?error, "processing a Mollie webhook failed");
+            StatusCode::SERVICE_UNAVAILABLE
+        }
     }
-    StatusCode::OK
 }
 
 async fn handle_mollie(state: &AppState, external_id: &str) -> AppResult<()> {
@@ -150,6 +153,15 @@ async fn handle_mollie(state: &AppState, external_id: &str) -> AppResult<()> {
         }
         None => {
             if !looks_like_mollie_payment(external_id) {
+                return Ok(());
+            }
+            let claimable: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM payments WHERE provider = 'mollie' AND external_id IS NULL
+                                AND created_at > now() - interval '7 days')",
+            )
+            .fetch_one(&state.db)
+            .await?;
+            if !claimable {
                 return Ok(());
             }
             state

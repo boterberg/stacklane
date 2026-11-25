@@ -3814,3 +3814,45 @@ async fn proxmox_nodes_of_one_cluster_share_one_vlan_pool(db: PgPool) {
         .unwrap();
     assert_eq!(left, 0);
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn unknown_mollie_ids_do_not_spend_the_matching_budget(db: PgPool) {
+    let client = Client::new(db);
+    let key = crate::payments::conceal(&client.state, "test_key").unwrap();
+    crate::settings::set(
+        &client.state.db,
+        "payments",
+        &json!({
+            "mollie_enabled": true,
+            "mollie_key": key,
+            "stripe_enabled": false,
+            "stripe_secret_key": null,
+            "stripe_webhook_secret": null,
+            "bank_transfer_enabled": false,
+        }),
+    )
+    .await
+    .unwrap();
+    for index in 0..70 {
+        let reply = client
+            .app
+            .clone()
+            .oneshot(
+                axum::http::Request::post("/api/webhooks/mollie")
+                    .header("content-type", "application/x-www-form-urlencoded")
+                    .body(axum::body::Body::from(format!("id=tr_unknown{index}")))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(reply.status(), StatusCode::OK);
+    }
+    assert!(
+        client
+            .state
+            .limits
+            .check(&crate::limits::UNKNOWN_PAYMENT, "mollie")
+            .is_ok()
+    );
+}
