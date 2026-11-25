@@ -43,6 +43,7 @@ pub struct Features {
     pub snapshots: bool,
     pub firewall: bool,
     pub volumes: bool,
+    pub floating_ips: bool,
     pub panel: bool,
 }
 
@@ -63,6 +64,11 @@ impl Machine {
             snapshots: !virtfusion,
             firewall: !virtfusion,
             volumes: !virtfusion,
+            floating_ips: match self {
+                Self::Proxmox(..) => true,
+                Self::OpenStack(client, _) => client.has_floating_ips(),
+                Self::VirtFusion(..) => false,
+            },
             panel: virtfusion,
         }
     }

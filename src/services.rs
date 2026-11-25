@@ -163,6 +163,7 @@ async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()>
             _ => anyhow::bail!("deze koppeling kan geen VPS maken"),
         },
         "volume" => provision_volume(state, &context, driver).await?,
+        "floating_ip" => provision_floating_ip(state, service_id, integration_id, &driver).await?,
         "webhosting" => {
             let taken: bool = sqlx::query_scalar(
                 "SELECT EXISTS (SELECT 1 FROM services WHERE kind = 'webhosting' AND id <> $1
@@ -236,6 +237,92 @@ async fn provision_volume(
             "server_id": order.server_id,
             "host": volume.host,
         }),
+    })
+}
+
+async fn provision_floating_ip(
+    state: &AppState,
+    service_id: Uuid,
+    integration_id: Uuid,
+    driver: &integrations::Driver,
+) -> anyhow::Result<pterodactyl::Provisioned> {
+    let (external_id, address) = match driver {
+        integrations::Driver::Proxmox(client) => {
+            let mut transaction = state.db.begin().await?;
+            sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1::text))")
+                .bind(integration_id)
+                .execute(&mut *transaction)
+                .await?;
+            let current: Option<String> =
+                sqlx::query_scalar("SELECT details->>'ipv4' FROM services WHERE id = $1")
+                    .bind(service_id)
+                    .fetch_one(&mut *transaction)
+                    .await?;
+            let address = match current {
+                Some(address) => address,
+                None => {
+                    let taken: Vec<String> = sqlx::query_scalar(
+                        "SELECT details->>'ipv4' FROM services
+                         WHERE integration_id = $1 AND id <> $2 AND status <> 'terminated' AND details ? 'ipv4'",
+                    )
+                    .bind(integration_id)
+                    .bind(service_id)
+                    .fetch_all(&mut *transaction)
+                    .await?;
+                    let address = proxmox::ip_range(client.settings())
+                        .map(|ip| ip.to_string())
+                        .find(|ip| !taken.contains(ip))
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("alle IP-adressen van deze koppeling zijn in gebruik")
+                        })?;
+                    sqlx::query(
+                        "UPDATE services SET details = details || jsonb_build_object('ipv4', $2::text) WHERE id = $1",
+                    )
+                    .bind(service_id)
+                    .bind(&address)
+                    .execute(&mut *transaction)
+                    .await?;
+                    address
+                }
+            };
+            transaction.commit().await?;
+            (address.clone(), address)
+        }
+        integrations::Driver::OpenStack(client) => {
+            let existing: Option<String> =
+                sqlx::query_scalar("SELECT external_id FROM services WHERE id = $1")
+                    .bind(service_id)
+                    .fetch_one(&state.db)
+                    .await?;
+            let found = match existing {
+                Some(id) => client.floating_ip(&id).await?,
+                None => None,
+            };
+            match found {
+                Some(found) => found,
+                None => {
+                    let created = client
+                        .create_floating_ip(&format!("Stacklane {service_id}"))
+                        .await?;
+                    sqlx::query("UPDATE services SET external_id = $2 WHERE id = $1")
+                        .bind(service_id)
+                        .bind(&created.0)
+                        .execute(&state.db)
+                        .await?;
+                    created
+                }
+            }
+        }
+        _ => anyhow::bail!("deze koppeling kan geen floating IPs maken"),
+    };
+    sqlx::query("UPDATE services SET name = $2 WHERE id = $1")
+        .bind(service_id)
+        .bind(&address)
+        .execute(&state.db)
+        .await?;
+    Ok(pterodactyl::Provisioned {
+        external_id,
+        details: json!({ "ipv4": address }),
     })
 }
 
@@ -868,6 +955,107 @@ async fn delete_volume(
     storage.delete(&volume, server.as_deref()).await
 }
 
+async fn addresses_for(
+    state: &AppState,
+    integration_id: Uuid,
+) -> anyhow::Result<integrations::floating_ips::Addresses> {
+    let driver = integrations::driver(state, integration_id)
+        .await
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+    integrations::floating_ips::Addresses::from_driver(driver)
+        .ok_or_else(|| anyhow::anyhow!("deze koppeling kan geen floating IPs beheren"))
+}
+
+fn floating_ip(external_id: &str, details: &Value) -> integrations::floating_ips::FloatingIp {
+    integrations::floating_ips::FloatingIp {
+        id: external_id.to_owned(),
+        address: details["ipv4"].as_str().unwrap_or_default().to_owned(),
+    }
+}
+
+async fn suspend_floating_ip(
+    state: &AppState,
+    service_id: Uuid,
+    integration_id: Uuid,
+    external_id: &str,
+    details: &Value,
+) -> anyhow::Result<()> {
+    let Some(server_id) = details["server_id"].as_str() else {
+        return Ok(());
+    };
+    if let Some(server) = server_reference(state, server_id).await? {
+        addresses_for(state, integration_id)
+            .await?
+            .detach(&floating_ip(external_id, details), &server)
+            .await?;
+    }
+    sqlx::query(
+        "UPDATE services SET details = (details - 'server_id') || jsonb_build_object('suspended_from', $2::text)
+         WHERE id = $1",
+    )
+    .bind(service_id)
+    .bind(server_id)
+    .execute(&state.db)
+    .await?;
+    Ok(())
+}
+
+async fn unsuspend_floating_ip(
+    state: &AppState,
+    service_id: Uuid,
+    integration_id: Uuid,
+    external_id: &str,
+    details: &Value,
+) -> anyhow::Result<()> {
+    let Some(server_id) = details["suspended_from"].as_str() else {
+        return Ok(());
+    };
+    let target: Option<(Option<Uuid>, Option<String>)> = sqlx::query_as(
+        "SELECT integration_id, external_id FROM services WHERE id = $1::uuid AND kind = 'vps' AND status = 'active'",
+    )
+    .bind(server_id)
+    .fetch_optional(&state.db)
+    .await?;
+    if let Some((Some(target_integration), Some(server))) = target
+        && target_integration == integration_id
+    {
+        addresses_for(state, integration_id)
+            .await?
+            .attach(&floating_ip(external_id, details), &server)
+            .await?;
+        sqlx::query(
+            "UPDATE services SET details = (details - 'suspended_from') || jsonb_build_object('server_id', $2::text)
+             WHERE id = $1",
+        )
+        .bind(service_id)
+        .bind(server_id)
+        .execute(&state.db)
+        .await?;
+    } else {
+        sqlx::query("UPDATE services SET details = details - 'suspended_from' WHERE id = $1")
+            .bind(service_id)
+            .execute(&state.db)
+            .await?;
+    }
+    Ok(())
+}
+
+async fn release_floating_ip(
+    state: &AppState,
+    integration_id: Uuid,
+    external_id: &str,
+    details: &Value,
+) -> anyhow::Result<()> {
+    let server = match details["server_id"].as_str() {
+        Some(server_id) => server_reference(state, server_id).await?,
+        None => None,
+    };
+    addresses_for(state, integration_id)
+        .await?
+        .release(&floating_ip(external_id, details), server.as_deref())
+        .await
+}
+
 pub async fn change_state(state: &AppState, service_id: Uuid, action: &str) -> AppResult<()> {
     change_state_because(state, service_id, action, "admin").await
 }
@@ -915,6 +1103,22 @@ pub async fn change_state_because(
                     unsuspend_volume(state, service_id, integration_id, external_id, &details).await
                 }
                 _ => delete_volume(state, integration_id, external_id, &details).await,
+            };
+            result.map_err(|error| AppError::field("action", format!("{error:#}")))?;
+        }
+    } else if kind == "floating_ip" {
+        if let (Some(integration_id), Some(external_id)) = (integration_id, external_id.as_deref())
+        {
+            let result = match action {
+                "suspend" => {
+                    suspend_floating_ip(state, service_id, integration_id, external_id, &details)
+                        .await
+                }
+                "unsuspend" => {
+                    unsuspend_floating_ip(state, service_id, integration_id, external_id, &details)
+                        .await
+                }
+                _ => release_floating_ip(state, integration_id, external_id, &details).await,
             };
             result.map_err(|error| AppError::field("action", format!("{error:#}")))?;
         }
@@ -1014,8 +1218,9 @@ async fn release_volumes(
     .execute(&state.db)
     .await?;
     sqlx::query(
-        "UPDATE services SET details = details - 'server_id', updated_at = now()
-         WHERE kind = 'volume' AND status <> 'terminated' AND details->>'server_id' = $1::text",
+        "UPDATE services SET details = details - 'server_id' - 'suspended_from', updated_at = now()
+         WHERE kind IN ('volume', 'floating_ip') AND status <> 'terminated'
+           AND (details->>'server_id' = $1::text OR details->>'suspended_from' = $1::text)",
     )
     .bind(service_id.to_string())
     .execute(&state.db)

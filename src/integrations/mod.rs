@@ -1,5 +1,6 @@
 pub mod cpanel;
 pub mod directadmin;
+pub mod floating_ips;
 pub mod isos;
 pub mod openprovider;
 pub mod openstack;

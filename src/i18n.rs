@@ -295,9 +295,6 @@ fn english(message: &str) -> Option<&'static str> {
         "Koppel het volume eerst los van de huidige server." => {
             "Detach the volume from its current server first."
         }
-        "Op dit moment kun je gameserver-, VPS-, volume- en webhostingproducten aanmaken." => {
-            "For now you can create game server, VPS, volume and web hosting products."
-        }
         "Kies een koppeling met Proxmox VE of OpenStack." => {
             "Choose a Proxmox VE or OpenStack integration."
         }
@@ -393,6 +390,29 @@ fn english(message: &str) -> Option<&'static str> {
         }
         "Een gekoppelde server is nu niet actief, dus de regels kunnen er niet af. Koppel die server eerst los of wacht tot hij weer actief is." => {
             "An attached server is not active right now, so its rules cannot be removed. Detach that server first or wait until it is active again."
+        }
+        "Kies waar je de floating IP wilt hebben." => "Choose where you want the floating IP.",
+        "Je hebt al 10 floating IPs. Zeg er eerst een op." => {
+            "You already have 10 floating IPs. Cancel one first."
+        }
+        "Kies een aantal. Je kunt in totaal 10 floating IPs hebben." => {
+            "Choose a number. You can have 10 floating IPs in total."
+        }
+        "Deze floating IP is nog niet klaar." => "This floating IP is not ready yet.",
+        "Dit platform kan geen floating IPs beheren." => {
+            "This platform cannot manage floating IPs."
+        }
+        "Deze floating IP is niet aan een server gekoppeld." => {
+            "This floating IP is not attached to a server."
+        }
+        "Deze floating IP kan niet naar deze server. Kies een server op hetzelfde platform." => {
+            "This floating IP cannot go to this server. Choose a server on the same platform."
+        }
+        "Op dit moment kun je gameserver-, VPS-, volume-, floating IP- en webhostingproducten aanmaken." => {
+            "Right now you can create game server, VPS, volume, floating IP and web hosting products."
+        }
+        "Kies een koppeling met Proxmox VE, of OpenStack met een extern netwerk voor floating IPs." => {
+            "Choose a Proxmox VE connection, or OpenStack with an external network for floating IPs."
         }
         _ => return None,
     })

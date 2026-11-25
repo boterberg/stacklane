@@ -24,6 +24,7 @@ mod two_factor;
 mod vps;
 pub mod vps_access;
 pub mod vps_firewalls;
+mod vps_floating_ips;
 pub mod vps_isos;
 mod vps_volumes;
 mod webhosting;
@@ -80,6 +81,17 @@ pub fn router(state: AppState) -> Router {
             get(vps_isos::server)
                 .post(vps_isos::mount)
                 .delete(vps_isos::unmount),
+        )
+        .route("/vps/floating-ips", get(vps_floating_ips::index))
+        .route("/vps/floating-ips/options", get(vps_floating_ips::options))
+        .route("/vps/floating-ips/order", post(shop::place_floating_ips))
+        .route(
+            "/vps/floating-ips/{id}/attach",
+            post(vps_floating_ips::attach),
+        )
+        .route(
+            "/vps/floating-ips/{id}/detach",
+            post(vps_floating_ips::detach),
         )
         .route("/vps/volumes", get(vps_volumes::index))
         .route("/vps/volumes/options", get(vps_volumes::options))

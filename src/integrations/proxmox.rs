@@ -375,6 +375,25 @@ impl Proxmox {
         Ok(())
     }
 
+    pub async fn unbind_address(&self, vmid: u32, ipv4: Ipv4Addr) -> anyhow::Result<()> {
+        let set = format!("{}/firewall/ipset/ipfilter-net0", self.vm_path(vmid));
+        self.request(Method::DELETE, &format!("{set}/{ipv4}"), None)
+            .await
+            .ok();
+        let listed = self.request(Method::GET, &set, None).await?;
+        anyhow::ensure!(
+            !listed
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|entry| entry["cidr"]
+                    .as_str()
+                    .is_some_and(|cidr| cidr.trim_end_matches("/32") == ipv4.to_string())),
+            "het IP-adres staat nog in het IP-filter van de server"
+        );
+        Ok(())
+    }
+
     pub async fn status(&self, vmid: u32) -> anyhow::Result<Status> {
         let current = self
             .request(

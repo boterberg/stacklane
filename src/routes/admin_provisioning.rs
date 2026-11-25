@@ -422,11 +422,11 @@ pub async fn create_product(
     }
     if !matches!(
         input.kind.as_str(),
-        "gameserver" | "vps" | "webhosting" | "volume"
+        "gameserver" | "vps" | "webhosting" | "volume" | "floating_ip"
     ) {
         errors.insert(
             "kind",
-            "Op dit moment kun je gameserver-, VPS-, volume- en webhostingproducten aanmaken."
+            "Op dit moment kun je gameserver-, VPS-, volume-, floating IP- en webhostingproducten aanmaken."
                 .to_owned(),
         );
     }
@@ -481,6 +481,27 @@ pub async fn create_product(
                 );
             }
             json!({ "per_gb": true })
+        }
+        ("floating_ip", kind) => {
+            let usable = match (kind, input.integration_id) {
+                (Some("proxmox"), _) => true,
+                (Some("openstack"), Some(id)) => sqlx::query_scalar::<_, Option<String>>(
+                    "SELECT settings->>'floating_network_id' FROM integrations WHERE id = $1",
+                )
+                .bind(id)
+                .fetch_one(&state.db)
+                .await?
+                .is_some_and(|network| !network.trim().is_empty()),
+                _ => false,
+            };
+            if !usable {
+                errors.insert(
+                    "integration_id",
+                    "Kies een koppeling met Proxmox VE, of OpenStack met een extern netwerk voor floating IPs."
+                        .to_owned(),
+                );
+            }
+            json!({ "per_ip": true })
         }
         ("vps", Some("openstack")) => {
             match serde_json::from_value::<openstack::ProductConfig>(input.provisioning.clone()) {
