@@ -186,11 +186,11 @@ pub async fn power(
     }
     if input.action != "stop" && input.action != "shutdown" {
         actor.require("servers.start")?;
-        upstream_budget(&state, actor.owner)?;
     }
     if input.action != "start" {
         actor.require("servers.stop")?;
     }
+    upstream_budget(&state, actor.owner)?;
     let (_guard, machine) = locked(&state, actor.owner, id).await?;
     machine.power(&input.action).await.map_err(failed)?;
     Ok(StatusCode::NO_CONTENT)
