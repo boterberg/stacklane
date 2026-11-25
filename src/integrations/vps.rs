@@ -15,6 +15,18 @@ pub struct Status {
 }
 
 #[derive(Serialize)]
+pub struct Metric {
+    pub time: i64,
+    pub cpu: Option<f64>,
+    pub memory: Option<f64>,
+    pub max_memory: Option<f64>,
+    pub net_in: Option<f64>,
+    pub net_out: Option<f64>,
+    pub disk_read: Option<f64>,
+    pub disk_write: Option<f64>,
+}
+
+#[derive(Serialize)]
 pub struct Snapshot {
     pub name: String,
     pub description: String,
@@ -46,6 +58,7 @@ pub struct Features {
     pub floating_ips: bool,
     pub networks: bool,
     pub rebuild: bool,
+    pub graphs: bool,
     pub panel: bool,
 }
 
@@ -77,6 +90,7 @@ impl Machine {
                 Self::VirtFusion(..) => false,
             },
             rebuild: !virtfusion,
+            graphs: matches!(self, Self::Proxmox(..)),
             panel: virtfusion,
         }
     }
@@ -90,6 +104,13 @@ impl Machine {
             Self::Proxmox(client, vmid) => client.status(*vmid).await,
             Self::OpenStack(client, id) => client.status(id).await,
             Self::VirtFusion(client, id) => client.status(id).await,
+        }
+    }
+
+    pub async fn metrics(&self, timeframe: &str) -> anyhow::Result<Vec<Metric>> {
+        match self {
+            Self::Proxmox(client, vmid) => client.metrics(*vmid, timeframe).await,
+            _ => anyhow::bail!("dit platform geeft geen grafieken door"),
         }
     }
 

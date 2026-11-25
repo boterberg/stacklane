@@ -176,6 +176,32 @@ pub async fn power(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+pub struct GraphQuery {
+    #[serde(default = "default_timeframe")]
+    timeframe: String,
+}
+
+fn default_timeframe() -> String {
+    "hour".to_owned()
+}
+
+pub async fn graphs(
+    State(state): State<AppState>,
+    actor: VpsActor,
+    Path(id): Path<Uuid>,
+    axum::extract::Query(query): axum::extract::Query<GraphQuery>,
+) -> AppResult<Json<Vec<vps::Metric>>> {
+    actor.require("servers.view")?;
+    if !matches!(query.timeframe.as_str(), "hour" | "day" | "week" | "month") {
+        return Err(AppError::field("timeframe", "Kies een periode."));
+    }
+    let machine = connect(&state, actor.owner, id, true).await?;
+    Ok(Json(
+        machine.metrics(&query.timeframe).await.map_err(failed)?,
+    ))
+}
+
 #[derive(Serialize)]
 pub struct ImageChoice {
     id: String,

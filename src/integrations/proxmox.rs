@@ -6,7 +6,7 @@ use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::vps::{FirewallRule, Snapshot, Status};
+use super::vps::{FirewallRule, Metric, Snapshot, Status};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Credentials {
@@ -564,6 +564,39 @@ impl Proxmox {
             "het IP-adres staat nog in het IP-filter van de server"
         );
         Ok(())
+    }
+
+    pub async fn metrics(&self, vmid: u32, timeframe: &str) -> anyhow::Result<Vec<Metric>> {
+        if !matches!(timeframe, "hour" | "day" | "week" | "month") {
+            bail!("onbekende periode {timeframe}");
+        }
+        let rows = self
+            .request(
+                Method::GET,
+                &format!(
+                    "{}/rrddata?timeframe={timeframe}&cf=AVERAGE",
+                    self.vm_path(vmid)
+                ),
+                None,
+            )
+            .await?;
+        Ok(rows
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|row| {
+                Some(Metric {
+                    time: row["time"].as_i64()?,
+                    cpu: row["cpu"].as_f64(),
+                    memory: row["mem"].as_f64(),
+                    max_memory: row["maxmem"].as_f64(),
+                    net_in: row["netin"].as_f64(),
+                    net_out: row["netout"].as_f64(),
+                    disk_read: row["diskread"].as_f64(),
+                    disk_write: row["diskwrite"].as_f64(),
+                })
+            })
+            .collect())
     }
 
     pub async fn status(&self, vmid: u32) -> anyhow::Result<Status> {
@@ -1174,6 +1207,36 @@ mod tests {
             _ => {}
         }
         (200, json!({ "data": null }))
+    }
+
+    fn graphing_node(_: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+        if path.contains("/rrddata?timeframe=day&cf=AVERAGE") {
+            return (
+                200,
+                json!({ "data": [
+                    { "time": 1764000000, "cpu": 0.25, "mem": 512.0, "maxmem": 1024.0, "netin": 10.5 },
+                    { "time": 1764000060 },
+                    { "cpu": 0.5 },
+                ] }),
+            );
+        }
+        (404, json!({ "data": null }))
+    }
+
+    #[tokio::test]
+    async fn reads_usage_history() {
+        let (base, _) = crate::testing::fake_api(graphing_node).await;
+        let credentials = Credentials {
+            token_id: "t".into(),
+            token_secret: "s".into(),
+        };
+        let client = Proxmox::new(&base, credentials, settings()).unwrap();
+        let points = client.metrics(101, "day").await.unwrap();
+        assert_eq!(points.len(), 2);
+        assert_eq!(points[0].cpu, Some(0.25));
+        assert_eq!(points[0].max_memory, Some(1024.0));
+        assert_eq!(points[1].cpu, None);
+        assert!(client.metrics(101, "year; rm").await.is_err());
     }
 
     #[tokio::test]
