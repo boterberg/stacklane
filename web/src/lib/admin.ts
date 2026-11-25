@@ -413,3 +413,32 @@ export type Stats = {
 export function useStats() {
   return useQuery({ queryKey: ['admin', 'stats'], queryFn: () => api<Stats>('/admin/stats') })
 }
+
+export type StaffPermission = 'support' | 'billing' | 'customers' | 'services'
+
+export type TeamMember = {
+  id: string
+  email: string
+  first_name: string
+  last_name: string
+  role: 'staff' | 'admin'
+  permissions: StaffPermission[]
+  two_factor: boolean
+  last_active_at: string | null
+}
+
+export type MemberGrant = { role: 'staff' | 'admin'; permissions: StaffPermission[] }
+
+export function useTeam() {
+  return useQuery({ queryKey: ['admin', 'team'], queryFn: () => api<TeamMember[]>('/admin/staff') })
+}
+
+export function useTeamChanges() {
+  const queryClient = useQueryClient()
+  const onSuccess = () => queryClient.invalidateQueries({ queryKey: ['admin', 'team'] })
+  return {
+    add: useMutation({ mutationFn: (input: MemberGrant & { email: string }) => api<TeamMember>('/admin/staff', { method: 'POST', body: input }), onSuccess }),
+    update: useMutation({ mutationFn: ({ id, ...input }: MemberGrant & { id: string }) => api<TeamMember>(`/admin/staff/${id}`, { method: 'PUT', body: input }), onSuccess }),
+    remove: useMutation({ mutationFn: (id: string) => api<TeamMember>(`/admin/staff/${id}`, { method: 'DELETE' }), onSuccess }),
+  }
+}

@@ -55,6 +55,7 @@ import { SettingsPage } from '../pages/admin/SettingsPage'
 import { ProductsPage } from '../pages/admin/ProductsPage'
 import { ServicesPage } from '../pages/admin/ServicesPage'
 import { SystemPage } from '../pages/admin/SystemPage'
+import { TeamPage } from '../pages/admin/TeamPage'
 import { ArticlePage } from '../pages/help/ArticlePage'
 import { HelpPage } from '../pages/help/HelpPage'
 
@@ -124,6 +125,7 @@ export const router = createBrowserRouter([
       { path: '/account/security/api-tokens', element: <SecurityPage /> },
       { path: '/admin/system', element: <SystemPage /> },
       { path: '/admin/settings', element: <SettingsPage /> },
+      { path: '/admin/team', element: <TeamPage /> },
       { path: '/admin/vat', element: <VatReportPage /> },
       { path: '/admin/mail-log', element: <MailLogPage /> },
       { path: '/admin/kb', element: <KbPage /> },
