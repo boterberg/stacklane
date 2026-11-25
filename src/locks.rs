@@ -74,3 +74,12 @@ mod tests {
         assert!(exclusive("cancel".into(), async { Ok(()) }).await.is_ok());
     }
 }
+
+pub async fn service(
+    db: &sqlx::PgPool,
+    id: uuid::Uuid,
+) -> sqlx::Result<sqlx::Transaction<'static, sqlx::Postgres>> {
+    let mut guard = db.begin().await?;
+    transaction(&mut guard, format!("service {id}")).await?;
+    Ok(guard)
+}

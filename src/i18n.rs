@@ -488,6 +488,12 @@ fn english(message: &str) -> Option<&'static str> {
         "Deze persoon heeft het e-mailadres nog niet bevestigd. Vraag dat eerst te doen." => {
             "This person has not confirmed their email address yet. Ask them to do that first."
         }
+        "Deze server wordt nu herbouwd. Probeer het daarna opnieuw." => {
+            "This server is being rebuilt right now. Try again afterwards."
+        }
+        "Er hangt een geblokkeerd volume of IP-adres aan deze server. Terugzetten kan pas als dat weer actief is." => {
+            "A blocked volume or IP address belongs to this server. You can restore a snapshot once it is active again."
+        }
         _ => return None,
     })
 }

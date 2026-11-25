@@ -549,6 +549,7 @@ pub async fn start_rebuild(
             "Kies je eigen SSH-sleutels.",
         ));
     }
+    let guard = crate::locks::service(&state.db, service_id).await?;
     let claimed = sqlx::query(
         "UPDATE services SET details = details || '{\"rebuilding\": true}'::jsonb, last_error = NULL, updated_at = now()
          WHERE id = $1 AND status = 'active' AND NOT details ? 'rebuilding'",
@@ -557,6 +558,7 @@ pub async fn start_rebuild(
     .execute(&state.db)
     .await?
     .rows_affected();
+    guard.commit().await?;
     if claimed == 0 {
         return Err(AppError::field("server", "Deze server wordt al herbouwd."));
     }
@@ -1254,6 +1256,7 @@ pub async fn change_state_because(
     action: &str,
     reason: &str,
 ) -> AppResult<()> {
+    let guard = crate::locks::service(&state.db, service_id).await?;
     let (integration_id, external_id, status, kind, details): (
         Option<Uuid>,
         Option<String>,
@@ -1267,6 +1270,12 @@ pub async fn change_state_because(
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound)?;
+    if details.get("rebuilding").is_some() {
+        return Err(AppError::field(
+            "action",
+            "Deze server wordt nu herbouwd. Probeer het daarna opnieuw.",
+        ));
+    }
 
     let next = match (action, status.as_str()) {
         ("suspend", "active") => "suspended",
@@ -1347,6 +1356,7 @@ pub async fn change_state_because(
             .execute(&state.db)
             .await?;
     }
+    guard.commit().await?;
     Ok(())
 }
 

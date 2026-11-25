@@ -1748,3 +1748,36 @@ async fn cancelling_an_unpaid_order_releases_it_at_once(db: PgPool) {
         )
     );
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_server_being_rebuilt_keeps_its_state_until_done(db: PgPool) {
+    let client = Client::new(db);
+    let (user, _) = client.register("rebuilding@example.test").await;
+    let server = crate::testing::service(
+        &client.state,
+        crate::testing::NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "active",
+            integration: None,
+            external_id: None,
+            details: json!({ "rebuilding": true }),
+        },
+    )
+    .await;
+    for action in ["suspend", "terminate"] {
+        assert!(
+            crate::services::change_state_because(&client.state, server, action, "admin")
+                .await
+                .is_err()
+        );
+    }
+    let status: String = sqlx::query_scalar("SELECT status FROM services WHERE id = $1")
+        .bind(server)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(status, "active");
+}

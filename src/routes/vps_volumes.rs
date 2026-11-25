@@ -165,6 +165,7 @@ pub async fn detach(
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
     actor.require("volumes.detach")?;
+    let _guard = crate::locks::service(&state.db, id).await?;
     let volume = owned(&state, &actor, id).await?;
     let Some(server) = server_external(&state, volume.details["server_id"].as_str()).await? else {
         return Err(AppError::field(
@@ -193,6 +194,7 @@ pub async fn attach(
     Json(input): Json<Attach>,
 ) -> AppResult<StatusCode> {
     actor.require("volumes.attach")?;
+    let _guard = crate::locks::service(&state.db, id).await?;
     let volume = owned(&state, &actor, id).await?;
     if volume.details["server_id"].as_str().is_some() {
         return Err(AppError::field(

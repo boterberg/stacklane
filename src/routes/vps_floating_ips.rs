@@ -167,6 +167,7 @@ pub async fn detach(
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
     actor.require("floating_ips.detach")?;
+    let _guard = crate::locks::service(&state.db, id).await?;
     crate::locks::exclusive(format!("floating-ip {id}"), async {
         let floating = owned(&state, &actor, id).await?;
         let Some(server_id) = floating.details["server_id"].as_str() else {
@@ -200,6 +201,7 @@ pub async fn attach(
     Json(input): Json<Attach>,
 ) -> AppResult<StatusCode> {
     actor.require("floating_ips.attach")?;
+    let _guard = crate::locks::service(&state.db, id).await?;
     crate::locks::exclusive(format!("floating-ip {id}"), async {
         let floating = owned(&state, &actor, id).await?;
         let current = floating.details["server_id"].as_str();
