@@ -34,7 +34,7 @@ export function SearchField({ value, onChange, placeholder }: { value: string; o
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-8 w-full rounded-md border border-zinc-200 border-b-zinc-300/80 bg-white pr-3 pl-10 text-sm text-zinc-700 shadow-xs placeholder:text-zinc-400 focus:outline-2 focus:-outline-offset-1 focus:outline-zinc-800/15 dark:border-white/10 dark:bg-white/10 dark:text-zinc-200 dark:shadow-none dark:placeholder:text-white/60 dark:focus:outline-white/20"
+        className="accent-focus h-8 w-full rounded-md border border-zinc-200 border-b-zinc-300/80 bg-white pr-3 pl-10 text-sm text-zinc-700 shadow-xs placeholder:text-zinc-400 focus:outline-2 focus:-outline-offset-1 focus:outline-zinc-800/15 dark:border-white/10 dark:bg-white/10 dark:text-zinc-200 dark:shadow-none dark:placeholder:text-white/60 dark:focus:outline-white/20"
       />
     </div>
   )

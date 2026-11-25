@@ -135,7 +135,7 @@ export function ServerFiles({ serverId }: { serverId: string }) {
                         onClick={() => (entry.is_file ? setFile(join(directory, entry.name)) : setDirectory(join(directory, entry.name)))}
                         className="flex items-center gap-3 font-medium text-zinc-800 hover:underline disabled:no-underline disabled:opacity-60 dark:text-white"
                       >
-                        <Icon className={entry.is_file ? 'size-4 text-zinc-400' : 'size-4 text-indigo-500 dark:text-indigo-300'} />
+                        <Icon className={entry.is_file ? 'size-4 text-zinc-400' : 'accent-text size-4 text-indigo-500 dark:text-indigo-300'} />
                         {entry.name}
                       </button>
                     </td>

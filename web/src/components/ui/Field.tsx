@@ -29,7 +29,7 @@ export function Field({ label, description, error, aside, children }: FieldProps
 }
 
 const control =
-  'block h-10 w-full rounded-lg border border-zinc-200 border-b-zinc-300/80 bg-white px-3 text-base text-zinc-700 shadow-xs placeholder:text-zinc-400 focus:outline-2 focus:-outline-offset-1 focus:outline-zinc-800/15 sm:text-sm dark:border-white/10 dark:bg-white/10 dark:text-zinc-300 dark:placeholder:text-zinc-400 dark:focus:outline-white/20'
+  'accent-focus block h-10 w-full rounded-lg border border-zinc-200 border-b-zinc-300/80 bg-white px-3 text-base text-zinc-700 shadow-xs placeholder:text-zinc-400 focus:outline-2 focus:-outline-offset-1 focus:outline-zinc-800/15 sm:text-sm dark:border-white/10 dark:bg-white/10 dark:text-zinc-300 dark:placeholder:text-zinc-400 dark:focus:outline-white/20'
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>
 

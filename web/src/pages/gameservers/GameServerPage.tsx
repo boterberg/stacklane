@@ -46,7 +46,7 @@ function Meter({ label, value, detail, percent }: { label: string; value: string
       </p>
       {percent !== undefined && (
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-white/10">
-          <div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.min(100, Math.max(2, percent))}%` }} />
+          <div className="accent-bar h-full rounded-full bg-indigo-500" style={{ width: `${Math.min(100, Math.max(2, percent))}%` }} />
         </div>
       )}
     </div>

@@ -21,7 +21,7 @@ export function Tabs<T extends string>({ tabs, active, onChange }: TabsProps<T>)
             className={cn(
               'border-b-2 px-3 py-3 text-sm font-medium transition-colors',
               tab.id === active
-                ? 'border-zinc-800 text-zinc-800 dark:border-white dark:text-white'
+                ? 'accent-border border-zinc-800 text-zinc-800 dark:border-white dark:text-white'
                 : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:text-white/70 dark:hover:text-white',
             )}
           >

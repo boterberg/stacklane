@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from './api'
 import { applyPreferences, meQueryKey, syncPreferences, type Profile } from './auth'
+import { applyTheme } from './brandTheme'
 import { setCurrency } from './format'
 
 export type Company = {
@@ -16,6 +17,10 @@ export type Company = {
 export type Branding = {
   name: string | null
   accent: string | null
+  accent_dark: string | null
+  neutral: string | null
+  radius: string | null
+  css: string | null
   logo: number | null
   logo_dark: number | null
   favicon: number | null
@@ -29,25 +34,8 @@ export type Meta = {
   branding: Branding
 }
 
-function contrast(hex: string) {
-  const [r, g, b] = [1, 3, 5].map((start) => {
-    const channel = parseInt(hex.slice(start, start + 2), 16) / 255
-    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
-  })
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? '#18181b' : '#ffffff'
-}
-
 export function applyBranding(branding: Branding) {
-  const root = document.documentElement
-  if (branding.accent) {
-    root.dataset.accent = ''
-    root.style.setProperty('--accent', branding.accent)
-    root.style.setProperty('--accent-contrast', contrast(branding.accent))
-  } else {
-    delete root.dataset.accent
-    root.style.removeProperty('--accent')
-    root.style.removeProperty('--accent-contrast')
-  }
+  applyTheme(branding)
   document.title = branding.name ?? 'Stacklane'
   const icons = document.querySelectorAll<HTMLLinkElement>('link[rel="icon"]')
   icons.forEach((icon) => {

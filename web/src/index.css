@@ -68,6 +68,33 @@
   }
 }
 
+html[data-accent] {
+  --accent: var(--accent-light);
+  --accent-contrast: var(--accent-light-contrast);
+  accent-color: var(--accent);
+}
+
+html.dark[data-accent] {
+  --accent: var(--accent-dark);
+  --accent-contrast: var(--accent-dark-contrast);
+}
+
+html[data-accent] .accent-border {
+  border-color: var(--accent);
+}
+
+html[data-accent] .accent-text {
+  color: var(--accent);
+}
+
+html[data-accent] .accent-bar {
+  background-color: var(--accent);
+}
+
+html[data-accent] .accent-focus:focus {
+  outline-color: color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
 html[data-accent] .accent-fill {
   background-color: var(--accent);
   color: var(--accent-contrast);
