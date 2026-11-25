@@ -41,7 +41,7 @@ pub const AREAS: &[Area] = &[
     },
     Area {
         key: "support",
-        paths: &["/support"],
+        paths: &["/support", "/kb"],
         admin_only: false,
     },
     Area {

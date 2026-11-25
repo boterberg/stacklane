@@ -11,7 +11,7 @@ Ga naar **Beveiliging → API-tokens** (via je naam linksonder) en klik op **Tok
 | Account en meldingen | `GET /api/me`, `/api/dashboard`, `/api/notifications` | thema en taal wijzigen via `PATCH /api/me/settings` |
 | Gameservers | lijst, details, bestanden, back-ups | aan/uit zetten, bestanden schrijven, console |
 | Facturering | abonnementen, facturen, pdf's | betalen, opzeggen, betaalmethode kiezen |
-| Ondersteuning | tickets en afdelingen | tickets maken, reageren, sluiten |
+| Ondersteuning | tickets, afdelingen en het helpcentrum | tickets maken, reageren, sluiten |
 | Beheer | alleen voor beheerders: alles onder `/api/admin` lezen | alles onder `/api/admin` |
 
 Beheren geeft ook leesrechten. Het token zie je maar één keer; Stacklane bewaart alleen een hash.
