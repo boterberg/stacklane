@@ -21,8 +21,6 @@ struct Due {
     code: String,
     expires_at: OffsetDateTime,
     billing_interval: String,
-    payment_mode: String,
-    mandate_id: Option<Uuid>,
 }
 
 pub(crate) async fn notify(
@@ -183,7 +181,7 @@ async fn charge(state: &AppState, invoice_id: i64, total: i64, mandate_id: Uuid)
 
 async fn issue_renewals(state: &AppState, billing: &Billing) -> AppResult<usize> {
     let due: Vec<Due> = sqlx::query_as(
-        "SELECT s.id, s.user_id, s.code, s.expires_at, s.billing_interval, s.payment_mode, s.mandate_id
+        "SELECT s.id, s.user_id, s.code, s.expires_at, s.billing_interval
          FROM subscriptions s
          WHERE s.status IN ('active', 'suspended') AND s.cancelled_at IS NULL
            AND s.expires_at <= now() + make_interval(days => $1)
@@ -196,12 +194,24 @@ async fn issue_renewals(state: &AppState, billing: &Billing) -> AppResult<usize>
     .await?;
     let mut created = 0;
     for subscription in due {
+        let mut guard = state.db.begin().await?;
+        crate::locks::transaction(&mut guard, format!("subscription {}", subscription.id)).await?;
+        let current: Option<(String, Option<Uuid>)> = sqlx::query_as(
+            "SELECT payment_mode, mandate_id FROM subscriptions
+             WHERE id = $1 AND status IN ('active', 'suspended') AND cancelled_at IS NULL",
+        )
+        .bind(subscription.id)
+        .fetch_optional(&mut *guard)
+        .await?;
+        let Some((payment_mode, mandate_id)) = current else {
+            continue;
+        };
         let Some((invoice_id, total)) = create_invoice(state, &subscription, billing).await? else {
             continue;
         };
         created += 1;
         let link = format!("/billing/invoices/{invoice_id}");
-        match (subscription.payment_mode.as_str(), subscription.mandate_id) {
+        match (payment_mode.as_str(), mandate_id) {
             ("automatic", Some(mandate_id)) => charge(state, invoice_id, total, mandate_id).await?,
             _ => notify(
                 state,
@@ -212,6 +222,7 @@ async fn issue_renewals(state: &AppState, billing: &Billing) -> AppResult<usize>
             )
             .await?,
         }
+        guard.commit().await?;
     }
     Ok(created)
 }
@@ -307,6 +318,7 @@ async fn expire_orders(state: &AppState) -> AppResult<usize> {
          WHERE s.status = 'pending'
            AND (EXISTS (SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
                         WHERE l.subscription_id = s.id AND i.status = 'open')
+                OR s.cancelled_at IS NOT NULL
                 OR (s.started_at < now() - interval '1 day' AND s.import_ref IS NULL
                     AND NOT EXISTS (SELECT 1 FROM invoice_lines l WHERE l.subscription_id = s.id)))
            AND NOT EXISTS (SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
