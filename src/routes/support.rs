@@ -8,7 +8,7 @@ use sqlx::AssertSqlSafe;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::auth::{CurrentAdmin, CurrentUser};
+use crate::auth::{CurrentUser, Staff, permission};
 use crate::error::{AppError, AppResult};
 use crate::html::{sanitize_rich_text, visible_text};
 use crate::pagination::{PageQuery, Paginated};
@@ -370,7 +370,7 @@ pub async fn close(
 
 pub async fn staff_index(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Support>,
     Query(filter): Query<TicketFilter>,
 ) -> AppResult<Json<Paginated<TicketSummary>>> {
     Ok(Json(list(&state, Scope::Staff, &filter).await?))
@@ -378,7 +378,7 @@ pub async fn staff_index(
 
 pub async fn staff_show(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Support>,
     Path(number): Path<i64>,
 ) -> AppResult<Json<TicketDetail>> {
     Ok(Json(load_detail(&state, Scope::Staff, number).await?))
@@ -386,7 +386,7 @@ pub async fn staff_show(
 
 pub async fn staff_reply(
     State(state): State<AppState>,
-    admin: CurrentAdmin,
+    admin: Staff<permission::Support>,
     Path(number): Path<i64>,
     Json(input): Json<CreateReply>,
 ) -> AppResult<Json<TicketDetail>> {
@@ -460,7 +460,7 @@ pub async fn close_stale(state: &AppState) -> AppResult<usize> {
 
 pub async fn staff_update_status(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Support>,
     Path(number): Path<i64>,
     Json(input): Json<UpdateStatus>,
 ) -> AppResult<Json<TicketDetail>> {

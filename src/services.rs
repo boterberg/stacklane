@@ -1022,12 +1022,9 @@ pub fn renew_domain_in_background(state: AppState, service_id: Uuid) {
                 .bind(format!("Verlengen mislukt: {error:#}"))
                 .execute(&state.db)
                 .await;
-            let admins: Vec<Uuid> = sqlx::query_scalar(
-                "SELECT id FROM users WHERE role = 'admin' AND deleted_at IS NULL",
-            )
-            .fetch_all(&state.db)
-            .await
-            .unwrap_or_default();
+            let admins = crate::auth::staff_with(&state.db, "services")
+                .await
+                .unwrap_or_default();
             for admin in admins {
                 crate::renewals::notify(
                     &state,

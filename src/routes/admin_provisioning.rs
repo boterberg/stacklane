@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::auth::CurrentAdmin;
+use crate::auth::{CurrentAdmin, Staff, permission};
 use crate::error::{AppError, AppResult};
 use crate::integrations::{
     self, IntegrationSummary, KINDS, cpanel, directadmin, openprovider, openstack, plesk, proxmox,
@@ -406,7 +406,7 @@ pub async fn delete_integration(
 
 pub async fn catalog(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Services>,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Value>> {
     let failed = |error: anyhow::Error| AppError::field("integration", format!("{error:#}"));
@@ -432,7 +432,7 @@ pub async fn catalog(
 
 pub async fn products(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Services>,
 ) -> AppResult<Json<Vec<ProductRow>>> {
     let rows = sqlx::query_as(
         "SELECT p.id, p.kind, p.slug, p.name, p.description, p.monthly_price_cents, p.is_active, p.integration_id,
@@ -448,7 +448,7 @@ pub async fn products(
 
 pub async fn create_product(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Services>,
     Json(input): Json<CreateProduct>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     let mut errors = BTreeMap::new();
@@ -627,7 +627,7 @@ pub async fn create_product(
 
 pub async fn services_index(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Services>,
 ) -> AppResult<Json<Vec<ServiceRow>>> {
     let rows = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "{SERVICE_SELECT} ORDER BY s.created_at DESC LIMIT 200"
@@ -639,7 +639,7 @@ pub async fn services_index(
 
 pub async fn create_service(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Services>,
     Json(input): Json<CreateService>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     let user_id: Option<Uuid> = sqlx::query_scalar(
@@ -684,7 +684,7 @@ pub async fn create_service(
 
 pub async fn service_action(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Services>,
     Path((id, action)): Path<(Uuid, String)>,
 ) -> AppResult<StatusCode> {
     match action.as_str() {
@@ -712,7 +712,7 @@ pub async fn service_action(
 
 pub async fn customers(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Services>,
     Query(query): Query<CustomerQuery>,
 ) -> AppResult<Json<Vec<CustomerOption>>> {
     let search = format!("%{}%", query.q.unwrap_or_default().trim());

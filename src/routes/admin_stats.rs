@@ -2,7 +2,7 @@ use axum::Json;
 use axum::extract::State;
 use serde::Serialize;
 
-use crate::auth::CurrentAdmin;
+use crate::auth::{Staff, permission};
 use crate::error::AppResult;
 use crate::settings::{self, Billing};
 use crate::state::AppState;
@@ -35,7 +35,10 @@ pub struct Stats {
     services: Vec<KindCount>,
 }
 
-pub async fn show(State(state): State<AppState>, _admin: CurrentAdmin) -> AppResult<Json<Stats>> {
+pub async fn show(
+    State(state): State<AppState>,
+    _admin: Staff<permission::Billing>,
+) -> AppResult<Json<Stats>> {
     let billing: Billing = settings::get(&state.db, "billing").await?;
     let currency = billing.currency;
     let monthly_recurring_cents: i64 = sqlx::query_scalar(

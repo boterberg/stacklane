@@ -363,10 +363,7 @@ async fn flag_late_payment(state: &AppState, invoice_id: i64) -> AppResult<()> {
         return Ok(());
     }
     tracing::warn!(invoice_id, "a payment came in for a cancelled invoice");
-    let admins: Vec<Uuid> =
-        sqlx::query_scalar("SELECT id FROM users WHERE role = 'admin' AND deleted_at IS NULL")
-            .fetch_all(&state.db)
-            .await?;
+    let admins = crate::auth::staff_with(&state.db, "billing").await?;
     for admin in admins {
         crate::renewals::notify(
             state,

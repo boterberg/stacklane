@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::auth::CurrentAdmin;
+use crate::auth::{Staff, permission};
 use crate::error::{AppError, AppResult};
 use crate::pagination::{PageQuery, Paginated, like_pattern};
 use crate::state::AppState;
@@ -112,7 +112,7 @@ const CUSTOMER_WHERE: &str = "WHERE u.role = 'customer' AND u.deleted_at IS NULL
 
 pub async fn index(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Customers>,
     Query(filter): Query<CustomerFilter>,
 ) -> AppResult<Json<Paginated<CustomerRow>>> {
     let search = like_pattern(filter.search.as_deref());
@@ -143,7 +143,7 @@ pub async fn index(
 
 pub async fn show(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Customers>,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<CustomerDetail>> {
     let profile: Profile = sqlx::query_as(

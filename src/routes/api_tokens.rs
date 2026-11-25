@@ -54,7 +54,7 @@ fn browser_only(user: &CurrentUser) -> AppResult<()> {
 
 async fn is_admin(state: &AppState, user: &CurrentUser) -> AppResult<bool> {
     Ok(
-        sqlx::query_scalar("SELECT role = 'admin' FROM users WHERE id = $1")
+        sqlx::query_scalar("SELECT role IN ('admin', 'staff') FROM users WHERE id = $1")
             .bind(user.id)
             .fetch_one(&state.db)
             .await?,

@@ -6,7 +6,7 @@ use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::auth::CurrentAdmin;
+use crate::auth::{Staff, permission};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
@@ -93,7 +93,7 @@ async fn validate(state: &AppState, input: &ExtensionInput) -> AppResult<String>
 
 pub async fn index(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Services>,
 ) -> AppResult<Json<Vec<Extension>>> {
     Ok(Json(
         sqlx::query_as(sqlx::AssertSqlSafe(format!(
@@ -106,7 +106,7 @@ pub async fn index(
 
 pub async fn create(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Services>,
     Json(input): Json<ExtensionInput>,
 ) -> AppResult<StatusCode> {
     let extension = validate(&state, &input).await?;
@@ -131,7 +131,7 @@ pub async fn create(
 
 pub async fn update(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Services>,
     Path(id): Path<Uuid>,
     Json(input): Json<ExtensionInput>,
 ) -> AppResult<StatusCode> {
@@ -164,7 +164,7 @@ pub async fn update(
 
 pub async fn destroy(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Services>,
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
     let deleted = sqlx::query("DELETE FROM domain_extensions WHERE id = $1")

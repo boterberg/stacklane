@@ -5,7 +5,7 @@ use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use time::{Date, Month};
 
-use crate::auth::CurrentAdmin;
+use crate::auth::{Staff, permission};
 use crate::error::{AppError, AppResult};
 use crate::settings::{self, Billing};
 use crate::state::AppState;
@@ -46,7 +46,7 @@ fn euros(cents: i64) -> String {
 
 pub async fn report(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Billing>,
     Query(period): Query<Period>,
 ) -> AppResult<Response> {
     let Some((start, end)) = quarter_bounds(period.year, period.quarter) else {

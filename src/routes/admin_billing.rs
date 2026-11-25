@@ -6,7 +6,7 @@ use sqlx::AssertSqlSafe;
 use time::Date;
 use uuid::Uuid;
 
-use crate::auth::CurrentAdmin;
+use crate::auth::{Staff, permission};
 use crate::error::{AppError, AppResult};
 use crate::i18n::Locale;
 use crate::pagination::{PageQuery, Paginated};
@@ -56,7 +56,7 @@ pub struct AdminInvoiceDetail {
 
 pub async fn index(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Billing>,
     Query(filter): Query<Filter>,
 ) -> AppResult<Json<Paginated<AdminInvoice>>> {
     let statuses: Vec<String> = filter
@@ -109,7 +109,7 @@ pub async fn index(
 
 pub async fn show(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Billing>,
     Path(id): Path<i64>,
 ) -> AppResult<Json<AdminInvoiceDetail>> {
     let invoice = load_invoice(&state, None, id).await?;
@@ -134,7 +134,7 @@ pub async fn show(
 
 pub async fn mark_paid(
     State(state): State<AppState>,
-    admin: CurrentAdmin,
+    admin: Staff<permission::Billing>,
     Path(id): Path<i64>,
 ) -> AppResult<Json<AdminInvoiceDetail>> {
     let total: i32 =
@@ -159,7 +159,7 @@ pub async fn mark_paid(
 
 pub async fn cancel(
     State(state): State<AppState>,
-    admin: CurrentAdmin,
+    admin: Staff<permission::Billing>,
     Path(id): Path<i64>,
 ) -> AppResult<Json<AdminInvoiceDetail>> {
     let updated =
@@ -179,7 +179,7 @@ pub async fn cancel(
 
 pub async fn pdf(
     State(state): State<AppState>,
-    admin: CurrentAdmin,
+    admin: Staff<permission::Billing>,
     Path(id): Path<i64>,
 ) -> AppResult<impl IntoResponse> {
     let invoice = load_invoice(&state, None, id).await?;

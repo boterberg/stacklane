@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::auth::{CurrentAdmin, CurrentUser};
+use crate::auth::{CurrentUser, Staff, permission};
 use crate::error::{AppError, AppResult};
 use crate::html::{sanitize_rich_text, visible_text};
 use crate::pagination::like_pattern;
@@ -202,7 +202,7 @@ pub async fn show(
 
 pub async fn admin_index(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Support>,
     Query(query): Query<Search>,
 ) -> AppResult<Json<Vec<ArticleSummary>>> {
     Ok(Json(list(&state, query.search.as_deref(), true).await?))
@@ -210,7 +210,7 @@ pub async fn admin_index(
 
 pub async fn admin_show(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Support>,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Article>> {
     let article = sqlx::query_as(
@@ -225,7 +225,7 @@ pub async fn admin_show(
 
 pub async fn create(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Support>,
     Json(input): Json<ArticleInput>,
 ) -> AppResult<(StatusCode, Json<Article>)> {
     let (title, category, body, published) = clean(input)?;
@@ -247,7 +247,7 @@ pub async fn create(
 
 pub async fn update(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Support>,
     Path(id): Path<Uuid>,
     Json(input): Json<ArticleInput>,
 ) -> AppResult<Json<Article>> {
@@ -271,7 +271,7 @@ pub async fn update(
 
 pub async fn remove(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    _admin: Staff<permission::Support>,
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
     let deleted = sqlx::query("DELETE FROM kb_articles WHERE id = $1")

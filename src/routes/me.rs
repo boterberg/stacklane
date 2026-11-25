@@ -16,6 +16,7 @@ pub struct Profile {
     company_name: Option<String>,
     is_business: bool,
     role: String,
+    permissions: Vec<String>,
     country: String,
     theme: String,
     locale: String,
@@ -33,7 +34,10 @@ pub struct SettingsRequest {
 
 pub async fn load_profile(state: &AppState, user_id: Uuid) -> AppResult<Profile> {
     sqlx::query_as(
-        "SELECT id, email::text AS email, first_name, last_name, company_name, is_business, role, country::text AS country, theme, locale, timezone,
+        "SELECT id, email::text AS email, first_name, last_name, company_name, is_business, role,
+                CASE role WHEN 'admin' THEN ARRAY['support', 'billing', 'customers', 'services']
+                          WHEN 'staff' THEN staff_permissions ELSE '{}'::text[] END AS permissions,
+                country::text AS country, theme, locale, timezone,
                 email_verified_at IS NOT NULL AS email_verified,
                 (SELECT v.email::text FROM email_verifications v WHERE v.user_id = users.id AND v.email <> users.email
                  ORDER BY v.created_at DESC LIMIT 1) AS pending_email

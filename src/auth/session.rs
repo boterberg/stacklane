@@ -168,6 +168,76 @@ pub struct CurrentAdmin {
     pub id: Uuid,
 }
 
+pub const PERMISSIONS: [&str; 4] = ["support", "billing", "customers", "services"];
+
+pub trait Permission {
+    const KEY: &'static str;
+}
+
+pub mod permission {
+    pub struct Support;
+    pub struct Billing;
+    pub struct Customers;
+    pub struct Services;
+
+    impl super::Permission for Support {
+        const KEY: &'static str = "support";
+    }
+
+    impl super::Permission for Billing {
+        const KEY: &'static str = "billing";
+    }
+
+    impl super::Permission for Customers {
+        const KEY: &'static str = "customers";
+    }
+
+    impl super::Permission for Services {
+        const KEY: &'static str = "services";
+    }
+}
+
+pub struct Staff<P> {
+    pub id: Uuid,
+    permission: std::marker::PhantomData<P>,
+}
+
+pub async fn staff_with(db: &sqlx::PgPool, key: &str) -> sqlx::Result<Vec<Uuid>> {
+    sqlx::query_scalar(
+        "SELECT id FROM users WHERE deleted_at IS NULL AND (role = 'admin' OR (role = 'staff' AND $1 = ANY(staff_permissions)))",
+    )
+    .bind(key)
+    .fetch_all(db)
+    .await
+}
+
+pub fn role_allows(role: &str, permissions: &[String], key: &str) -> bool {
+    role == "admin" || (role == "staff" && permissions.iter().any(|granted| granted == key))
+}
+
+impl<P: Permission> FromRequestParts<AppState> for Staff<P> {
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let user = CurrentUser::from_request_parts(parts, state).await?;
+        let (role, permissions): (String, Vec<String>) =
+            sqlx::query_as("SELECT role, staff_permissions FROM users WHERE id = $1")
+                .bind(user.id)
+                .fetch_one(&state.db)
+                .await?;
+        if !role_allows(&role, &permissions, P::KEY) {
+            return Err(AppError::Forbidden);
+        }
+        Ok(Self {
+            id: user.id,
+            permission: std::marker::PhantomData,
+        })
+    }
+}
+
 impl FromRequestParts<AppState> for CurrentAdmin {
     type Rejection = AppError;
 

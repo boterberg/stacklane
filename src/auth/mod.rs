@@ -5,8 +5,8 @@ pub mod totp;
 
 pub use password::{hash, hash_password, needs_rehash, verify};
 pub use session::{
-    CurrentAdmin, CurrentUser, clear_session_cookie, create_session, hash_token, revoke_session,
-    session_cookie,
+    CurrentAdmin, CurrentUser, PERMISSIONS, Staff, clear_session_cookie, create_session,
+    hash_token, permission, revoke_session, session_cookie, staff_with,
 };
 
 pub async fn forget_unproven_holder(
