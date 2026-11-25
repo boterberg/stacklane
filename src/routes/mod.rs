@@ -272,6 +272,7 @@ pub fn router(state: AppState) -> Router {
         .route("/gameservers", get(gameservers::index))
         .route("/gameservers/{id}", get(gameservers::show))
         .route("/gameservers/{id}/power", post(gameservers::power))
+        .route("/gameservers/{id}/activity", get(gameservers::activity))
         .route("/gameservers/{id}/websocket", get(gameservers::websocket))
         .route("/gameservers/{id}/files", get(gameservers::files))
         .route(

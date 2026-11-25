@@ -483,6 +483,11 @@ fn counted(step: &str, result: AppResult<usize>) -> usize {
 
 async fn remove_expired(state: &AppState) -> AppResult<usize> {
     let mut removed = 0;
+    removed +=
+        sqlx::query("DELETE FROM service_activity WHERE created_at < now() - interval '180 days'")
+            .execute(&state.db)
+            .await?
+            .rows_affected() as usize;
     removed += sqlx::query("DELETE FROM mail_log WHERE created_at < now() - interval '90 days'")
         .execute(&state.db)
         .await?

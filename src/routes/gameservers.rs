@@ -6,9 +6,11 @@ use serde_json::{Value, json};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+use crate::activity;
 use crate::auth::CurrentUser;
 use crate::error::{AppError, AppResult};
 use crate::integrations::{self, pterodactyl::Pterodactyl};
+use crate::limits::ClientIp;
 use crate::state::AppState;
 
 const MAX_EDIT_SIZE: usize = 2 * 1024 * 1024;
@@ -160,6 +162,7 @@ pub async fn show(
 pub async fn power(
     State(state): State<AppState>,
     user: CurrentUser,
+    ClientIp(ip): ClientIp,
     Path(id): Path<Uuid>,
     Json(input): Json<PowerRequest>,
 ) -> AppResult<StatusCode> {
@@ -171,16 +174,20 @@ pub async fn power(
         .power(&identifier, &input.signal)
         .await
         .map_err(upstream)?;
+    activity::record(&state, id, user.id, &ip, "power", Some(&input.signal)).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn websocket(
     State(state): State<AppState>,
     user: CurrentUser,
+    ClientIp(ip): ClientIp,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Value>> {
     let (client, identifier) = panel(&state, &user, id).await?;
-    Ok(Json(client.websocket(&identifier).await.map_err(upstream)?))
+    let socket = client.websocket(&identifier).await.map_err(upstream)?;
+    activity::record(&state, id, user.id, &ip, "console", None).await;
+    Ok(Json(socket))
 }
 
 pub async fn files(
@@ -215,6 +222,7 @@ pub async fn read_file(
 pub async fn write_file(
     State(state): State<AppState>,
     user: CurrentUser,
+    ClientIp(ip): ClientIp,
     Path(id): Path<Uuid>,
     Query(query): Query<FileQuery>,
     body: String,
@@ -231,6 +239,7 @@ pub async fn write_file(
         .write_file(&identifier, &file, body)
         .await
         .map_err(upstream)?;
+    activity::record(&state, id, user.id, &ip, "file.write", Some(&file)).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -246,6 +255,7 @@ pub async fn backups(
 pub async fn create_backup(
     State(state): State<AppState>,
     user: CurrentUser,
+    ClientIp(ip): ClientIp,
     Path(id): Path<Uuid>,
     Json(input): Json<BackupRequest>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
@@ -259,12 +269,14 @@ pub async fn create_backup(
         .create_backup(&identifier, &name)
         .await
         .map_err(upstream)?;
+    activity::record(&state, id, user.id, &ip, "backup.create", Some(&name)).await;
     Ok((StatusCode::CREATED, Json(backup)))
 }
 
 pub async fn download_backup(
     State(state): State<AppState>,
     user: CurrentUser,
+    ClientIp(ip): ClientIp,
     Path((id, backup)): Path<(Uuid, Uuid)>,
 ) -> AppResult<Json<Value>> {
     let (client, identifier) = panel(&state, &user, id).await?;
@@ -272,7 +284,26 @@ pub async fn download_backup(
         .backup_download(&identifier, &backup.to_string())
         .await
         .map_err(upstream)?;
+    activity::record(&state, id, user.id, &ip, "backup.download", None).await;
     Ok(Json(json!({ "url": url })))
+}
+
+pub async fn activity(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Vec<activity::Entry>>> {
+    let owned: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM services WHERE id = $1 AND kind = 'gameserver' AND user_id = $2)",
+    )
+    .bind(id)
+    .bind(user.id)
+    .fetch_one(&state.db)
+    .await?;
+    if !owned {
+        return Err(AppError::NotFound);
+    }
+    Ok(Json(activity::list(&state, id).await?))
 }
 
 #[cfg(test)]

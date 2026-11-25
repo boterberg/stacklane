@@ -2595,3 +2595,102 @@ async fn knowledge_base_articles_are_cleaned_and_drafts_stay_hidden(db: PgPool) 
         .await;
     assert_eq!(second.body["slug"], "dns-instellen-2");
 }
+
+fn quiet_panel(_method: &str, path: &str, _body: &str) -> (u16, serde_json::Value) {
+    if path.ends_with("/websocket") {
+        (
+            200,
+            json!({ "data": { "token": "t", "socket": "wss://example.test" } }),
+        )
+    } else {
+        (204, json!(null))
+    }
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn gameserver_actions_land_in_the_owners_activity_log(db: PgPool) {
+    use crate::testing::{NewService, fake_api, service};
+    let client = Client::new(db);
+    let (base, _) = fake_api(quiet_panel).await;
+    let sealed = crate::integrations::seal_credentials(
+        &client.state,
+        &json!({ "application_key": "ptla_x", "client_key": "ptlc_x" }),
+    )
+    .unwrap();
+    let integration = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO integrations (id, kind, name, base_url, credentials) VALUES ($1, 'pterodactyl', 'Panel', $2, $3)",
+    )
+    .bind(integration)
+    .bind(&base)
+    .bind(sealed)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    let (owner, cookie) = client.register("game-owner@example.test").await;
+    let (_, stranger) = client.register("game-stranger@example.test").await;
+    let server = service(
+        &client.state,
+        NewService {
+            user: owner,
+            subscription: None,
+            kind: "gameserver",
+            status: "active",
+            integration: Some(integration),
+            external_id: Some("7"),
+            details: json!({ "identifier": "abc123" }),
+        },
+    )
+    .await;
+    let power = client
+        .send(
+            Method::POST,
+            &format!("/gameservers/{server}/power"),
+            Some(&cookie),
+            Some(json!({ "signal": "restart" })),
+        )
+        .await;
+    assert_eq!(power.status, StatusCode::NO_CONTENT, "{}", power.body);
+    for _ in 0..2 {
+        let socket = client
+            .send(
+                Method::GET,
+                &format!("/gameservers/{server}/websocket"),
+                Some(&cookie),
+                None,
+            )
+            .await;
+        assert_eq!(socket.status, StatusCode::OK, "{}", socket.body);
+    }
+    let log = client
+        .send(
+            Method::GET,
+            &format!("/gameservers/{server}/activity"),
+            Some(&cookie),
+            None,
+        )
+        .await;
+    assert_eq!(log.status, StatusCode::OK);
+    let actions: Vec<&str> = log
+        .body
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["action"].as_str().unwrap())
+        .collect();
+    assert_eq!(actions, ["console", "power"]);
+    assert_eq!(log.body[1]["detail"], "restart");
+    assert_eq!(
+        client
+            .send(
+                Method::GET,
+                &format!("/gameservers/{server}/activity"),
+                Some(&stranger),
+                None,
+            )
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+}
