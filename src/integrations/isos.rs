@@ -129,7 +129,10 @@ pub async fn check_url(raw: &str) -> anyhow::Result<String> {
         bail!("een URL met inloggegevens kan niet");
     }
     let host = url.host_str().context("de URL heeft geen host")?.to_owned();
-    let port = url.port_or_known_default().unwrap_or(443);
+    if url.port().is_some_and(|port| port != 443) {
+        bail!("gebruik een https-URL zonder ander poortnummer");
+    }
+    let port = 443;
     let addresses: Vec<IpAddr> = tokio::net::lookup_host((host.as_str(), port))
         .await
         .map(|found| found.map(|address| address.ip()).collect())
@@ -142,7 +145,13 @@ pub async fn check_url(raw: &str) -> anyhow::Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::public;
+    use super::{check_url, public};
+
+    #[tokio::test]
+    async fn only_the_https_port_is_allowed() {
+        assert!(check_url("https://203.0.113.9:8443/os.iso").await.is_err());
+        assert!(check_url("http://203.0.113.9/os.iso").await.is_err());
+    }
 
     #[test]
     fn only_public_addresses_pass() {
