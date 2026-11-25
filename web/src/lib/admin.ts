@@ -387,3 +387,21 @@ export function useBrandAsset(kind: BrandAsset) {
     remove: useMutation({ mutationFn: () => api<Branding>(`/admin/branding/${kind}`, { method: 'DELETE' }), onSuccess }),
   }
 }
+
+export type Stats = {
+  currency: string
+  monthly_recurring_cents: number
+  revenue_this_month_cents: number
+  revenue_last_month_cents: number
+  open_invoices: number
+  open_cents: number
+  customers: number
+  paying_customers: number
+  new_customers_30_days: number
+  months: Array<{ month: string; revenue_cents: number; new_customers: number }>
+  services: Array<{ kind: string; count: number }>
+}
+
+export function useStats() {
+  return useQuery({ queryKey: ['admin', 'stats'], queryFn: () => api<Stats>('/admin/stats') })
+}

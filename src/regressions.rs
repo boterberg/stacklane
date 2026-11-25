@@ -2407,3 +2407,48 @@ async fn admins_brand_the_panel_with_plain_images_only(db: PgPool) {
         StatusCode::NOT_FOUND
     );
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn admin_stats_add_up_revenue_and_recurring_income(db: PgPool) {
+    use crate::testing::make_admin;
+    let client = Client::new(db);
+    let (user, cookie) = client.register("stats-klant@example.test").await;
+    let (admin, admin_cookie) = client.register("stats-staff@example.test").await;
+    make_admin(&client.state, admin).await;
+    let paid = open_invoice(&client, user).await;
+    let open = open_invoice(&client, user).await;
+    sqlx::query("UPDATE invoices SET status = 'paid', paid_at = now() WHERE id = $1")
+        .bind(paid.invoice)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO subscription_items (id, subscription_id, description, monthly_price_cents) VALUES ($1, $2, 'VPS', 1250)",
+    )
+    .bind(uuid::Uuid::new_v4())
+    .bind(open.subscription)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    assert_eq!(
+        client
+            .send(Method::GET, "/admin/stats", Some(&cookie), None)
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+    let stats = client
+        .send(Method::GET, "/admin/stats", Some(&admin_cookie), None)
+        .await;
+    assert_eq!(stats.status, StatusCode::OK, "{}", stats.body);
+    assert_eq!(stats.body["monthly_recurring_cents"], 1250);
+    assert_eq!(stats.body["revenue_this_month_cents"], 1210);
+    assert_eq!(stats.body["open_invoices"], 1);
+    assert_eq!(stats.body["open_cents"], 1210);
+    assert_eq!(stats.body["paying_customers"], 1);
+    let months = stats.body["months"].as_array().unwrap();
+    assert_eq!(months.len(), 12);
+    assert_eq!(months[11]["revenue_cents"], 1210);
+    assert_eq!(months[11]["new_customers"], 1);
+}

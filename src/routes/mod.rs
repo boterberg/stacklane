@@ -5,6 +5,7 @@ mod admin_domains;
 mod admin_mail;
 mod admin_provisioning;
 mod admin_settings;
+mod admin_stats;
 mod admin_vat;
 mod api_tokens;
 mod auth;
@@ -317,6 +318,7 @@ pub fn router(state: AppState) -> Router {
         .route("/admin/invoices", get(admin_billing::index))
         .route("/admin/reports/vat", get(admin_vat::report))
         .route("/admin/mail-log", get(admin_mail::index))
+        .route("/admin/stats", get(admin_stats::show))
         .route("/admin/invoices/{id}", get(admin_billing::show))
         .route("/admin/invoices/{id}/pdf", get(admin_billing::pdf))
         .route(

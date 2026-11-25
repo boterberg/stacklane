@@ -3,6 +3,7 @@ import {
   ArchiveBoxIcon,
   BookOpenIcon,
   CameraIcon,
+  ChartBarIcon,
   CircleStackIcon,
   CloudIcon,
   Cog6ToothIcon,
@@ -100,6 +101,7 @@ export const adminNavigation: NavGroup = {
   label: 'Beheer',
   icon: WrenchScrewdriverIcon,
   children: [
+    { label: 'Statistieken', to: '/admin/stats', icon: ChartBarIcon },
     { label: 'Klanten', to: '/admin/customers', icon: UsersIcon },
     { label: 'Alle tickets', to: '/admin/tickets', icon: InboxStackIcon },
     { label: 'Alle facturen', to: '/admin/invoices', icon: DocumentDuplicateIcon },

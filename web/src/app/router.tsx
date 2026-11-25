@@ -47,6 +47,7 @@ import { AdminInvoicesPage } from '../pages/admin/InvoicesPage'
 import { CustomerPage } from '../pages/admin/CustomerPage'
 import { CustomersPage } from '../pages/admin/CustomersPage'
 import { MailLogPage } from '../pages/admin/MailLogPage'
+import { StatsPage } from '../pages/admin/StatsPage'
 import { VatReportPage } from '../pages/admin/VatReportPage'
 import { SettingsPage } from '../pages/admin/SettingsPage'
 import { ProductsPage } from '../pages/admin/ProductsPage'
@@ -119,6 +120,7 @@ export const router = createBrowserRouter([
       { path: '/admin/settings', element: <SettingsPage /> },
       { path: '/admin/vat', element: <VatReportPage /> },
       { path: '/admin/mail-log', element: <MailLogPage /> },
+      { path: '/admin/stats', element: <StatsPage /> },
       { path: '/admin/customers', element: <CustomersPage /> },
       { path: '/admin/customers/:id', element: <CustomerPage /> },
       { path: '/admin/invoices', element: <AdminInvoicesPage /> },

@@ -81,3 +81,12 @@ html[data-accent] .accent-fill:hover:not(:disabled) {
 html[data-accent] .accent-active {
   background-color: color-mix(in oklab, var(--accent) 14%, transparent);
 }
+
+.chart-bar {
+  fill: var(--accent, var(--color-brand));
+  transition: opacity 150ms ease-out;
+}
+
+.dark .chart-bar {
+  fill: var(--accent, #818cf8);
+}
