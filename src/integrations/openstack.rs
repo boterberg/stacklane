@@ -1,4 +1,6 @@
-use std::time::Duration;
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, bail};
 use base64::Engine;
@@ -6,9 +8,9 @@ use base64::engine::general_purpose::STANDARD;
 use reqwest::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
-use tokio::sync::OnceCell;
 
 use super::vps::{FirewallRule, Snapshot, Status};
 
@@ -69,6 +71,7 @@ enum Service {
     Volume,
 }
 
+#[derive(Clone)]
 struct Session {
     token: String,
     compute: String,
@@ -77,12 +80,16 @@ struct Session {
     volume: Option<String>,
 }
 
+const SESSION_LIFETIME: Duration = Duration::from_secs(30 * 60);
+
+static SESSIONS: LazyLock<Mutex<HashMap<String, (Session, Instant)>>> =
+    LazyLock::new(Mutex::default);
+
 pub struct OpenStack {
     auth_url: String,
     credentials: Credentials,
     settings: Settings,
     http: reqwest::Client,
-    session: OnceCell<Session>,
 }
 
 const COMPUTE_VERSION: &str = "compute 2.47";
@@ -147,12 +154,45 @@ impl OpenStack {
             credentials,
             settings,
             http,
-            session: OnceCell::new(),
         })
     }
 
     pub fn settings(&self) -> &Settings {
         &self.settings
+    }
+
+    fn cache_key(&self) -> String {
+        let secret = hex::encode(Sha256::digest(
+            self.credentials.application_credential_secret.as_bytes(),
+        ));
+        format!(
+            "{}|{}|{}|{}|{}",
+            self.auth_url,
+            self.credentials.application_credential_id,
+            secret,
+            self.settings.interface,
+            self.settings.region.as_deref().unwrap_or_default()
+        )
+    }
+
+    async fn session(&self, fresh: bool) -> anyhow::Result<Session> {
+        let key = self.cache_key();
+        if !fresh {
+            let sessions = SESSIONS
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some((session, issued)) = sessions.get(&key)
+                && issued.elapsed() < SESSION_LIFETIME
+            {
+                return Ok(session.clone());
+            }
+        }
+        let session = self.authenticate().await?;
+        SESSIONS
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(key, (session.clone(), Instant::now()));
+        Ok(session)
     }
 
     async fn authenticate(&self) -> anyhow::Result<Session> {
@@ -237,31 +277,38 @@ impl OpenStack {
         path: &str,
         body: Option<Value>,
     ) -> anyhow::Result<(StatusCode, Value)> {
-        let session = self.session.get_or_try_init(|| self.authenticate()).await?;
-        let base = match service {
-            Service::Compute => &session.compute,
-            Service::Image => &session.image,
-            Service::Network => &session.network,
-            Service::Volume => session
-                .volume
-                .as_ref()
-                .context("deze OpenStack heeft geen blokopslag (Cinder)")?,
-        };
-        let mut request = self
-            .http
-            .request(method, format!("{base}{path}"))
-            .header("X-Auth-Token", &session.token)
-            .header("OpenStack-API-Version", version);
-        if let Some(body) = body {
-            request = request.json(&body);
+        let mut fresh = false;
+        loop {
+            let session = self.session(fresh).await?;
+            let base = match service {
+                Service::Compute => &session.compute,
+                Service::Image => &session.image,
+                Service::Network => &session.network,
+                Service::Volume => session
+                    .volume
+                    .as_ref()
+                    .context("deze OpenStack heeft geen blokopslag (Cinder)")?,
+            };
+            let mut request = self
+                .http
+                .request(method.clone(), format!("{base}{path}"))
+                .header("X-Auth-Token", &session.token)
+                .header("OpenStack-API-Version", version);
+            if let Some(body) = &body {
+                request = request.json(body);
+            }
+            let response = request
+                .send()
+                .await
+                .context("OpenStack is niet bereikbaar")?;
+            let status = response.status();
+            if status == StatusCode::UNAUTHORIZED && !fresh {
+                fresh = true;
+                continue;
+            }
+            let body: Value = response.json().await.unwrap_or(Value::Null);
+            return Ok((status, body));
         }
-        let response = request
-            .send()
-            .await
-            .context("OpenStack is niet bereikbaar")?;
-        let status = response.status();
-        let body: Value = response.json().await.unwrap_or(Value::Null);
-        Ok((status, body))
     }
 
     async fn call(
@@ -1328,6 +1375,57 @@ mod tests {
             .map(|snapshot| snapshot.name)
             .collect();
         assert_eq!(names, ["new", "old-1", "old-2"]);
+    }
+    #[tokio::test]
+    async fn clients_share_one_keystone_token_and_renew_it_when_refused() {
+        use axum::extract::State;
+        use axum::http::{HeaderMap, StatusCode};
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        type Shared = (String, Arc<AtomicUsize>);
+        async fn token(State((base, logins)): State<Shared>) -> impl axum::response::IntoResponse {
+            let issued = logins.fetch_add(1, Ordering::SeqCst) + 1;
+            let endpoint = |kind: &str| serde_json::json!({ "type": kind, "endpoints": [{ "interface": "public", "url": base }] });
+            (
+                [("x-subject-token", format!("t{issued}"))],
+                axum::Json(serde_json::json!({ "token": { "catalog": [
+                    endpoint("compute"), endpoint("image"), endpoint("network"),
+                ] } })),
+            )
+        }
+        async fn images(headers: HeaderMap) -> (StatusCode, axum::Json<Value>) {
+            if headers["x-auth-token"] == "t1" {
+                return (StatusCode::UNAUTHORIZED, axum::Json(serde_json::json!({})));
+            }
+            (
+                StatusCode::OK,
+                axum::Json(serde_json::json!({ "images": [] })),
+            )
+        }
+        let logins = Arc::new(AtomicUsize::new(0));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let app = axum::Router::new()
+            .route("/v3/auth/tokens", axum::routing::post(token))
+            .route("/v2/images", axum::routing::get(images))
+            .with_state((base.clone(), logins.clone()));
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        let client = || {
+            OpenStack::new(
+                &base,
+                Credentials {
+                    application_credential_id: "id".into(),
+                    application_credential_secret: "secret".into(),
+                },
+                serde_json::from_value(serde_json::json!({ "network_id": "net" })).unwrap(),
+            )
+            .unwrap()
+        };
+        for _ in 0..3 {
+            assert!(client().snapshots("srv").await.unwrap().is_empty());
+        }
+        assert_eq!(logins.load(Ordering::SeqCst), 2);
     }
     #[tokio::test]
     async fn floating_ips_go_through_neutron() {
