@@ -1419,3 +1419,61 @@ async fn one_server_cannot_collect_unlimited_firewall_rules(db: PgPool) {
         second.body
     );
 }
+
+fn filtering_node(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+    match (method, path) {
+        ("GET", path) if path.ends_with("/ipset/ipfilter-net0") => {
+            (200, json!({ "data": [{ "cidr": "192.0.2.44" }] }))
+        }
+        _ => (200, json!({ "data": null })),
+    }
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn older_proxmox_vms_get_the_ip_filter(db: PgPool) {
+    use crate::testing::{NewService, fake_api, proxmox_integration, service};
+    let client = Client::new(db);
+    let (base, calls) = fake_api(filtering_node).await;
+    let integration = proxmox_integration(&client.state, &base).await;
+    let (user, _) = client.register("old-vm@example.test").await;
+    let vm = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "active",
+            integration: Some(integration),
+            external_id: Some("144"),
+            details: json!({ "ipv4": "192.0.2.44", "vmid": 144 }),
+        },
+    )
+    .await;
+    assert_eq!(
+        crate::services::filter_older_vms(&client.state)
+            .await
+            .unwrap(),
+        1
+    );
+    assert!(
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|call| call.contains("/qemu/144/firewall/options") && call.contains("ipfilter=1"))
+    );
+    let flagged: bool =
+        sqlx::query_scalar("SELECT details ? 'ip_filter' FROM services WHERE id = $1")
+            .bind(vm)
+            .fetch_one(&client.state.db)
+            .await
+            .unwrap();
+    assert!(flagged);
+    assert_eq!(
+        crate::services::filter_older_vms(&client.state)
+            .await
+            .unwrap(),
+        0
+    );
+}

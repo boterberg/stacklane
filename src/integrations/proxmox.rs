@@ -328,7 +328,7 @@ impl Proxmox {
         self.power(server.vmid, "start").await
     }
 
-    async fn bind_address(&self, vmid: u32, ipv4: Ipv4Addr) -> anyhow::Result<()> {
+    pub async fn bind_address(&self, vmid: u32, ipv4: Ipv4Addr) -> anyhow::Result<()> {
         let firewall = format!("{}/firewall", self.vm_path(vmid));
         self.request(
             Method::POST,

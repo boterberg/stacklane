@@ -462,6 +462,12 @@ async fn run_locked(state: &AppState) -> AppResult<Run> {
     };
     counted("reconcile", reconcile_suspensions(state).await.map(|()| 0));
     counted("isos", crate::routes::vps_isos::remove_unused(state).await);
+    counted(
+        "ip filter",
+        crate::services::filter_older_vms(state)
+            .await
+            .map_err(crate::error::AppError::Internal),
+    );
     counted("cleanup", remove_expired(state).await);
     counted("vat", recheck_vat_numbers(state).await.map(|()| 0));
     Ok(run)
