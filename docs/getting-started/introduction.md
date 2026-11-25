@@ -22,10 +22,16 @@ Stacklane is jong. Probeer het eerst naast je huidige panel: [importeer](/docs/g
 | VPS op Proxmox VE: bestellen, aan en uit, snapshots, firewall | 1.1.0.0 |
 | Webhosting op DirectAdmin en Plesk, inloggen met één klik | 1.1.0.0 |
 | Bestellen en betalen in het panel | 1.1.0.0 |
+| VPS op OpenStack en VirtFusion | 1.2.0.0 |
+| Volumes, floating IP's, privénetwerken, ISO's, rescue, reverse DNS en herinstalleren | 1.2.0.0 |
+| VPS-omgeving delen met andere gebruikers, per recht | 1.2.0.0 |
+| Domeinen registreren en verhuizen via Openprovider | 1.2.0.0 |
+| Webhosting op cPanel & WHM | 1.2.0.0 |
+| Btw per land met OSS, verlegging en een kwartaaloverzicht | 1.2.0.0 |
 | Nederlands en Engels, licht en donker | 1.0.0.0 |
 | Het commando `stacklane` met setup, update, status en import | 1.0.0.0 |
 
-Domeinen, cPanel en VPS op OpenStack en VirtFusion staan op de [roadmap](/#roadmap).
+DNS-beheer en meer facturatie staan op de [roadmap](/#roadmap).
 
 ## Hoe het in elkaar zit
 
