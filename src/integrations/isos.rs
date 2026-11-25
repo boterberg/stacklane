@@ -70,9 +70,11 @@ fn embedded_v4(ip: std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
         Some(mapped)
     } else if segments[..6] == [0; 6]
         || segments[..6] == [0x64, 0xff9b, 0, 0, 0, 0]
-        || segments[..3] == [0x64, 0xff9b, 1]
+        || segments[..6] == [0, 0, 0, 0, 0xffff, 0]
     {
         Some(last)
+    } else if segments[..3] == [0x64, 0xff9b, 1] {
+        Some(std::net::Ipv4Addr::UNSPECIFIED)
     } else if segments[0] == 0x2002 {
         let [high, low] = [segments[1], segments[2]];
         Some(std::net::Ipv4Addr::from(
@@ -156,6 +158,8 @@ mod tests {
             "::ffff:10.0.0.1",
             "64:ff9b::a9fe:a9fe",
             "64:ff9b:1::a00:1",
+            "64:ff9b:1:a00:100::",
+            "::ffff:0:a9fe:a9fe",
             "2002:a9fe:a9fe::1",
             "::a9fe:a9fe",
             "2001:0:4136:e378:8000:63bf:3fff:fdd2",
