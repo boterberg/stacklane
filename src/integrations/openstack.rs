@@ -748,6 +748,103 @@ impl OpenStack {
         Ok(())
     }
 
+    pub async fn create_network(&self, name: &str, cidr: &str) -> anyhow::Result<String> {
+        let network = self
+            .call(
+                Service::Network,
+                Method::POST,
+                "/v2.0/networks",
+                Some(json!({ "network": { "name": name, "port_security_enabled": false } })),
+            )
+            .await?;
+        let id = network["network"]["id"]
+            .as_str()
+            .context("OpenStack gaf geen netwerk terug")?
+            .to_owned();
+        let subnet = self
+            .call(
+                Service::Network,
+                Method::POST,
+                "/v2.0/subnets",
+                Some(json!({ "subnet": {
+                    "network_id": id,
+                    "name": name,
+                    "cidr": cidr,
+                    "ip_version": 4,
+                    "gateway_ip": null,
+                    "enable_dhcp": true,
+                } })),
+            )
+            .await;
+        if let Err(error) = subnet {
+            self.delete_network(&id).await.ok();
+            return Err(error);
+        }
+        Ok(id)
+    }
+
+    pub async fn delete_network(&self, id: &str) -> anyhow::Result<()> {
+        let (status, body) = self
+            .send(
+                Service::Network,
+                Method::DELETE,
+                &format!("/v2.0/networks/{id}"),
+                None,
+            )
+            .await?;
+        if !status.is_success() && status != StatusCode::NOT_FOUND {
+            bail!(
+                "OpenStack antwoordde {status}: {}",
+                error_message(&body).unwrap_or_else(|| "onbekende fout".to_owned())
+            );
+        }
+        Ok(())
+    }
+
+    pub async fn attach_network(
+        &self,
+        server: &str,
+        network: &str,
+    ) -> anyhow::Result<(String, String)> {
+        let body = self
+            .call(
+                Service::Compute,
+                Method::POST,
+                &format!("/servers/{server}/os-interface"),
+                Some(json!({ "interfaceAttachment": { "net_id": network } })),
+            )
+            .await?;
+        let attachment = &body["interfaceAttachment"];
+        let port = attachment["port_id"]
+            .as_str()
+            .context("OpenStack gaf geen poort terug")?;
+        let address = attachment["fixed_ips"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find_map(|ip| ip["ip_address"].as_str())
+            .context("OpenStack gaf geen IP-adres terug")?;
+        Ok((port.to_owned(), address.to_owned()))
+    }
+
+    pub async fn detach_network(&self, server: &str, port: &str) -> anyhow::Result<()> {
+        let (status, body) = self
+            .send(
+                Service::Compute,
+                Method::DELETE,
+                &format!("/servers/{server}/os-interface/{port}"),
+                None,
+            )
+            .await?;
+        if !status.is_success() && status != StatusCode::NOT_FOUND {
+            bail!(
+                "OpenStack antwoordde {status}: {}",
+                error_message(&body).unwrap_or_else(|| "onbekende fout".to_owned())
+            );
+        }
+        Ok(())
+    }
+
     pub async fn import_iso(&self, name: &str, url: &str, uefi: bool) -> anyhow::Result<String> {
         let mut image = json!({
             "name": name,
@@ -1279,6 +1376,107 @@ mod tests {
         assert_eq!(parsed(2)["floatingip"]["port_id"], "public");
         assert_eq!(parsed(3)["floatingip"]["port_id"], Value::Null);
         assert_eq!(calls[4], "DELETE /v2.0/floatingips/fip");
+    }
+
+    #[tokio::test]
+    async fn private_networks_go_through_neutron_and_nova() {
+        use axum::extract::{Request, State};
+        use std::sync::{Arc, Mutex};
+
+        type Shared = (String, Arc<Mutex<Vec<String>>>);
+        async fn token(State((base, _)): State<Shared>) -> impl axum::response::IntoResponse {
+            let endpoint = |kind: &str| serde_json::json!({ "type": kind, "endpoints": [{ "interface": "public", "url": base }] });
+            (
+                [("x-subject-token", "t")],
+                axum::Json(serde_json::json!({ "token": { "catalog": [
+                    endpoint("compute"), endpoint("image"), endpoint("network"),
+                ] } })),
+            )
+        }
+        async fn api(
+            State((_, calls)): State<Shared>,
+            request: Request,
+        ) -> (axum::http::StatusCode, axum::Json<Value>) {
+            let method = request.method().to_string();
+            let path = request.uri().to_string();
+            let body = axum::body::to_bytes(request.into_body(), 1 << 16)
+                .await
+                .unwrap_or_default();
+            let body = String::from_utf8_lossy(&body).into_owned();
+            calls
+                .lock()
+                .unwrap()
+                .push(format!("{method} {path} {body}").trim_end().to_owned());
+            let ok = axum::http::StatusCode::OK;
+            match (method.as_str(), path.as_str()) {
+                ("POST", "/v2.0/networks") => (
+                    ok,
+                    axum::Json(serde_json::json!({ "network": { "id": "lan" } })),
+                ),
+                ("POST", "/v2.0/subnets") if body.contains("10.9.0.0/24") => (
+                    axum::http::StatusCode::BAD_REQUEST,
+                    axum::Json(serde_json::json!({ "NeutronError": { "message": "overlap" } })),
+                ),
+                ("POST", "/servers/srv/os-interface") => (
+                    ok,
+                    axum::Json(serde_json::json!({ "interfaceAttachment": {
+                        "port_id": "port-1",
+                        "fixed_ips": [{ "ip_address": "10.8.0.5", "subnet_id": "s" }],
+                    } })),
+                ),
+                ("DELETE", _) => (axum::http::StatusCode::NOT_FOUND, axum::Json(Value::Null)),
+                _ => (
+                    ok,
+                    axum::Json(serde_json::json!({ "subnet": { "id": "s" } })),
+                ),
+            }
+        }
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let app = axum::Router::new()
+            .route("/v3/auth/tokens", axum::routing::post(token))
+            .fallback(api)
+            .with_state((base.clone(), calls.clone()));
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        let client = OpenStack::new(
+            &base,
+            Credentials {
+                application_credential_id: "id".into(),
+                application_credential_secret: "secret".into(),
+            },
+            serde_json::from_value(json!({ "network_id": "net" })).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            client
+                .create_network("stacklane-a", "10.8.0.0/24")
+                .await
+                .unwrap(),
+            "lan"
+        );
+        assert!(
+            client
+                .create_network("stacklane-b", "10.9.0.0/24")
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            client.attach_network("srv", "lan").await.unwrap(),
+            ("port-1".to_owned(), "10.8.0.5".to_owned())
+        );
+        client.detach_network("srv", "port-1").await.unwrap();
+        client.delete_network("lan").await.unwrap();
+
+        let calls = calls.lock().unwrap().clone();
+        assert!(calls[0].starts_with("POST /v2.0/networks "));
+        assert!(calls[0].contains("\"port_security_enabled\":false"));
+        assert!(calls[1].contains("\"gateway_ip\":null"));
+        assert_eq!(calls[4], "DELETE /v2.0/networks/lan");
+        assert!(calls[5].contains("\"net_id\":\"lan\""));
+        assert_eq!(calls[6], "DELETE /servers/srv/os-interface/port-1");
+        assert_eq!(calls[7], "DELETE /v2.0/networks/lan");
     }
 
     use serde_json::json;
