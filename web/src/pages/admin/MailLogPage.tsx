@@ -85,12 +85,12 @@ export function MailLogPage() {
             },
             {
               header: t('Ontvanger'),
-              cell: (entry) => <span className="break-all">{entry.recipient}</span>,
+              cell: (entry) => <span className="whitespace-nowrap">{entry.recipient}</span>,
             },
             {
               header: t('Onderwerp'),
               cell: (entry) => (
-                <div>
+                <div className="min-w-56">
                   <div className="text-zinc-800 dark:text-white">{entry.subject}</div>
                   <div className="text-xs text-zinc-500 dark:text-white/60">{kindLabel(entry.kind)}</div>
                   {entry.error && <div className="mt-1 text-xs break-all text-red-600 dark:text-red-400">{entry.error}</div>}
