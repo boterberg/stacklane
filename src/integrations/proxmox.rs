@@ -300,7 +300,20 @@ impl Proxmox {
         {
             Ok(config) => Ok(config["description"].as_str().map(str::to_owned)),
             Err(error) if format!("{error:#}").contains("does not exist") => Ok(None),
-            Err(error) => Err(error),
+            Err(error) => {
+                let listed = self
+                    .request(
+                        Method::GET,
+                        &format!("/nodes/{}/qemu", self.settings.node),
+                        None,
+                    )
+                    .await?;
+                let exists = listed.as_array().is_some_and(|vms| {
+                    vms.iter()
+                        .any(|vm| vm["vmid"].as_u64() == Some(u64::from(vmid)))
+                });
+                if exists { Err(error) } else { Ok(None) }
+            }
         }
     }
 
