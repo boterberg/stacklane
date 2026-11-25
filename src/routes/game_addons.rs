@@ -10,6 +10,7 @@ use crate::auth::CurrentUser;
 use crate::error::{AppError, AppResult};
 use crate::limits::ClientIp;
 use crate::modrinth::{self, Loader};
+use crate::routes::game_access;
 use crate::routes::gameservers::panel;
 use crate::state::AppState;
 
@@ -78,6 +79,15 @@ fn jar(value: &str) -> AppResult<&str> {
     }
 }
 
+async fn allowed(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<()> {
+    state
+        .limits
+        .check(&crate::limits::GAME_PANEL, &user.id.to_string())?;
+    game_access::grant(state, user.id, id)
+        .await?
+        .require("files")
+}
+
 fn upstream(error: anyhow::Error) -> AppError {
     AppError::upstream("server", error)
 }
@@ -87,16 +97,19 @@ pub async fn context(
     user: CurrentUser,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Context>> {
-    let (client, identifier) = panel(&state, &user, id, "files").await?;
+    allowed(&state, &user, id).await?;
     let egg: Option<String> =
         sqlx::query_scalar("SELECT details->>'egg' FROM services WHERE id = $1")
             .bind(id)
             .fetch_one(&state.db)
             .await?;
-    let variables = client
-        .startup_variables(&identifier)
-        .await
-        .unwrap_or_default();
+    let variables = match panel(&state, &user, id, "files").await {
+        Ok((client, identifier)) => client
+            .startup_variables(&identifier)
+            .await
+            .unwrap_or_default(),
+        Err(_) => Vec::new(),
+    };
     let version = [
         "MINECRAFT_VERSION",
         "MC_VERSION",
@@ -151,7 +164,7 @@ pub async fn search(
 ) -> AppResult<Json<Vec<modrinth::Hit>>> {
     let loader = loader(&query.loader)?;
     let version = version(query.version.as_deref())?;
-    panel(&state, &user, id, "files").await?;
+    allowed(&state, &user, id).await?;
     let text: String = query.query.trim().chars().take(100).collect();
     let hits = modrinth::search(
         &state.config.modrinth_url,
