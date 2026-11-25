@@ -1341,6 +1341,11 @@ pub async fn change_state_because(
     .await?;
     if action == "terminate" {
         end_billing(state, service_id).await?;
+        if matches!(kind.as_str(), "vps" | "floating_ip")
+            && let Some(ip) = details["ipv4"].as_str()
+        {
+            crate::routes::vps_rdns::clear(state, ip).await;
+        }
     }
     if kind == "vps" && action == "terminate" {
         release_volumes(state, service_id, integration_id, external_id.as_deref()).await?;

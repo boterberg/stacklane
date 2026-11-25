@@ -60,6 +60,11 @@ pub const INVITE: Rule = Rule {
     max: 20,
     window: Duration::from_secs(60 * 60),
 };
+pub const RDNS: Rule = Rule {
+    name: "rdns",
+    max: 30,
+    window: Duration::from_secs(60 * 60),
+};
 pub const DOMAIN_SEARCH: Rule = Rule {
     name: "domain-search",
     max: 30,
@@ -106,6 +111,7 @@ fn window_of(name: &str) -> Duration {
         TICKET,
         TICKET_REPLY,
         INVITE,
+        RDNS,
         DOMAIN_SEARCH,
     ]
     .into_iter()

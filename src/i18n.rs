@@ -461,6 +461,21 @@ fn english(message: &str) -> Option<&'static str> {
             "Detach the ISO before you turn on rescue mode."
         }
         "Zet eerst de rescue-modus uit." => "Turn off rescue mode first.",
+        "Dit IP-adres hoort niet bij deze server." => {
+            "This IP address does not belong to this server."
+        }
+        "Vul een volledige hostnaam in, zoals mail.jouwdomein.nl." => {
+            "Enter a full hostname, such as mail.yourdomain.com."
+        }
+        "Laat deze hostnaam eerst met een A-record naar dit IP-adres wijzen." => {
+            "Point this hostname to this IP address with an A record first."
+        }
+        "Voor dit IP-adres kun je hier geen reverse DNS instellen." => {
+            "You cannot set reverse DNS for this IP address here."
+        }
+        "Vul de server-ID van PowerDNS in, meestal localhost." => {
+            "Enter the PowerDNS server ID, usually localhost."
+        }
         _ => return None,
     })
 }

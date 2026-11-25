@@ -139,6 +139,7 @@ pub async fn create_integration(
             | "plesk"
             | "openprovider"
             | "cpanel"
+            | "powerdns"
     ) {
         errors.insert(
             "kind",
@@ -194,6 +195,10 @@ pub async fn create_integration(
             }),
         "plesk" => serde_json::from_value::<plesk::Credentials>(input.credentials.clone())
             .is_ok_and(|credentials| !credentials.api_key.trim().is_empty()),
+        "powerdns" => {
+            serde_json::from_value::<integrations::powerdns::Credentials>(input.credentials.clone())
+                .is_ok_and(|credentials| !credentials.api_key.trim().is_empty())
+        }
         _ => true,
     };
     if !credentials_ok {
@@ -283,6 +288,22 @@ pub async fn create_integration(
                 Value::Null
             }
         }
+    } else if input.kind == "powerdns" {
+        let server_id = input.settings["server_id"]
+            .as_str()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .unwrap_or("localhost");
+        if !server_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        {
+            errors.insert(
+                "settings",
+                "Vul de server-ID van PowerDNS in, meestal localhost.".to_owned(),
+            );
+        }
+        json!({ "server_id": server_id })
     } else if matches!(input.kind.as_str(), "directadmin" | "plesk") {
         let ip = input.settings["ip"]
             .as_str()

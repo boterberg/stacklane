@@ -27,6 +27,7 @@ pub mod vps_firewalls;
 mod vps_floating_ips;
 pub mod vps_isos;
 mod vps_networks;
+pub(crate) mod vps_rdns;
 mod vps_volumes;
 mod webhosting;
 pub mod whois_profiles;
@@ -128,6 +129,10 @@ pub fn router(state: AppState) -> Router {
         .route("/vps/servers/{id}/networks", get(vps_networks::server))
         .route("/vps/servers/{id}/images", get(vps::images))
         .route("/vps/servers/{id}/graphs", get(vps::graphs))
+        .route(
+            "/vps/servers/{id}/rdns",
+            get(vps_rdns::index).put(vps_rdns::update),
+        )
         .route(
             "/vps/servers/{id}/rescue",
             post(vps::enter_rescue).delete(vps::leave_rescue),
