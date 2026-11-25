@@ -17,7 +17,7 @@ mod notifications;
 mod payments;
 mod security;
 mod shop;
-mod ssh_keys;
+pub(crate) mod ssh_keys;
 mod support;
 mod system;
 mod two_factor;

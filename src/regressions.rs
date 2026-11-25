@@ -2059,3 +2059,29 @@ async fn account_details_that_land_on_invoices_stay_short(db: PgPool) {
         .await;
     assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn the_demo_seeds_every_part_of_the_panel(db: PgPool) {
+    crate::demo::reset(&db).await.unwrap();
+    crate::demo::reset(&db).await.unwrap();
+    for (table, at_least) in [
+        ("users", 6),
+        ("services", 10),
+        ("vps_networks", 1),
+        ("vps_firewalls", 1),
+        ("vps_isos", 2),
+        ("ssh_keys", 2),
+        ("vps_members", 1),
+        ("whois_profiles", 1),
+        ("domain_extensions", 5),
+        ("tickets", 6),
+    ] {
+        let count: i64 =
+            sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) FROM {table}")))
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert!(count >= at_least, "{table}: {count}");
+    }
+}

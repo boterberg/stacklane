@@ -105,8 +105,8 @@ impl Seed<'_> {
         let password = hex::encode(rand::random::<[u8; 24]>());
         sqlx::query(
             "INSERT INTO users (id, email, password_hash, first_name, last_name, role, company_name, is_business,
-                                country, address_line1, city, postal_code, theme, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'NL', 'Stationsplein 12', 'Utrecht', '3511 ED', 'dark', $9)",
+                                country, address_line1, city, postal_code, theme, created_at, email_verified_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'NL', 'Stationsplein 12', 'Utrecht', '3511 ED', 'dark', $9, $9)",
         )
         .bind(id)
         .bind(email)
@@ -247,12 +247,13 @@ impl Seed<'_> {
         kind: &str,
         name: &str,
         details: serde_json::Value,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Uuid> {
+        let id = Uuid::new_v4();
         sqlx::query(
             "INSERT INTO services (id, user_id, product_id, subscription_id, kind, name, status, details, created_at)
              VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8)",
         )
-        .bind(Uuid::new_v4())
+        .bind(id)
         .bind(customer)
         .bind(product)
         .bind(subscription)
@@ -262,7 +263,42 @@ impl Seed<'_> {
         .bind(self.ago(24 * 60))
         .execute(&mut *self.transaction)
         .await?;
+        Ok(id)
+    }
+
+    async fn attach(
+        &mut self,
+        service: Uuid,
+        integration: Uuid,
+        external_id: &str,
+    ) -> anyhow::Result<()> {
+        sqlx::query("UPDATE services SET integration_id = $2, external_id = $3 WHERE id = $1")
+            .bind(service)
+            .bind(integration)
+            .bind(external_id)
+            .execute(&mut *self.transaction)
+            .await?;
         Ok(())
+    }
+
+    async fn integration(
+        &mut self,
+        kind: &str,
+        name: &str,
+        settings: serde_json::Value,
+    ) -> anyhow::Result<Uuid> {
+        let id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO integrations (id, kind, name, base_url, credentials, settings)
+             VALUES ($1, $2, $3, 'https://demo.invalid', ''::bytea, $4)",
+        )
+        .bind(id)
+        .bind(kind)
+        .bind(name)
+        .bind(settings)
+        .execute(&mut *self.transaction)
+        .await?;
+        Ok(id)
     }
 
     async fn invoice(
@@ -335,7 +371,7 @@ pub async fn reset(pool: &PgPool) -> anyhow::Result<()> {
     sqlx::query(
         "TRUNCATE sessions, notifications, ticket_messages, tickets, invoice_lines, invoices,
                   subscription_items, subscriptions, services, products, users, integrations,
-                  domain_extensions RESTART IDENTITY CASCADE",
+                  domain_extensions, ptr_cleanups RESTART IDENTITY CASCADE",
     )
     .execute(&mut *seed.transaction)
     .await?;
@@ -459,14 +495,15 @@ pub async fn reset(pool: &PgPool) -> anyhow::Result<()> {
             650,
         )
         .await?;
-    seed.product(
-        "vps",
-        "Cloud M",
-        "Voor drukkere sites en een paar containers naast elkaar.",
-        json!({ "cores": 2, "memory_mb": 4096, "disk_gb": 40 }),
-        1250,
-    )
-    .await?;
+    let cloud_m = seed
+        .product(
+            "vps",
+            "Cloud M",
+            "Voor drukkere sites en een paar containers naast elkaar.",
+            json!({ "cores": 2, "memory_mb": 4096, "disk_gb": 40 }),
+            1250,
+        )
+        .await?;
     seed.product(
         "vps",
         "Cloud L",
@@ -526,7 +563,7 @@ pub async fn reset(pool: &PgPool) -> anyhow::Result<()> {
     )
     .await?;
 
-    seed.service(
+    let web = seed.service(
         customer,
         cloud_s,
         vps,
@@ -553,6 +590,8 @@ pub async fn reset(pool: &PgPool) -> anyhow::Result<()> {
         json!({ "username": "jansenbo", "plan": "plus", "panel": "DirectAdmin" }),
     )
     .await?;
+
+    extras(&mut seed, customer, web, cloud_m).await?;
 
     seed.invoice(customer, vps, "paid", 55, "VPS: Cloud S", 650)
         .await?;
@@ -589,6 +628,410 @@ pub async fn reset(pool: &PgPool) -> anyhow::Result<()> {
 
     seed.transaction.commit().await?;
     tracing::info!("demo data reset");
+    Ok(())
+}
+
+const DEMO_KEYS: [(&str, &str); 2] = [
+    (
+        "Laptop Jan",
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFMXMMPuV8/LagCn6t+bZMYKO61iYwgYxyx5ZfuWI0Ws jan@laptop",
+    ),
+    (
+        "Deploy-server",
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH/YjZrm0YUrDnrhEGhcKTzjs9ntR3PQSIU2Vm93QZxz deploy@ci",
+    ),
+];
+
+async fn extras(
+    seed: &mut Seed<'_>,
+    customer: Uuid,
+    web: Uuid,
+    cloud_m: Uuid,
+) -> anyhow::Result<()> {
+    let proxmox = seed
+        .integration(
+            "proxmox",
+            "Proxmox Amsterdam",
+            json!({
+                "node": "pve",
+                "gateway": "203.0.113.1",
+                "ip_from": "203.0.113.10",
+                "ip_to": "203.0.113.99",
+                "private_bridge": "vmbr1",
+                "images": [
+                    { "template": 9000, "name": "Ubuntu 24.04" },
+                    { "template": 9001, "name": "Debian 13" },
+                    { "template": 9002, "name": "AlmaLinux 9" },
+                    { "template": 9003, "name": "Rocky Linux 9" },
+                ],
+            }),
+        )
+        .await?;
+    let registrar = seed
+        .integration("openprovider", "Openprovider", json!({}))
+        .await?;
+    seed.attach(web, proxmox, "101").await?;
+
+    let database = seed
+        .subscription(
+            customer,
+            "D4VN7K",
+            "active",
+            "monthly",
+            "automatic",
+            12,
+            ("VPS: Cloud M", "2 vCPU · 4 GB RAM · 40 GB opslag", 1250),
+        )
+        .await?;
+    let db = seed
+        .service(
+            customer,
+            cloud_m,
+            database,
+            "vps",
+            "db-01",
+            json!({ "hostname": "db-01.jansenbouw.nl", "ipv4": "203.0.113.11", "image": "Debian 13", "cores": 2, "memory_mb": 4096, "disk_gb": 40 }),
+        )
+        .await?;
+    seed.attach(db, proxmox, "102").await?;
+
+    let volume_product = seed
+        .product(
+            "volume",
+            "Volume",
+            "Extra opslag die je aan een server koppelt.",
+            json!({ "per_gb": true }),
+            10,
+        )
+        .await?;
+    let address_product = seed
+        .product(
+            "floating_ip",
+            "Floating IP",
+            "Een extra IPv4-adres dat je tussen servers verplaatst.",
+            json!({}),
+            300,
+        )
+        .await?;
+    sqlx::query(
+        "UPDATE products SET integration_id = $1 WHERE kind IN ('vps', 'volume', 'floating_ip')",
+    )
+    .bind(proxmox)
+    .execute(&mut *seed.transaction)
+    .await?;
+
+    let storage = seed
+        .subscription(
+            customer,
+            "V8RS3T",
+            "active",
+            "monthly",
+            "automatic",
+            12,
+            ("Volume: data-01", "50 GB", 500),
+        )
+        .await?;
+    let volume = seed
+        .service(
+            customer,
+            volume_product,
+            storage,
+            "volume",
+            "data-01",
+            json!({ "size_gb": 50, "server_id": db.to_string(), "host": "102" }),
+        )
+        .await?;
+    seed.attach(volume, proxmox, "local-lvm:vm-102-disk-1")
+        .await?;
+
+    let address = seed
+        .subscription(
+            customer,
+            "F2KP9W",
+            "active",
+            "monthly",
+            "automatic",
+            12,
+            ("Floating IP", "203.0.113.50", 300),
+        )
+        .await?;
+    let floating = seed
+        .service(
+            customer,
+            address_product,
+            address,
+            "floating_ip",
+            "203.0.113.50",
+            json!({ "ipv4": "203.0.113.50", "server_id": web.to_string() }),
+        )
+        .await?;
+    seed.attach(floating, proxmox, "203.0.113.50").await?;
+
+    let network = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO vps_networks (id, user_id, integration_id, name, cidr, vlan, external_id, created_at)
+         VALUES ($1, $2, $3, 'intern', '10.10.0.0/24', 101, '101', $4)",
+    )
+    .bind(network)
+    .bind(customer)
+    .bind(proxmox)
+    .bind(seed.ago(24 * 30))
+    .execute(&mut *seed.transaction)
+    .await?;
+    for (server, ip) in [(web, "10.10.0.2"), (db, "10.10.0.3")] {
+        sqlx::query(
+            "INSERT INTO vps_network_servers (network_id, service_id, address, port) VALUES ($1, $2, $3, 'net1')",
+        )
+        .bind(network)
+        .bind(server)
+        .bind(ip)
+        .execute(&mut *seed.transaction)
+        .await?;
+    }
+
+    let firewall = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO vps_firewalls (id, user_id, name, auto_assign, created_at) VALUES ($1, $2, 'Webservers', TRUE, $3)",
+    )
+    .bind(firewall)
+    .bind(customer)
+    .bind(seed.ago(24 * 30))
+    .execute(&mut *seed.transaction)
+    .await?;
+    for (position, port, source, comment) in [
+        (0, "22", Some("198.51.100.0/24"), "SSH vanaf kantoor"),
+        (1, "80", None, "Website"),
+        (2, "443", None, "Website"),
+    ] {
+        sqlx::query(
+            "INSERT INTO vps_firewall_rules (id, firewall_id, position, direction, action, proto, dport, source, comment)
+             VALUES ($1, $2, $3, 'in', 'ACCEPT', 'tcp', $4, $5, $6)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(firewall)
+        .bind(position)
+        .bind(port)
+        .bind(source)
+        .bind(comment)
+        .execute(&mut *seed.transaction)
+        .await?;
+    }
+    sqlx::query("INSERT INTO vps_firewall_servers (firewall_id, service_id) VALUES ($1, $2)")
+        .bind(firewall)
+        .bind(web)
+        .execute(&mut *seed.transaction)
+        .await?;
+
+    for (name, url, days) in [
+        (
+            "Debian 13 netinst",
+            "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13-amd64-netinst.iso",
+            6,
+        ),
+        (
+            "SystemRescue",
+            "https://fastly.example.org/systemrescue-11.03-amd64.iso",
+            2,
+        ),
+    ] {
+        sqlx::query(
+            "INSERT INTO vps_isos (id, user_id, integration_id, name, url, firmware, status, external_id, last_used_at, created_at)
+             VALUES ($1, $2, $3, $4, $5, 'bios', 'ready', $6, $7, $7)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(customer)
+        .bind(proxmox)
+        .bind(name)
+        .bind(url)
+        .bind(format!("local:iso/{}.iso", name.to_lowercase().replace(' ', "-")))
+        .bind(seed.ago(24 * days))
+        .execute(&mut *seed.transaction)
+        .await?;
+    }
+
+    for (index, (name, key)) in DEMO_KEYS.iter().enumerate() {
+        let (public_key, fingerprint) = crate::routes::ssh_keys::parse(key)
+            .ok_or_else(|| anyhow::anyhow!("demo ssh key {index} is invalid"))?;
+        sqlx::query(
+            "INSERT INTO ssh_keys (id, user_id, name, public_key, fingerprint, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(customer)
+        .bind(name)
+        .bind(public_key)
+        .bind(fingerprint)
+        .bind(seed.ago(24 * (60 - index as i64 * 20)))
+        .execute(&mut *seed.transaction)
+        .await?;
+    }
+
+    let colleague = seed
+        .user("lisa@demo.stacklane.io", "Lisa", "Bakker", "customer", None)
+        .await?;
+    sqlx::query(
+        "INSERT INTO vps_members (id, owner_id, user_id, permissions, created_at, accepted_at)
+         VALUES ($1, $2, $3, $4, $5, $5)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(customer)
+    .bind(colleague)
+    .bind(vec![
+        "servers.view",
+        "servers.start",
+        "servers.stop",
+        "servers.console",
+        "snapshots.view",
+        "snapshots.create",
+        "firewalls.view",
+    ])
+    .bind(seed.ago(24 * 14))
+    .execute(&mut *seed.transaction)
+    .await?;
+
+    let profile = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO whois_profiles (id, user_id, first_name, last_name, company, email, phone, street, house_number, zipcode, city, country, created_at)
+         VALUES ($1, $2, 'Jan', 'Jansen', 'Jansen Bouw', 'jan@jansenbouw.nl', '+31.302345678', 'Stationsplein', '12', '3511ED', 'Utrecht', 'NL', $3)",
+    )
+    .bind(profile)
+    .bind(customer)
+    .bind(seed.ago(24 * 80))
+    .execute(&mut *seed.transaction)
+    .await?;
+    for (extension, register, renew, transfer) in [
+        ("nl", 799, 799, 0),
+        ("com", 1199, 1399, 1199),
+        ("be", 899, 899, 0),
+        ("eu", 699, 899, 699),
+        ("io", 3999, 4999, 3999),
+    ] {
+        sqlx::query(
+            "INSERT INTO domain_extensions (id, integration_id, extension, register_cents, renew_cents, transfer_cents)
+             VALUES ($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(registrar)
+        .bind(extension)
+        .bind(register)
+        .bind(renew)
+        .bind(transfer)
+        .execute(&mut *seed.transaction)
+        .await?;
+    }
+    for (name, code, days, external) in [
+        ("jansenbouw.nl", "N5DM2Q", 160, "9100001"),
+        ("jansenbouw.com", "N7CX4H", 40, "9100002"),
+    ] {
+        let subscription = seed
+            .subscription(
+                customer,
+                code,
+                "active",
+                "yearly",
+                "manual",
+                days,
+                ("Domein", name, 67),
+            )
+            .await?;
+        let expires = (seed.ahead(days)).date().to_string();
+        let domain = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO services (id, user_id, subscription_id, integration_id, kind, name, status, external_id, details, created_at)
+             VALUES ($1, $2, $3, $4, 'domain', $5, 'active', $6, $7, $8)",
+        )
+        .bind(domain)
+        .bind(customer)
+        .bind(subscription)
+        .bind(registrar)
+        .bind(name)
+        .bind(external)
+        .bind(json!({
+            "whois_profile_id": profile,
+            "operation": "register",
+            "expires_on": expires,
+            "nameservers": ["ns1.openprovider.nl", "ns2.openprovider.be", "ns3.openprovider.eu"],
+        }))
+        .bind(seed.ago(24 * 200))
+        .execute(&mut *seed.transaction)
+        .await?;
+    }
+
+    for (vmid, (email, first, last, company, ticket)) in (110..).zip([
+        (
+            "info@fietsenmakerdewit.nl",
+            "Eva",
+            "de Wit",
+            Some("Fietsenmaker de Wit"),
+            "Mail komt niet aan bij Gmail",
+        ),
+        (
+            "hallo@pixelstudio.nl",
+            "Noah",
+            "Visser",
+            Some("Pixelstudio"),
+            "Kunnen we upgraden naar Cloud L?",
+        ),
+        (
+            "mila.peters@example.nl",
+            "Mila",
+            "Peters",
+            None,
+            "Hoe zet ik een modpack op mijn server?",
+        ),
+    ]) {
+        let other = seed.user(email, first, last, "customer", company).await?;
+        seed.ticket(
+            other,
+            "Algemeen",
+            ticket,
+            "open",
+            &[(
+                Some(other),
+                false,
+                6,
+                "<p>Kunnen jullie hiernaar kijken? Alvast bedankt.</p>",
+            )],
+        )
+        .await?;
+        let code = format!(
+            "{}{}",
+            first[..1].to_uppercase(),
+            last.replace(' ', "")[..3].to_uppercase()
+        );
+        let subscription = seed
+            .subscription(
+                other,
+                &format!("{code}91"),
+                "active",
+                "monthly",
+                "automatic",
+                9,
+                ("VPS: Cloud M", "2 vCPU · 4 GB RAM · 40 GB opslag", 1250),
+            )
+            .await?;
+        let server = seed
+            .service(
+                other,
+                cloud_m,
+                subscription,
+                "vps",
+                &format!("{}-01", last.to_lowercase().replace(' ', "")),
+                json!({ "ipv4": format!("203.0.113.{}", vmid - 90), "image": "Ubuntu 24.04", "cores": 2, "memory_mb": 4096, "disk_gb": 40 }),
+            )
+            .await?;
+        seed.attach(server, proxmox, &vmid.to_string()).await?;
+        seed.invoice(other, subscription, "paid", 21, "VPS: Cloud M", 1250)
+            .await?;
+    }
+
+    seed.notification(
+        customer,
+        "Lisa heeft toegang gekregen",
+        "Lisa Bakker kan nu je servers bekijken, aan- en uitzetten en snapshots maken.",
+        "/vps/users",
+        24 * 14,
+    )
+    .await?;
     Ok(())
 }
 
