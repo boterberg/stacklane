@@ -123,7 +123,7 @@ Het tweede commando laat de router weten dat het adres nu bij deze server zit; z
 
 ### Netwerken
 
-Met een privénetwerk praten servers van één klant onderling, buiten het publieke netwerk om. De klant maakt onder **VPS → Netwerken** een netwerk met een naam en een privé IP-bereik (bijvoorbeeld `10.1.0.0/24`, met een netmasker van /16 tot /28) en koppelt daar servers op hetzelfde platform aan. Elke server krijgt een extra netwerkkaart met een adres uit dat bereik. Netwerken zijn gratis. Een klant heeft hoogstens tien netwerken, een server zit in hoogstens drie, en de bereiken van één klant mogen elkaar niet overlappen.
+Met een privénetwerk praten servers van één klant onderling, buiten het publieke netwerk om. De klant maakt onder **VPS → Netwerken** een netwerk met een naam en een privé IP-bereik (bijvoorbeeld `10.1.0.0/24`, met een netmasker van /16 tot /28) en koppelt daar servers op hetzelfde platform aan. Elke server krijgt een extra netwerkkaart met een adres uit dat bereik. Netwerken zijn gratis, maar alleen voor klanten met een actieve VPS op dat platform. Een klant heeft hoogstens tien netwerken, een server zit in hoogstens drie, en de bereiken van één klant mogen elkaar niet overlappen.
 
 | Platform | Hoe het werkt |
 | --- | --- |
@@ -147,7 +147,7 @@ Stacklane weigert links naar privé-adressen, localhost, link-local adressen en 
 
 ### Gebruikers
 
-Een klant kan onder **VPS → Gebruikers** anderen toegang geven tot zijn VPS-omgeving, bijvoorbeeld een collega of een beheerder. Die persoon heeft een eigen Stacklane-account nodig; de klant vult het e-mailadres in en kiest de rechten. Er zijn 49 rechten in negen groepen, van *Servers → Start* tot *Firewalls → Regels verwijderen*.
+Een klant kan onder **VPS → Gebruikers** anderen toegang geven tot zijn VPS-omgeving, bijvoorbeeld een collega of een beheerder. Die persoon heeft een eigen Stacklane-account met een bevestigd e-mailadres nodig, en de klant zelf ook; de klant vult het e-mailadres in en kiest de rechten. Er zijn 49 rechten in negen groepen, van *Servers → Start* tot *Firewalls → Regels verwijderen*.
 
 De gebruiker krijgt een uitnodiging en vindt die onder **Gedeelde toegang**. Pas als hij op **Accepteren** klikt, krijgt hij toegang en ziet de eigenaar zijn naam; tot dan staat hij als *Uitgenodigd* in de lijst. Met **Openen** werkt hij in de omgeving van de eigenaar; het menu toont dan alleen wat hij mag. Stacklane controleert elk recht op de server, niet alleen in het scherm.
 
