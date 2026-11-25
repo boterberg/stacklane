@@ -658,6 +658,7 @@ pub async fn add_firewall_rule(
 ) -> AppResult<StatusCode> {
     actor.require("firewalls.rule_create")?;
     validate_rule(&mut rule)?;
+    let _guard = crate::locks::service(&state.db, id).await?;
     let machine = machine(&state, actor.owner, id).await?;
     if rule.action != "ACCEPT" && !machine.can_block() {
         return Err(AppError::field(

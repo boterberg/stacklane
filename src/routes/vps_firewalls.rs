@@ -284,6 +284,8 @@ pub async fn servers(
     Ok(Json(eligible(&state, actor.owner).await?))
 }
 
+const MAX_FIREWALLS: i64 = 20;
+
 async fn store(
     state: &AppState,
     actor: &VpsActor,
@@ -318,6 +320,19 @@ async fn store(
         None => None,
     };
     let mut transaction = state.db.begin().await?;
+    crate::locks::transaction(&mut transaction, format!("firewalls {}", actor.owner)).await?;
+    let others: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM vps_firewalls WHERE user_id = $1 AND id <> $2")
+            .bind(actor.owner)
+            .bind(id)
+            .fetch_one(&mut *transaction)
+            .await?;
+    if others >= MAX_FIREWALLS {
+        return Err(AppError::field(
+            "name",
+            "Je hebt al 20 firewalls. Verwijder er eerst een.",
+        ));
+    }
     sqlx::query(
         "INSERT INTO vps_firewalls (id, user_id, name, auto_assign) VALUES ($1, $2, $3, $4)
          ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, auto_assign = EXCLUDED.auto_assign, updated_at = now()",
@@ -541,7 +556,7 @@ pub async fn create(
         .bind(actor.owner)
         .fetch_one(&state.db)
         .await?;
-    if count >= 20 {
+    if count >= MAX_FIREWALLS {
         return Err(AppError::field(
             "name",
             "Je hebt al 20 firewalls. Verwijder er eerst een.",
