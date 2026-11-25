@@ -506,6 +506,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Er is net al een bevestiging naar dit adres gestuurd. Probeer het over een paar minuten opnieuw." => {
             "A confirmation was just sent to this address. Try again in a few minutes."
         }
+        "Je hebt al 10 domeinen besteld die nog niet betaald zijn. Betaal of annuleer die eerst." => {
+            "You already have 10 domain orders that are not paid yet. Pay or cancel those first."
+        }
         _ => return None,
     })
 }

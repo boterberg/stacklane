@@ -159,6 +159,8 @@ pub struct DomainOrdered {
     service_id: Uuid,
 }
 
+const MAX_WAITING_ORDERS: i64 = 10;
+
 pub async fn order(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -168,6 +170,21 @@ pub async fn order(
         return Err(AppError::field(
             "domain",
             "In de demo kun je niets bestellen.",
+        ));
+    }
+    state
+        .limits
+        .check(&crate::limits::DOMAIN_SEARCH, &user.id.to_string())?;
+    let waiting: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM services WHERE user_id = $1 AND kind = 'domain' AND status = 'pending'",
+    )
+    .bind(user.id)
+    .fetch_one(&state.db)
+    .await?;
+    if waiting >= MAX_WAITING_ORDERS {
+        return Err(AppError::field(
+            "domain",
+            "Je hebt al 10 domeinen besteld die nog niet betaald zijn. Betaal of annuleer die eerst.",
         ));
     }
     let Some((name, extension)) = openprovider::split_domain(&input.domain) else {
