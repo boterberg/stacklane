@@ -13,18 +13,34 @@ use crate::state::AppState;
 const KINDS: [&str; 3] = ["logo", "logo_dark", "favicon"];
 const MAX_BYTES: usize = 512 * 1024;
 const MAX_NAME: usize = 60;
+const MAX_CSS: usize = 64 * 1024;
+const NEUTRALS: [&str; 5] = ["slate", "gray", "neutral", "stone", "tinted"];
+const RADII: [&str; 2] = ["sharp", "round"];
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Branding {
     pub name: Option<String>,
     pub accent: Option<String>,
+    pub accent_dark: Option<String>,
+    pub neutral: Option<String>,
+    pub radius: Option<String>,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ThemeCss {
+    pub css: String,
 }
 
 #[derive(Serialize)]
 pub struct BrandingInfo {
     name: Option<String>,
     accent: Option<String>,
+    accent_dark: Option<String>,
+    neutral: Option<String>,
+    radius: Option<String>,
+    css: Option<String>,
     logo: Option<i64>,
     logo_dark: Option<i64>,
     favicon: Option<i64>,
@@ -55,6 +71,28 @@ fn accent(value: &str) -> Option<String> {
         .then(|| format!("#{}", hex.to_lowercase()))
 }
 
+fn choice(value: Option<&str>, allowed: &[&str], field: &'static str) -> AppResult<Option<String>> {
+    match value.map(str::trim) {
+        None | Some("") | Some("zinc") | Some("default") => Ok(None),
+        Some(value) if allowed.contains(&value) => Ok(Some(value.to_owned())),
+        Some(_) => Err(AppError::field(field, "Kies een van de opties.")),
+    }
+}
+
+fn color(value: Option<&str>, field: &'static str) -> AppResult<Option<String>> {
+    match value.map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(value) => accent(value)
+            .map(Some)
+            .ok_or_else(|| AppError::field(field, "Gebruik een kleur als #4f46e5.")),
+    }
+}
+
+fn css_version(css: &str) -> Option<String> {
+    use sha2::Digest;
+    (!css.trim().is_empty()).then(|| hex::encode(&sha2::Sha256::digest(css.as_bytes())[..6]))
+}
+
 fn known(kind: &str) -> AppResult<()> {
     if KINDS.contains(&kind) {
         Ok(())
@@ -75,9 +113,14 @@ pub async fn info(state: &AppState) -> AppResult<BrandingInfo> {
             .find(|(name, _)| name == kind)
             .map(|(_, version)| *version)
     };
+    let theme: ThemeCss = settings::get(&state.db, "theme_css").await?;
     Ok(BrandingInfo {
         name: branding.name,
         accent: branding.accent,
+        accent_dark: branding.accent_dark,
+        neutral: branding.neutral,
+        radius: branding.radius,
+        css: css_version(&theme.css),
         logo: version("logo"),
         logo_dark: version("logo_dark"),
         favicon: version("favicon"),
@@ -123,14 +166,47 @@ pub async fn update(
             format!("Gebruik hoogstens {MAX_NAME} tekens."),
         ));
     }
-    let accent = match input.accent.as_deref().map(str::trim) {
-        None | Some("") => None,
-        Some(value) => Some(
-            accent(value)
-                .ok_or_else(|| AppError::field("accent", "Gebruik een kleur als #4f46e5."))?,
-        ),
+    let branding = Branding {
+        name,
+        accent: color(input.accent.as_deref(), "accent")?,
+        accent_dark: color(input.accent_dark.as_deref(), "accent_dark")?,
+        neutral: choice(input.neutral.as_deref(), &NEUTRALS, "neutral")?,
+        radius: choice(input.radius.as_deref(), &RADII, "radius")?,
     };
-    settings::set(&state.db, "branding", &Branding { name, accent }).await?;
+    settings::set(&state.db, "branding", &branding).await?;
+    Ok(Json(info(&state).await?))
+}
+
+pub async fn stylesheet(State(state): State<AppState>) -> AppResult<Response> {
+    let theme: ThemeCss = settings::get(&state.db, "theme_css").await?;
+    if theme.css.trim().is_empty() {
+        return Err(AppError::NotFound);
+    }
+    let mut response = theme.css.into_response();
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/css; charset=utf-8"),
+    );
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=86400"),
+    );
+    Ok(response)
+}
+
+pub async fn update_css(
+    State(state): State<AppState>,
+    _admin: CurrentAdmin,
+    Json(input): Json<ThemeCss>,
+) -> AppResult<Json<BrandingInfo>> {
+    if input.css.len() > MAX_CSS {
+        return Err(AppError::field("css", "Gebruik hoogstens 64 kB aan CSS."));
+    }
+    if input.css.contains('\0') {
+        return Err(AppError::field("css", "Deze CSS bevat ongeldige tekens."));
+    }
+    settings::set(&state.db, "theme_css", &ThemeCss { css: input.css }).await?;
     Ok(Json(info(&state).await?))
 }
 
@@ -189,7 +265,7 @@ pub async fn remove(
 
 #[cfg(test)]
 mod tests {
-    use super::{accent, sniff};
+    use super::{NEUTRALS, RADII, accent, choice, css_version, sniff};
 
     #[test]
     fn only_plain_images_are_accepted() {
@@ -206,5 +282,25 @@ mod tests {
         assert_eq!(accent("red"), None);
         assert_eq!(accent("#fff"), None);
         assert_eq!(accent("#4f46e5;x"), None);
+    }
+
+    #[test]
+    fn theme_choices_are_a_fixed_list() {
+        assert_eq!(
+            choice(Some("slate"), &NEUTRALS, "neutral")
+                .unwrap()
+                .as_deref(),
+            Some("slate")
+        );
+        assert_eq!(choice(Some("zinc"), &NEUTRALS, "neutral").unwrap(), None);
+        assert_eq!(choice(None, &RADII, "radius").unwrap(), None);
+        assert!(choice(Some("red; }"), &NEUTRALS, "neutral").is_err());
+        assert!(choice(Some("huge"), &RADII, "radius").is_err());
+    }
+
+    #[test]
+    fn empty_css_has_no_version() {
+        assert_eq!(css_version("  \n"), None);
+        assert_eq!(css_version("a{}").map(|version| version.len()), Some(12));
     }
 }

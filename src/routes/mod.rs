@@ -255,6 +255,7 @@ pub fn router(state: AppState) -> Router {
             patch(support::staff_update_status),
         )
         .route("/meta", get(demo::meta))
+        .route("/branding/theme.css", get(branding::stylesheet))
         .route("/branding/{kind}", get(branding::asset))
         .route("/public/catalog", get(catalog::index))
         .route("/kb", get(kb::index))
@@ -265,6 +266,7 @@ pub fn router(state: AppState) -> Router {
             get(kb::admin_show).put(kb::update).delete(kb::remove),
         )
         .route("/admin/branding", put(branding::update))
+        .route("/admin/theme-css", put(branding::update_css))
         .route(
             "/admin/branding/{kind}",
             put(branding::upload).delete(branding::remove),
@@ -614,6 +616,7 @@ mod tests {
         assert!(!demo_allows(&Method::PUT, "/api/admin/settings"));
         assert!(!demo_allows(&Method::PUT, "/api/admin/branding"));
         assert!(!demo_allows(&Method::PUT, "/api/admin/branding/logo"));
+        assert!(!demo_allows(&Method::PUT, "/api/admin/theme-css"));
         assert!(!demo_allows(&Method::POST, "/api/admin/kb"));
         assert!(!demo_allows(&Method::DELETE, "/api/admin/kb/1"));
         assert!(demo_allows(&Method::GET, "/api/admin/kb"));

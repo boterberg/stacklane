@@ -2410,6 +2410,100 @@ async fn admins_brand_the_panel_with_plain_images_only(db: PgPool) {
 
 #[sqlx::test]
 #[ignore = "needs DATABASE_URL"]
+async fn admins_theme_the_panel_and_customers_cannot(db: PgPool) {
+    use crate::testing::make_admin;
+    let client = Client::new(db);
+    let (_, cookie) = client.register("thema-klant@example.test").await;
+    let (admin, admin_cookie) = client.register("thema-staff@example.test").await;
+    make_admin(&client.state, admin).await;
+    let css = json!({ "css": "body { letter-spacing: 0.01em; }" });
+    assert_eq!(
+        client
+            .send(
+                Method::PUT,
+                "/admin/theme-css",
+                Some(&cookie),
+                Some(css.clone())
+            )
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        client
+            .send(Method::GET, "/branding/theme.css", None, None)
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+    let bad = client
+        .send(
+            Method::PUT,
+            "/admin/branding",
+            Some(&admin_cookie),
+            Some(json!({ "neutral": "red; } body {", "radius": "round" })),
+        )
+        .await;
+    assert_eq!(bad.status, StatusCode::UNPROCESSABLE_ENTITY);
+    let saved = client
+        .send(
+            Method::PUT,
+            "/admin/branding",
+            Some(&admin_cookie),
+            Some(json!({ "accent": "#0EA5E9", "accent_dark": "#38bdf8", "neutral": "slate", "radius": "round" })),
+        )
+        .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
+    let too_big = client
+        .send(
+            Method::PUT,
+            "/admin/theme-css",
+            Some(&admin_cookie),
+            Some(json!({ "css": "a".repeat(70_000) })),
+        )
+        .await;
+    assert_eq!(too_big.status, StatusCode::UNPROCESSABLE_ENTITY);
+    let stored = client
+        .send(
+            Method::PUT,
+            "/admin/theme-css",
+            Some(&admin_cookie),
+            Some(css),
+        )
+        .await;
+    assert_eq!(stored.status, StatusCode::OK, "{}", stored.body);
+    let meta = client.send(Method::GET, "/meta", None, None).await;
+    let branding = &meta.body["branding"];
+    assert_eq!(branding["accent_dark"], "#38bdf8");
+    assert_eq!(branding["neutral"], "slate");
+    assert_eq!(branding["radius"], "round");
+    assert!(branding["css"].is_string());
+    let request = axum::http::Request::builder()
+        .uri("/api/branding/theme.css")
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let response = tower::ServiceExt::oneshot(client.app.clone(), request)
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()["content-type"],
+        "text/css; charset=utf-8"
+    );
+    assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+    let cleared = client
+        .send(
+            Method::PUT,
+            "/admin/theme-css",
+            Some(&admin_cookie),
+            Some(json!({ "css": "" })),
+        )
+        .await;
+    assert!(cleared.body["css"].is_null());
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
 async fn admin_stats_add_up_revenue_and_recurring_income(db: PgPool) {
     use crate::testing::make_admin;
     let client = Client::new(db);
