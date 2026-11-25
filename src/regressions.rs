@@ -2788,3 +2788,143 @@ async fn gameserver_actions_land_in_the_owners_activity_log(db: PgPool) {
         StatusCode::NOT_FOUND
     );
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn staff_only_reach_the_parts_they_were_given(db: PgPool) {
+    use crate::testing::make_admin;
+    let client = Client::new(db);
+    let (_, customer_cookie) = client.register("team-klant@example.test").await;
+    let (helper, helper_cookie) = client.register("team-support@example.test").await;
+    let (admin, admin_cookie) = client.register("team-eigenaar@example.test").await;
+    make_admin(&client.state, admin).await;
+    let status = |response: &crate::testing::Reply| response.status;
+    assert_eq!(
+        status(
+            &client
+                .send(Method::GET, "/admin/staff", Some(&customer_cookie), None)
+                .await
+        ),
+        StatusCode::FORBIDDEN
+    );
+    let missing = client
+        .send(
+            Method::POST,
+            "/admin/staff",
+            Some(&admin_cookie),
+            Some(json!({ "email": "niemand@example.test", "role": "staff", "permissions": ["support"] })),
+        )
+        .await;
+    assert_eq!(missing.status, StatusCode::UNPROCESSABLE_ENTITY);
+    let empty = client
+        .send(
+            Method::POST,
+            "/admin/staff",
+            Some(&admin_cookie),
+            Some(
+                json!({ "email": "team-support@example.test", "role": "staff", "permissions": [] }),
+            ),
+        )
+        .await;
+    assert_eq!(empty.status, StatusCode::UNPROCESSABLE_ENTITY);
+    let added = client
+        .send(
+            Method::POST,
+            "/admin/staff",
+            Some(&admin_cookie),
+            Some(json!({ "email": "TEAM-SUPPORT@example.test", "role": "staff", "permissions": ["support"] })),
+        )
+        .await;
+    assert_eq!(added.status, StatusCode::OK, "{}", added.body);
+    assert_eq!(added.body["permissions"], json!(["support"]));
+    let me = client
+        .send(Method::GET, "/me", Some(&helper_cookie), None)
+        .await;
+    assert_eq!(me.body["role"], "staff");
+    assert_eq!(me.body["permissions"], json!(["support"]));
+    for path in ["/admin/tickets", "/admin/kb"] {
+        let response = client
+            .send(Method::GET, path, Some(&helper_cookie), None)
+            .await;
+        assert_eq!(response.status, StatusCode::OK, "{path}");
+    }
+    for path in [
+        "/admin/invoices",
+        "/admin/stats",
+        "/admin/customers/all",
+        "/admin/products",
+        "/admin/integrations",
+        "/admin/settings",
+        "/admin/mail-log",
+        "/admin/staff",
+    ] {
+        let response = client
+            .send(Method::GET, path, Some(&helper_cookie), None)
+            .await;
+        assert_eq!(response.status, StatusCode::FORBIDDEN, "{path}");
+    }
+    assert_eq!(
+        status(
+            &client
+                .send(
+                    Method::PUT,
+                    &format!("/admin/staff/{helper}"),
+                    Some(&helper_cookie),
+                    Some(json!({ "role": "admin" })),
+                )
+                .await
+        ),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        status(
+            &client
+                .send(
+                    Method::PUT,
+                    &format!("/admin/staff/{admin}"),
+                    Some(&admin_cookie),
+                    Some(json!({ "role": "staff", "permissions": ["support"] })),
+                )
+                .await
+        ),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    let widened = client
+        .send(
+            Method::PUT,
+            &format!("/admin/staff/{helper}"),
+            Some(&admin_cookie),
+            Some(json!({ "role": "staff", "permissions": ["billing", "support"] })),
+        )
+        .await;
+    assert_eq!(widened.status, StatusCode::OK, "{}", widened.body);
+    assert_eq!(
+        status(
+            &client
+                .send(Method::GET, "/admin/invoices", Some(&helper_cookie), None)
+                .await
+        ),
+        StatusCode::OK
+    );
+    let team = client
+        .send(Method::GET, "/admin/staff", Some(&admin_cookie), None)
+        .await;
+    assert_eq!(team.body.as_array().map(Vec::len), Some(2));
+    let removed = client
+        .send(
+            Method::DELETE,
+            &format!("/admin/staff/{helper}"),
+            Some(&admin_cookie),
+            None,
+        )
+        .await;
+    assert_eq!(removed.status, StatusCode::OK, "{}", removed.body);
+    assert_eq!(
+        status(
+            &client
+                .send(Method::GET, "/admin/tickets", Some(&helper_cookie), None)
+                .await
+        ),
+        StatusCode::FORBIDDEN
+    );
+}

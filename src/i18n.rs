@@ -541,6 +541,17 @@ fn english(message: &str) -> Option<&'static str> {
         "Kies een van de opties." => "Choose one of the options.",
         "Gebruik hoogstens 64 kB aan CSS." => "Use at most 64 kB of CSS.",
         "Deze CSS bevat ongeldige tekens." => "This CSS contains invalid characters.",
+        "Kies alleen rechten uit de lijst." => "Only choose permissions from the list.",
+        "Geef een medewerker minstens één recht." => {
+            "Give a staff member at least one permission."
+        }
+        "Kies medewerker of beheerder." => "Choose staff member or administrator.",
+        "Er is geen account met dit e-mailadres. Laat diegene eerst zelf een account aanmaken." => {
+            "There is no account with this email address. Ask them to create an account first."
+        }
+        "Deze persoon zit al in je team." => "This person is already on your team.",
+        "Je kunt je eigen rechten niet wijzigen." => "You cannot change your own permissions.",
+        "Je kunt jezelf niet uit het team halen." => "You cannot remove yourself from the team.",
         _ => return None,
     })
 }

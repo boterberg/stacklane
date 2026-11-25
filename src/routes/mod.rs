@@ -5,6 +5,7 @@ mod admin_domains;
 mod admin_mail;
 mod admin_provisioning;
 mod admin_settings;
+mod admin_staff;
 mod admin_stats;
 mod admin_vat;
 mod api_tokens;
@@ -327,6 +328,14 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/admin/customers", get(admin_provisioning::customers))
         .route("/admin/customers/all", get(admin_customers::index))
+        .route(
+            "/admin/staff",
+            get(admin_staff::index).post(admin_staff::add),
+        )
+        .route(
+            "/admin/staff/{id}",
+            put(admin_staff::update).delete(admin_staff::remove),
+        )
         .route("/admin/customers/{id}", get(admin_customers::show))
         .route("/admin/invoices", get(admin_billing::index))
         .route("/admin/reports/vat", get(admin_vat::report))
@@ -617,6 +626,7 @@ mod tests {
         assert!(!demo_allows(&Method::PUT, "/api/admin/branding"));
         assert!(!demo_allows(&Method::PUT, "/api/admin/branding/logo"));
         assert!(!demo_allows(&Method::PUT, "/api/admin/theme-css"));
+        assert!(!demo_allows(&Method::POST, "/api/admin/staff"));
         assert!(!demo_allows(&Method::POST, "/api/admin/kb"));
         assert!(!demo_allows(&Method::DELETE, "/api/admin/kb/1"));
         assert!(demo_allows(&Method::GET, "/api/admin/kb"));

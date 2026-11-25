@@ -405,6 +405,13 @@ pub async fn reset(pool: &PgPool) -> anyhow::Result<()> {
     let admin = seed
         .user(ADMIN_EMAIL, "Sam", "de Vries", "admin", None)
         .await?;
+    let helper = seed
+        .user("lotte@demo.stacklane.io", "Lotte", "Bakker", "staff", None)
+        .await?;
+    sqlx::query("UPDATE users SET staff_permissions = ARRAY['support', 'customers'] WHERE id = $1")
+        .bind(helper)
+        .execute(&mut *seed.transaction)
+        .await?;
     let customer = seed
         .user(
             CUSTOMER_EMAIL,
