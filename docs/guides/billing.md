@@ -13,6 +13,7 @@ Ga naar **Beheer → Instellingen**.
 | Instelling | Standaard | Betekenis |
 | --- | --- | --- |
 | Land van je bedrijf | Nederland | Bepaalt wie een binnenlandse klant is |
+| Valuta | Euro | De valuta van nieuwe facturen en betalingen; een bestaande factuur houdt haar eigen valuta |
 | Btw-tarief | 21% | Prijzen zijn inclusief btw; de factuur rekent het btw-deel terug |
 | OSS-regeling | uit | Particulieren in andere EU-landen betalen het tarief van hun eigen land |
 | Betaaltermijn | 14 dagen | Hoe lang een klant heeft om te betalen |
@@ -91,3 +92,9 @@ sudo stacklane billing run
 ## Wat de klant ziet
 
 Onder **Facturering** staan de abonnementen en facturen van de klant. Bij een open factuur staat de knop **Betalen**; elke factuur is als pdf te downloaden. Bij een abonnement kiest de klant tussen handmatig betalen en automatisch met een opgeslagen betaalmethode, en daar zegt de klant ook op.
+
+## Statistieken
+
+Onder **Beheer → Statistieken** zie je de terugkerende omzet per maand van alle actieve abonnementen, wat er deze maand binnenkwam, wat er nog openstaat en hoeveel klanten je hebt. Een grafiek toont de betaalde facturen van de laatste twaalf maanden. Bedragen zijn inclusief btw en in de valuta die je hebt ingesteld.
+
+Onder **Beheer → Klanten** staat elke klant met abonnementen, diensten en openstaande facturen. Klik op een klant voor de gegevens, de laatste facturen en tickets.
