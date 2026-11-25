@@ -110,6 +110,11 @@ pub const DOMAIN_SEARCH: Rule = Rule {
     max: 30,
     window: Duration::from_secs(60),
 };
+pub const CATALOG: Rule = Rule {
+    name: "catalog",
+    max: 120,
+    window: Duration::from_secs(60),
+};
 
 type Hits = HashMap<(&'static str, String), (Instant, u32)>;
 
@@ -161,6 +166,7 @@ fn window_of(name: &str) -> Duration {
         CHECKOUT,
         VAT_CHECK,
         DOMAIN_SEARCH,
+        CATALOG,
     ]
     .into_iter()
     .find(|rule| rule.name == name)

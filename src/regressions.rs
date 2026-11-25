@@ -2452,3 +2452,61 @@ async fn admin_stats_add_up_revenue_and_recurring_income(db: PgPool) {
     assert_eq!(months[11]["revenue_cents"], 1210);
     assert_eq!(months[11]["new_customers"], 1);
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn the_public_catalog_shows_only_sellable_products_and_no_internals(db: PgPool) {
+    let client = Client::new(db);
+    let integration =
+        crate::testing::proxmox_integration(&client.state, "http://127.0.0.1:9").await;
+    for (name, active, linked) in [
+        ("Cloud S", true, true),
+        ("Oud", false, true),
+        ("Los", true, false),
+    ] {
+        sqlx::query(
+            "INSERT INTO products (id, kind, slug, name, specs, monthly_price_cents, is_active, integration_id, provisioning)
+             VALUES ($1, 'vps', $2, $3, '{\"cores\": 1}', 650, $4, $5, '{\"secret\": \"intern\"}')",
+        )
+        .bind(uuid::Uuid::new_v4())
+        .bind(name.to_lowercase())
+        .bind(name)
+        .bind(active)
+        .bind(linked.then_some(integration))
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    }
+    let request = axum::http::Request::builder()
+        .uri("/api/public/catalog")
+        .header("origin", "https://www.example.test")
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let response = tower::ServiceExt::oneshot(client.app.clone(), request)
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["access-control-allow-origin"], "*");
+    let bytes = axum::body::to_bytes(response.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let text = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(
+        !text.contains("intern") && !text.contains("integration"),
+        "{text}"
+    );
+    let body: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let products = body["products"].as_array().unwrap();
+    assert_eq!(products.len(), 1, "{body}");
+    assert_eq!(products[0]["name"], "Cloud S");
+    assert!(
+        products[0]["order_url"]
+            .as_str()
+            .unwrap()
+            .ends_with(&format!(
+                "/vps/servers/order?product={}",
+                products[0]["id"].as_str().unwrap()
+            ))
+    );
+    assert_eq!(body["currency"], "EUR");
+}

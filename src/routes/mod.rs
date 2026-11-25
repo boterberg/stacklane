@@ -11,6 +11,7 @@ mod api_tokens;
 mod auth;
 pub mod billing;
 pub(crate) mod branding;
+mod catalog;
 mod dashboard;
 mod domains;
 mod email_verification;
@@ -254,6 +255,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/meta", get(demo::meta))
         .route("/branding/{kind}", get(branding::asset))
+        .route("/public/catalog", get(catalog::index))
         .route("/admin/branding", put(branding::update))
         .route(
             "/admin/branding/{kind}",
