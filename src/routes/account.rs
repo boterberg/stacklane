@@ -315,10 +315,12 @@ pub async fn destroy(
         ));
     }
     check_password(&state, &user, &input.password, "password").await?;
-    let (running, unpaid): (bool, bool) = sqlx::query_as(
+    let (running, unpaid, services, networks): (bool, bool, bool, bool) = sqlx::query_as(
         "SELECT
             EXISTS (SELECT 1 FROM subscriptions WHERE user_id = $1 AND status IN ('active', 'pending', 'suspended') AND cancelled_at IS NULL),
-            EXISTS (SELECT 1 FROM invoices WHERE user_id = $1 AND status = 'open')",
+            EXISTS (SELECT 1 FROM invoices WHERE user_id = $1 AND status = 'open'),
+            EXISTS (SELECT 1 FROM services WHERE user_id = $1 AND status NOT IN ('terminated', 'failed')),
+            EXISTS (SELECT 1 FROM vps_networks WHERE user_id = $1)",
     )
     .bind(user.id)
     .fetch_one(&state.db)
@@ -327,6 +329,18 @@ pub async fn destroy(
         return Err(AppError::field(
             "password",
             "Zeg eerst je abonnementen op en betaal je openstaande facturen.",
+        ));
+    }
+    if services {
+        return Err(AppError::field(
+            "password",
+            "Er draaien nog diensten op je account. Wacht tot ze beëindigd zijn of vraag ons ze te stoppen.",
+        ));
+    }
+    if networks {
+        return Err(AppError::field(
+            "password",
+            "Verwijder eerst je privénetwerken onder VPS, Netwerken.",
         ));
     }
 
@@ -359,6 +373,9 @@ pub async fn destroy(
         "recovery_codes",
         "password_resets",
         "email_verifications",
+        "whois_profiles",
+        "ssh_keys",
+        "vps_firewalls",
     ] {
         sqlx::query(sqlx::AssertSqlSafe(format!(
             "DELETE FROM {table} WHERE user_id = $1"

@@ -497,6 +497,12 @@ fn english(message: &str) -> Option<&'static str> {
         "Je hebt een actieve VPS op dit platform nodig voor een privénetwerk." => {
             "You need an active VPS on this platform for a private network."
         }
+        "Er draaien nog diensten op je account. Wacht tot ze beëindigd zijn of vraag ons ze te stoppen." => {
+            "Services are still running on your account. Wait until they have ended or ask us to stop them."
+        }
+        "Verwijder eerst je privénetwerken onder VPS, Netwerken." => {
+            "Delete your private networks under VPS, Networks first."
+        }
         _ => return None,
     })
 }
