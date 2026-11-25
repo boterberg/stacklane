@@ -140,7 +140,9 @@ mod tests {
             super::PLATFORM_FAILED
         );
         assert_eq!(
-            public_message("Proxmox-taak mislukt: unable to create VM 105 - storage 'ceph-int' is not online"),
+            public_message(
+                "Proxmox-taak mislukt: unable to create VM 105 - storage 'ceph-int' is not online"
+            ),
             super::PLATFORM_FAILED
         );
         assert_eq!(
