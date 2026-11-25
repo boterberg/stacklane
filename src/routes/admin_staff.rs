@@ -90,21 +90,22 @@ pub async fn index(
 
 pub async fn add(
     State(state): State<AppState>,
-    _admin: CurrentAdmin,
+    admin: CurrentAdmin,
     Json(input): Json<Grant>,
 ) -> AppResult<Json<Member>> {
+    admin.browser_only()?;
     let permissions = clean(&input.role, input.permissions)?;
     let email = input.email.trim();
     if email.is_empty() {
         return Err(AppError::field("email", "Vul een e-mailadres in."));
     }
-    let found: Option<(Uuid, String)> = sqlx::query_as(
-        "SELECT id, role FROM users WHERE email = $1::citext AND deleted_at IS NULL",
+    let found: Option<(Uuid, String, bool)> = sqlx::query_as(
+        "SELECT id, role, email_verified_at IS NOT NULL FROM users WHERE email = $1::citext AND deleted_at IS NULL",
     )
     .bind(email)
     .fetch_optional(&state.db)
     .await?;
-    let (id, role) = found.ok_or_else(|| {
+    let (id, role, verified) = found.ok_or_else(|| {
         AppError::field(
             "email",
             "Er is geen account met dit e-mailadres. Laat diegene eerst zelf een account aanmaken.",
@@ -113,12 +114,25 @@ pub async fn add(
     if role != "customer" {
         return Err(AppError::field("email", "Deze persoon zit al in je team."));
     }
-    sqlx::query("UPDATE users SET role = $2, staff_permissions = $3 WHERE id = $1")
-        .bind(id)
-        .bind(&input.role)
-        .bind(&permissions)
-        .execute(&state.db)
-        .await?;
+    if !verified {
+        return Err(AppError::field(
+            "email",
+            "Deze persoon heeft het e-mailadres nog niet bevestigd. Vraag dat eerst te doen.",
+        ));
+    }
+    let updated = sqlx::query(
+        "UPDATE users SET role = $2, staff_permissions = $3
+         WHERE id = $1 AND role = 'customer' AND email_verified_at IS NOT NULL AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .bind(&input.role)
+    .bind(&permissions)
+    .execute(&state.db)
+    .await?
+    .rows_affected();
+    if updated == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(member(&state, id).await?))
 }
 
@@ -128,6 +142,7 @@ pub async fn update(
     Path(id): Path<Uuid>,
     Json(input): Json<Grant>,
 ) -> AppResult<Json<Member>> {
+    admin.browser_only()?;
     if id == admin.id {
         return Err(AppError::field(
             "role",
@@ -156,6 +171,7 @@ pub async fn remove(
     admin: CurrentAdmin,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Member>> {
+    admin.browser_only()?;
     if id == admin.id {
         return Err(AppError::field(
             "role",

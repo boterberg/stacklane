@@ -2827,6 +2827,16 @@ async fn staff_only_reach_the_parts_they_were_given(db: PgPool) {
         )
         .await;
     assert_eq!(empty.status, StatusCode::UNPROCESSABLE_ENTITY);
+    let unverified = client
+        .send(
+            Method::POST,
+            "/admin/staff",
+            Some(&admin_cookie),
+            Some(json!({ "email": "team-support@example.test", "role": "staff", "permissions": ["support"] })),
+        )
+        .await;
+    assert_eq!(unverified.status, StatusCode::UNPROCESSABLE_ENTITY);
+    crate::testing::verify(&client, &[helper]).await;
     let added = client
         .send(
             Method::POST,
@@ -3293,4 +3303,63 @@ async fn plugins_install_only_from_modrinth_into_the_right_folder(db: PgPool) {
             .iter()
             .any(|call| call.contains("/files/delete") && call.contains("LuckPerms.jar"))
     );
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn an_admin_token_cannot_change_the_team(db: PgPool) {
+    use crate::testing::{make_admin, verify};
+    let client = Client::new(db);
+    let (admin, admin_cookie) = client.register("team-token-eigenaar@example.test").await;
+    let (helper, _) = client.register("team-token-hulp@example.test").await;
+    make_admin(&client.state, admin).await;
+    verify(&client, &[helper]).await;
+    let created = client
+        .send(
+            Method::POST,
+            "/account/api-tokens",
+            Some(&admin_cookie),
+            Some(json!({ "name": "script", "scopes": ["admin:write"], "expires_in_days": null })),
+        )
+        .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    let bearer = format!("Bearer {}", created.body["secret"].as_str().unwrap());
+    let grant = json!({ "email": "team-token-hulp@example.test", "role": "admin" });
+    let by_token = client
+        .send_with(
+            Method::POST,
+            "/admin/staff",
+            None,
+            Some(grant.clone()),
+            &[("authorization", &bearer)],
+        )
+        .await;
+    assert_eq!(by_token.status, StatusCode::FORBIDDEN);
+    let added = client
+        .send(
+            Method::POST,
+            "/admin/staff",
+            Some(&admin_cookie),
+            Some(grant),
+        )
+        .await;
+    assert_eq!(added.status, StatusCode::OK, "{}", added.body);
+    for method in [Method::PUT, Method::DELETE] {
+        let reply = client
+            .send_with(
+                method.clone(),
+                &format!("/admin/staff/{helper}"),
+                None,
+                Some(json!({ "role": "staff", "permissions": ["support"] })),
+                &[("authorization", &bearer)],
+            )
+            .await;
+        assert_eq!(reply.status, StatusCode::FORBIDDEN, "{method}");
+    }
+    let role: String = sqlx::query_scalar("SELECT role FROM users WHERE id = $1")
+        .bind(helper)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(role, "admin");
 }

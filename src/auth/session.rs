@@ -166,6 +166,16 @@ async fn from_api_token(
 
 pub struct CurrentAdmin {
     pub id: Uuid,
+    pub via_api_token: bool,
+}
+
+impl CurrentAdmin {
+    pub fn browser_only(&self) -> Result<(), AppError> {
+        if self.via_api_token {
+            return Err(AppError::Forbidden);
+        }
+        Ok(())
+    }
 }
 
 pub const PERMISSIONS: [&str; 4] = ["support", "billing", "customers", "services"];
@@ -253,6 +263,9 @@ impl FromRequestParts<AppState> for CurrentAdmin {
         if !is_admin {
             return Err(AppError::Forbidden);
         }
-        Ok(Self { id: user.id })
+        Ok(Self {
+            id: user.id,
+            via_api_token: user.via_api_token,
+        })
     }
 }
