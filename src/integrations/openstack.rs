@@ -88,6 +88,7 @@ pub struct OpenStack {
 const COMPUTE_VERSION: &str = "compute 2.47";
 const VOLUME_VERSION: &str = "volume 3.42";
 const RESCUE_VERSION: &str = "compute 2.87";
+const REBUILD_VERSION: &str = "compute 2.57";
 
 fn error_message(body: &Value) -> Option<String> {
     let nested = body
@@ -458,6 +459,38 @@ impl OpenStack {
             .as_str()
             .context("OpenStack gaf geen server-ID terug")?
             .to_owned())
+    }
+
+    pub async fn rebuild(
+        &self,
+        id: &str,
+        image_id: &str,
+        hostname: &str,
+        password: &str,
+        ssh_keys: &[String],
+    ) -> anyhow::Result<()> {
+        let user_data = STANDARD.encode(cloud_config(hostname, password, ssh_keys));
+        let (status, body) = self
+            .send_as(
+                Service::Compute,
+                REBUILD_VERSION,
+                Method::POST,
+                &format!("/servers/{id}/action"),
+                Some(json!({ "rebuild": {
+                    "imageRef": image_id,
+                    "adminPass": password,
+                    "user_data": user_data,
+                } })),
+            )
+            .await?;
+        if !status.is_success() {
+            bail!(
+                "OpenStack antwoordde {status}: {}",
+                error_message(&body).unwrap_or_else(|| "onbekende fout".to_owned())
+            );
+        }
+        self.wait_until_active(id).await?;
+        Ok(())
     }
 
     pub async fn status(&self, id: &str) -> anyhow::Result<Status> {
