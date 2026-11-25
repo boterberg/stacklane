@@ -40,9 +40,7 @@ const sources = [
 ]
 
 const roadmap = [
-  { icon: 'server', title: 'Meer VPS', text: 'Servers, volumes en snapshots op OpenStack en VirtFusion' },
-  { icon: 'globe', title: 'Domeinen', text: 'Registreren, DNS-records en nameservers via Openprovider' },
-  { icon: 'app-window', title: 'cPanel', text: 'Webhosting op cPanel & WHM, naast DirectAdmin en Plesk' },
+  { icon: 'globe', title: 'DNS-beheer', text: 'Records van je domeinen bewerken in het panel, met PowerDNS' },
   { icon: 'receipt-text', title: 'Meer facturatie', text: 'Pro rata bij upgrades en mislukte betalingen opnieuw proberen' },
 ]
 </script>

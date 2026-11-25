@@ -102,6 +102,15 @@ export function InvoiceSpecification({ invoice, company }: { invoice: InvoiceDet
           <dt className="text-zinc-500 dark:text-white/70">{t('Waarvan btw ({rate}%)', { rate: taxRate })}</dt>
           <dd className="text-zinc-500 dark:text-white/70">{formatEuro(invoice.tax_cents)}</dd>
         </dl>
+        {invoice.vat_scheme !== 'domestic' && (
+          <p className="mt-6 text-sm text-zinc-500 dark:text-white/70">
+            {invoice.vat_scheme === 'reverse_charge'
+              ? t('Btw verlegd naar de afnemer (artikel 196 Btw-richtlijn). Btw-nummer afnemer: {number}.', { number: invoice.customer_vat_number ?? '-' })
+              : invoice.vat_scheme === 'outside_eu'
+                ? t('Dienst aan een afnemer buiten de EU, geen EU-btw in rekening gebracht.')
+                : t('Btw tegen het tarief van {country} (OSS-regeling).', { country: invoice.vat_country ?? '-' })}
+          </p>
+        )}
       </div>
       {company?.name && (
         <div className="px-6 py-4 text-center text-xs text-zinc-500 dark:text-white/60">

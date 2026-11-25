@@ -1,7 +1,16 @@
+pub mod cpanel;
 pub mod directadmin;
+pub mod floating_ips;
+pub mod isos;
+pub mod networks;
+pub mod openprovider;
+pub mod openstack;
 pub mod plesk;
+pub mod powerdns;
 pub mod proxmox;
 pub mod pterodactyl;
+pub mod virtfusion;
+pub mod volumes;
 pub mod vps;
 pub mod webhosting;
 
@@ -14,13 +23,16 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
-pub const KINDS: [&str; 6] = [
+pub const KINDS: [&str; 9] = [
     "pterodactyl",
     "proxmox",
     "openstack",
     "virtfusion",
     "directadmin",
     "plesk",
+    "openprovider",
+    "cpanel",
+    "powerdns",
 ];
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -42,6 +54,11 @@ pub enum Driver {
     Proxmox(proxmox::Proxmox),
     DirectAdmin(directadmin::DirectAdmin),
     Plesk(plesk::Plesk),
+    Cpanel(cpanel::Cpanel),
+    OpenStack(openstack::OpenStack),
+    VirtFusion(virtfusion::VirtFusion),
+    Openprovider(openprovider::Openprovider),
+    PowerDns(powerdns::PowerDns),
 }
 
 fn wrong_kind() -> AppError {
@@ -69,19 +86,17 @@ impl Driver {
         }
     }
 
-    pub fn proxmox(&self) -> AppResult<&proxmox::Proxmox> {
-        match self {
-            Self::Proxmox(client) => Ok(client),
-            _ => Err(wrong_kind()),
-        }
-    }
-
     pub async fn test(&self) -> anyhow::Result<String> {
         match self {
             Self::Pterodactyl(client) => client.test().await,
             Self::Proxmox(client) => client.test().await,
             Self::DirectAdmin(client) => client.test().await,
             Self::Plesk(client) => client.test().await,
+            Self::Cpanel(client) => client.test().await,
+            Self::OpenStack(client) => client.test().await,
+            Self::VirtFusion(client) => client.test().await,
+            Self::Openprovider(client) => client.test().await,
+            Self::PowerDns(client) => client.test().await,
         }
     }
 
@@ -91,6 +106,10 @@ impl Driver {
             Self::Proxmox(client) => client.suspend(vmid(external_id)?).await,
             Self::DirectAdmin(client) => client.suspend(external_id).await,
             Self::Plesk(client) => client.suspend(webhosting::plesk_parts(external_id).1).await,
+            Self::Cpanel(client) => client.suspend(external_id).await,
+            Self::OpenStack(client) => client.suspend(external_id).await,
+            Self::VirtFusion(client) => client.suspend(external_id).await,
+            Self::Openprovider(_) | Self::PowerDns(_) => Ok(()),
         }
     }
 
@@ -104,6 +123,10 @@ impl Driver {
                     .unsuspend(webhosting::plesk_parts(external_id).1)
                     .await
             }
+            Self::Cpanel(client) => client.unsuspend(external_id).await,
+            Self::OpenStack(client) => client.unsuspend(external_id).await,
+            Self::VirtFusion(client) => client.unsuspend(external_id).await,
+            Self::Openprovider(_) | Self::PowerDns(_) => Ok(()),
         }
     }
 
@@ -116,6 +139,10 @@ impl Driver {
                 let (username, domain) = webhosting::plesk_parts(external_id);
                 client.terminate(domain, username).await
             }
+            Self::Cpanel(client) => client.terminate(external_id).await,
+            Self::OpenStack(client) => client.destroy(external_id).await,
+            Self::VirtFusion(client) => client.destroy(external_id).await,
+            Self::Openprovider(_) | Self::PowerDns(_) => Ok(()),
         }
     }
 }
@@ -159,12 +186,61 @@ pub fn build(kind: &str, base_url: &str, credentials: &[u8], settings: Value) ->
                 settings,
             )?))
         }
+        "cpanel" => {
+            let credentials =
+                serde_json::from_slice(credentials).context("ongeldige WHM-gegevens")?;
+            Ok(Driver::Cpanel(cpanel::Cpanel::new(base_url, credentials)?))
+        }
         "plesk" => {
             let credentials =
                 serde_json::from_slice(credentials).context("ongeldige Plesk-gegevens")?;
             let settings =
                 serde_json::from_value(settings).context("ongeldige Plesk-instellingen")?;
             Ok(Driver::Plesk(plesk::Plesk::new(
+                base_url,
+                credentials,
+                settings,
+            )?))
+        }
+        "openstack" => {
+            let credentials =
+                serde_json::from_slice(credentials).context("ongeldige OpenStack-sleutels")?;
+            let settings =
+                serde_json::from_value(settings).context("ongeldige OpenStack-instellingen")?;
+            Ok(Driver::OpenStack(openstack::OpenStack::new(
+                base_url,
+                credentials,
+                settings,
+            )?))
+        }
+        "openprovider" => {
+            let credentials =
+                serde_json::from_slice(credentials).context("ongeldige Openprovider-gegevens")?;
+            let settings =
+                serde_json::from_value(settings).context("ongeldige Openprovider-instellingen")?;
+            Ok(Driver::Openprovider(openprovider::Openprovider::new(
+                base_url,
+                credentials,
+                settings,
+            )?))
+        }
+        "virtfusion" => {
+            let credentials =
+                serde_json::from_slice(credentials).context("ongeldige VirtFusion-sleutel")?;
+            let settings =
+                serde_json::from_value(settings).context("ongeldige VirtFusion-instellingen")?;
+            Ok(Driver::VirtFusion(virtfusion::VirtFusion::new(
+                base_url,
+                credentials,
+                settings,
+            )?))
+        }
+        "powerdns" => {
+            let credentials =
+                serde_json::from_slice(credentials).context("ongeldige PowerDNS-sleutel")?;
+            let settings =
+                serde_json::from_value(settings).context("ongeldige PowerDNS-instellingen")?;
+            Ok(Driver::PowerDns(powerdns::PowerDns::new(
                 base_url,
                 credentials,
                 settings,

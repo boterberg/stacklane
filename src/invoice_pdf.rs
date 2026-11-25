@@ -345,11 +345,34 @@ pub fn render_invoice(invoice: &InvoiceDetail, company: &Company, locale: Locale
         }),
         _ => None,
     };
-    if let Some(note) = note {
-        for (index, line) in wrap(&note, RIGHT - LEFT, 9.5, Font::Regular)
-            .iter()
-            .enumerate()
-        {
+    let vat_note = match (invoice.vat_scheme.as_str(), locale) {
+        ("reverse_charge", Locale::Nl) => Some(format!(
+            "Btw verlegd naar de afnemer (artikel 196 Btw-richtlijn). Btw-nummer afnemer: {}.",
+            invoice.customer_vat_number.as_deref().unwrap_or("-")
+        )),
+        ("reverse_charge", Locale::En) => Some(format!(
+            "VAT reverse charged to the customer (Article 196 VAT Directive). Customer VAT number: {}.",
+            invoice.customer_vat_number.as_deref().unwrap_or("-")
+        )),
+        ("outside_eu", Locale::Nl) => Some(
+            "Dienst aan een afnemer buiten de EU, geen EU-btw in rekening gebracht.".to_owned(),
+        ),
+        ("outside_eu", Locale::En) => {
+            Some("Service to a customer outside the EU, no EU VAT charged.".to_owned())
+        }
+        ("oss", Locale::Nl) => Some(format!(
+            "Btw tegen het tarief van {} (OSS-regeling).",
+            invoice.vat_country.as_deref().unwrap_or("-")
+        )),
+        ("oss", Locale::En) => Some(format!(
+            "VAT at the {} rate (OSS scheme).",
+            invoice.vat_country.as_deref().unwrap_or("-")
+        )),
+        _ => None,
+    };
+    for note in [note, vat_note].into_iter().flatten() {
+        let lines = wrap(&note, RIGHT - LEFT, 9.5, Font::Regular);
+        for (index, line) in lines.iter().enumerate() {
             page.text(
                 LEFT,
                 y + index as f32 * 13.0,
@@ -359,6 +382,7 @@ pub fn render_invoice(invoice: &InvoiceDetail, company: &Company, locale: Locale
                 line,
             );
         }
+        y += lines.len() as f32 * 13.0 + 6.0;
     }
 
     let footer: Vec<String> = [

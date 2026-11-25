@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::auth::{self, CurrentUser};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
+use crate::vat;
 
 use super::auth::looks_like_email;
 use super::security::check_password;
@@ -28,6 +29,8 @@ pub struct AccountDetails {
     address_line2: Option<String>,
     postal_code: Option<String>,
     city: Option<String>,
+    #[serde(default, skip_deserializing)]
+    tax_id_verified: bool,
     #[serde(default, skip_serializing)]
     #[sqlx(default)]
     current_password: Option<String>,
@@ -63,7 +66,8 @@ fn tidy(value: Option<String>) -> Option<String> {
 async fn load(state: &AppState, user_id: Uuid) -> AppResult<AccountDetails> {
     Ok(sqlx::query_as(
         "SELECT first_name, last_name, email::text AS email, invoice_email::text AS invoice_email, phone, is_business,
-                company_name, coc_number, tax_id, country::text AS country, address_line1, address_line2, postal_code, city
+                company_name, coc_number, tax_id, country::text AS country, address_line1, address_line2, postal_code, city,
+                tax_id_verified_at IS NOT NULL AS tax_id_verified
          FROM users WHERE id = $1",
     )
     .bind(user_id)
@@ -115,6 +119,31 @@ pub async fn update(
         return Err(AppError::field("country", "Kies een land."));
     }
     let company_name = tidy(input.company_name);
+    for (field, value) in [
+        ("first_name", Some(first_name)),
+        ("last_name", Some(input.last_name.as_str())),
+        ("company_name", company_name.as_deref()),
+    ] {
+        if value.is_some_and(|value| value.chars().count() > 100) {
+            return Err(AppError::field(field, "Gebruik hoogstens 100 tekens."));
+        }
+    }
+    for (field, value, max) in [
+        ("phone", input.phone.as_deref(), 32),
+        ("coc_number", input.coc_number.as_deref(), 32),
+        ("tax_id", input.tax_id.as_deref(), 20),
+        ("address_line1", input.address_line1.as_deref(), 200),
+        ("address_line2", input.address_line2.as_deref(), 200),
+        ("postal_code", input.postal_code.as_deref(), 20),
+        ("city", input.city.as_deref(), 100),
+    ] {
+        if value.is_some_and(|value| value.trim().chars().count() > max) {
+            return Err(AppError::field(
+                field,
+                format!("Gebruik hoogstens {max} tekens."),
+            ));
+        }
+    }
     if input.is_business && company_name.is_none() {
         return Err(AppError::field(
             "company_name",
@@ -128,6 +157,7 @@ pub async fn update(
             .await?;
     let changing = current_email != email;
     if changing {
+        super::email_verification::refuse_if_just_mailed(&state, user.id, &email).await?;
         if state.config.demo_mode {
             return Err(AppError::field(
                 "email",
@@ -158,10 +188,52 @@ pub async fn update(
                 .await?;
         }
     }
+    let tax_id = tidy(input.tax_id)
+        .filter(|_| input.is_business)
+        .map(|value| value.to_uppercase());
+    let previous: (Option<String>, String, bool) = sqlx::query_as(
+        "SELECT tax_id, country::text, tax_id_verified_at IS NOT NULL FROM users WHERE id = $1",
+    )
+    .bind(user.id)
+    .fetch_one(&state.db)
+    .await?;
+    let unchanged = previous.0 == tax_id && previous.1 == country;
+    let verified = match tax_id
+        .as_deref()
+        .and_then(|value| vat::split_vat_number(value, &country))
+    {
+        None if tax_id.is_some() => {
+            return Err(AppError::field(
+                "tax_id",
+                "Vul een btw-nummer uit de EU in, zoals NL123456789B01.",
+            ));
+        }
+        None => false,
+        Some(_) if unchanged && previous.2 => true,
+        Some((code, number)) => {
+            state
+                .limits
+                .check(&crate::limits::VAT_CHECK, &user.id.to_string())?;
+            match vat::check_vies(&code, &number).await {
+                Ok(true) => true,
+                Ok(false) => {
+                    return Err(AppError::field(
+                        "tax_id",
+                        "Dit btw-nummer is niet geldig volgens VIES.",
+                    ));
+                }
+                Err(error) => {
+                    tracing::warn!(error = %format!("{error:#}"), "checking a VAT number failed");
+                    false
+                }
+            }
+        }
+    };
     sqlx::query(
         "UPDATE users SET first_name = $2, last_name = $3, email = $4, invoice_email = $5, phone = $6, is_business = $7,
                 company_name = $8, coc_number = $9, tax_id = $10, country = $11, address_line1 = $12, address_line2 = $13,
-                postal_code = $14, city = $15, updated_at = now()
+                postal_code = $14, city = $15,
+                tax_id_verified_at = CASE WHEN $16 THEN COALESCE(tax_id_verified_at, now()) END, updated_at = now()
          WHERE id = $1",
     )
     .bind(user.id)
@@ -173,12 +245,13 @@ pub async fn update(
     .bind(input.is_business)
     .bind(company_name.filter(|_| input.is_business))
     .bind(tidy(input.coc_number).filter(|_| input.is_business))
-    .bind(tidy(input.tax_id).filter(|_| input.is_business))
+    .bind(&tax_id)
     .bind(&country)
     .bind(tidy(input.address_line1))
     .bind(tidy(input.address_line2))
     .bind(tidy(input.postal_code).map(|value| value.to_uppercase()))
     .bind(tidy(input.city))
+    .bind(verified)
     .execute(&state.db)
     .await?;
     if changing {
@@ -264,10 +337,12 @@ pub async fn destroy(
         ));
     }
     check_password(&state, &user, &input.password, "password").await?;
-    let (running, unpaid): (bool, bool) = sqlx::query_as(
+    let (running, unpaid, services, networks): (bool, bool, bool, bool) = sqlx::query_as(
         "SELECT
             EXISTS (SELECT 1 FROM subscriptions WHERE user_id = $1 AND status IN ('active', 'pending', 'suspended') AND cancelled_at IS NULL),
-            EXISTS (SELECT 1 FROM invoices WHERE user_id = $1 AND status = 'open')",
+            EXISTS (SELECT 1 FROM invoices WHERE user_id = $1 AND status = 'open'),
+            EXISTS (SELECT 1 FROM services WHERE user_id = $1 AND status NOT IN ('terminated', 'failed')),
+            EXISTS (SELECT 1 FROM vps_networks WHERE user_id = $1)",
     )
     .bind(user.id)
     .fetch_one(&state.db)
@@ -276,6 +351,18 @@ pub async fn destroy(
         return Err(AppError::field(
             "password",
             "Zeg eerst je abonnementen op en betaal je openstaande facturen.",
+        ));
+    }
+    if services {
+        return Err(AppError::field(
+            "password",
+            "Er draaien nog diensten op je account. Wacht tot ze beëindigd zijn of vraag ons ze te stoppen.",
+        ));
+    }
+    if networks {
+        return Err(AppError::field(
+            "password",
+            "Verwijder eerst je privénetwerken onder VPS, Netwerken.",
         ));
     }
 
@@ -297,12 +384,20 @@ pub async fn destroy(
     .bind(user.id)
     .execute(&mut *transaction)
     .await?;
+    sqlx::query("DELETE FROM vps_members WHERE owner_id = $1 OR user_id = $1")
+        .bind(user.id)
+        .execute(&mut *transaction)
+        .await?;
     for table in [
         "sessions",
         "api_tokens",
         "notifications",
         "recovery_codes",
         "password_resets",
+        "email_verifications",
+        "whois_profiles",
+        "ssh_keys",
+        "vps_firewalls",
     ] {
         sqlx::query(sqlx::AssertSqlSafe(format!(
             "DELETE FROM {table} WHERE user_id = $1"

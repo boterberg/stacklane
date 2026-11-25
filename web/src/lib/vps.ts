@@ -5,6 +5,8 @@ import { api } from './api'
 export type VpsStatus = 'pending' | 'provisioning' | 'active' | 'suspended' | 'failed'
 
 export type VpsDetails = {
+  rebuilding?: boolean
+  rescue?: boolean
   hostname?: string
   ipv4?: string
   image?: string
@@ -25,7 +27,9 @@ export type VpsServer = {
   created_at: string
 }
 
-export type LiveStatus = { state: string; cpu: number; cpus: number; memory: number; max_memory: number; uptime: number }
+export type LiveStatus = { state: string; cpu: number | null; cpus: number; memory: number | null; max_memory: number; uptime: number | null }
+
+export type Features = { snapshots: boolean; firewall: boolean; volumes: boolean; floating_ips: boolean; networks: boolean; rebuild: boolean; graphs: boolean; rescue: boolean; panel: boolean }
 
 export type Snapshot = { name: string; description: string; created_at: number | null }
 
@@ -39,7 +43,7 @@ export type ShopProduct = {
   description: string | null
   specs: { cores?: number; memory_mb?: number; disk_gb?: number }
   monthly_price_cents: number
-  images: Array<{ id: number; name: string }>
+  images: Array<{ id: string; name: string }>
 }
 
 export function useVpsServers() {
@@ -54,7 +58,7 @@ export function useVpsServers() {
 export function useVpsServer(id: string) {
   return useQuery({
     queryKey: ['vps', 'server', id],
-    queryFn: () => api<VpsServer & { live: LiveStatus | null }>(`/vps/servers/${id}`),
+    queryFn: () => api<VpsServer & { live: LiveStatus | null; features: Features | null }>(`/vps/servers/${id}`),
     refetchInterval: (query) => (query.state.data?.status === 'active' ? 10_000 : 5000),
   })
 }
@@ -71,15 +75,19 @@ export function useRootPassword(id: string) {
   return useMutation({ mutationFn: () => api<{ password: string | null }>(`/vps/servers/${id}/password`) })
 }
 
+export function usePanelLogin(id: string) {
+  return useMutation({ mutationFn: () => api<{ url: string }>(`/vps/servers/${id}/panel`, { method: 'POST' }) })
+}
+
 export function useSnapshots(id: string, enabled: boolean) {
   return useQuery({ queryKey: ['vps', 'snapshots', id], queryFn: () => api<Snapshot[]>(`/vps/servers/${id}/snapshots`), enabled })
 }
 
-function useServerMutation<TInput>(id: string, key: string, request: (input: TInput) => Promise<void>) {
+function useServerMutation<TInput>(_id: string, key: string, request: (input: TInput) => Promise<void>) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: request,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['vps', key, id] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['vps', key] }),
   })
 }
 
@@ -131,7 +139,7 @@ export function useShopProducts(kind: string) {
   return useQuery({ queryKey: ['shop', kind], queryFn: () => api<ShopProduct[]>(`/shop/products?kind=${kind}`) })
 }
 
-export type NewOrder = { product_id: string; billing_interval: string; name: string; image: number | null; ssh_key_ids: string[] }
+export type NewOrder = { product_id: string; billing_interval: string; name: string; image: string | null; ssh_key_ids: string[] }
 
 export function usePlaceOrder() {
   const queryClient = useQueryClient()
@@ -148,4 +156,23 @@ export function usePlaceOrder() {
 export function specsLine(specs: { cores?: number; memory_mb?: number; disk_gb?: number }) {
   const memory = specs.memory_mb ? (specs.memory_mb >= 1024 ? `${specs.memory_mb / 1024} GB` : `${specs.memory_mb} MB`) : null
   return [specs.cores ? `${specs.cores} vCPU` : null, memory ? `${memory} RAM` : null, specs.disk_gb ? `${specs.disk_gb} GB SSD` : null].filter(Boolean).join(' · ')
+}
+
+export type ServerSnapshot = Snapshot & { server_id: string; server_name: string }
+
+export function useAllSnapshots() {
+  return useQuery({ queryKey: ['vps', 'snapshots'], queryFn: () => api<{ snapshots: ServerSnapshot[]; used: number; limit: number }>('/vps/snapshots') })
+}
+
+export function useSnapshotAction() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ serverId, action, name, description }: { serverId: string; action: 'create' | 'rollback' | 'delete'; name?: string; description?: string }) =>
+      action === 'create'
+        ? api<void>(`/vps/servers/${serverId}/snapshots`, { method: 'POST', body: { description } })
+        : action === 'rollback'
+          ? api<void>(`/vps/servers/${serverId}/snapshots/${name}/rollback`, { method: 'POST' })
+          : api<void>(`/vps/servers/${serverId}/snapshots/${name}`, { method: 'DELETE' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['vps', 'snapshots'] }),
+  })
 }

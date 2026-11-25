@@ -6,6 +6,7 @@ use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+use super::vps_access::VpsActor;
 use crate::auth::CurrentUser;
 use crate::error::{AppError, AppResult};
 use crate::integrations::{self, vps};
@@ -33,6 +34,7 @@ pub struct ServerDetail {
     #[serde(flatten)]
     server: Server,
     live: Option<vps::Status>,
+    features: Option<vps::Features>,
 }
 
 const SELECT: &str = "SELECT s.id, s.name, s.status, s.details - 'root_password' - 'ssh_key_ids' AS details, s.last_error,
@@ -42,37 +44,78 @@ const SELECT: &str = "SELECT s.id, s.name, s.status, s.details - 'root_password'
      LEFT JOIN subscriptions sub ON sub.id = s.subscription_id
      WHERE s.kind = 'vps' AND s.status <> 'terminated' AND s.user_id = $1";
 
-async fn load(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<Server> {
+async fn load(state: &AppState, owner: Uuid, id: Uuid) -> AppResult<Server> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!("{SELECT} AND s.id = $2")))
-        .bind(user.id)
+        .bind(owner)
         .bind(id)
         .fetch_optional(&state.db)
         .await?
         .ok_or(AppError::NotFound)
 }
 
-async fn machine(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<vps::Machine> {
-    let (integration_id, external_id, status): (Option<Uuid>, Option<String>, String) = sqlx::query_as(
-        "SELECT integration_id, external_id, status FROM services WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
+fn upstream_budget(state: &AppState, owner: Uuid) -> AppResult<()> {
+    state
+        .limits
+        .check(&crate::limits::VPS_UPSTREAM, &owner.to_string())
+}
+
+async fn machine(state: &AppState, owner: Uuid, id: Uuid) -> AppResult<vps::Machine> {
+    machine_of(state, owner, id).await
+}
+
+pub(crate) async fn machine_of(
+    state: &AppState,
+    user_id: Uuid,
+    id: Uuid,
+) -> AppResult<vps::Machine> {
+    connect(state, user_id, id, false).await
+}
+
+async fn connect(
+    state: &AppState,
+    user_id: Uuid,
+    id: Uuid,
+    while_rebuilding: bool,
+) -> AppResult<vps::Machine> {
+    let (integration_id, external_id, status, rebuilding): (
+        Option<Uuid>,
+        Option<String>,
+        String,
+        bool,
+    ) = sqlx::query_as(
+        "SELECT integration_id, external_id, status, details ? 'rebuilding' FROM services
+         WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
     )
     .bind(id)
-    .bind(user.id)
+    .bind(user_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or(AppError::NotFound)?;
+    if rebuilding && !while_rebuilding {
+        return Err(AppError::field(
+            "server",
+            "Deze server wordt herbouwd. Wacht tot dat klaar is.",
+        ));
+    }
     if status != "active" {
         return Err(AppError::field(
             "server",
             "Deze server is nu niet beschikbaar.",
         ));
     }
-    let (Some(integration_id), Some(vmid)) =
-        (integration_id, external_id.and_then(|id| id.parse().ok()))
-    else {
-        return Err(AppError::field("server", "Deze server is nog niet klaar."));
+    let not_ready = || AppError::field("server", "Deze server is nog niet klaar.");
+    let (Some(integration_id), Some(external_id)) = (integration_id, external_id) else {
+        return Err(not_ready());
     };
     match integrations::driver(state, integration_id).await? {
-        integrations::Driver::Proxmox(client) => Ok(vps::Machine::Proxmox(client, vmid)),
+        integrations::Driver::Proxmox(client) => Ok(vps::Machine::Proxmox(
+            client,
+            external_id.parse().map_err(|_| not_ready())?,
+        )),
+        integrations::Driver::OpenStack(client) => Ok(vps::Machine::OpenStack(client, external_id)),
+        integrations::Driver::VirtFusion(client) => {
+            Ok(vps::Machine::VirtFusion(client, external_id))
+        }
         _ => Err(AppError::NotFound),
     }
 }
@@ -81,15 +124,13 @@ fn failed(error: anyhow::Error) -> AppError {
     AppError::upstream("server", error)
 }
 
-pub async fn index(
-    State(state): State<AppState>,
-    user: CurrentUser,
-) -> AppResult<Json<Vec<Server>>> {
+pub async fn index(State(state): State<AppState>, actor: VpsActor) -> AppResult<Json<Vec<Server>>> {
+    actor.require("servers.view")?;
     Ok(Json(
         sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "{SELECT} ORDER BY s.created_at DESC"
         )))
-        .bind(user.id)
+        .bind(actor.owner)
         .fetch_all(&state.db)
         .await?,
     ))
@@ -97,15 +138,21 @@ pub async fn index(
 
 pub async fn show(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<ServerDetail>> {
-    let server = load(&state, &user, id).await?;
-    let live = match machine(&state, &user, id).await {
-        Ok(machine) => machine.status().await.ok(),
-        Err(_) => None,
+    actor.require("servers.view")?;
+    upstream_budget(&state, actor.owner)?;
+    let server = load(&state, actor.owner, id).await?;
+    let (live, features) = match connect(&state, actor.owner, id, true).await {
+        Ok(machine) => (machine.status().await.ok(), Some(machine.features())),
+        Err(_) => (None, None),
     };
-    Ok(Json(ServerDetail { server, live }))
+    Ok(Json(ServerDetail {
+        server,
+        live,
+        features,
+    }))
 }
 
 #[derive(Deserialize)]
@@ -115,7 +162,7 @@ pub struct Power {
 
 pub async fn power(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
     Json(input): Json<Power>,
 ) -> AppResult<StatusCode> {
@@ -125,9 +172,200 @@ pub async fn power(
     ) {
         return Err(AppError::field("action", "Onbekende actie."));
     }
-    let machine = machine(&state, &user, id).await?;
+    if input.action != "stop" && input.action != "shutdown" {
+        actor.require("servers.start")?;
+        upstream_budget(&state, actor.owner)?;
+    }
+    if input.action != "start" {
+        actor.require("servers.stop")?;
+    }
+    let machine = machine(&state, actor.owner, id).await?;
     machine.power(&input.action).await.map_err(failed)?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize)]
+pub struct RescuePassword {
+    password: String,
+}
+
+pub async fn enter_rescue(
+    State(state): State<AppState>,
+    actor: VpsActor,
+    Path(id): Path<Uuid>,
+) -> AppResult<(StatusCode, Json<RescuePassword>)> {
+    actor.browser_only()?;
+    actor.require("servers.rescue")?;
+    crate::locks::exclusive(format!("server {id}"), async {
+        let machine = machine(&state, actor.owner, id).await?;
+        if !machine.features().rescue {
+            return Err(AppError::field(
+                "server",
+                "Dit platform heeft geen rescue-modus.",
+            ));
+        }
+        let (rescued, iso): (bool, bool) = sqlx::query_as(
+            "SELECT details ? 'rescue', EXISTS (SELECT 1 FROM vps_isos WHERE mounted_on = $1)
+             FROM services WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_one(&state.db)
+        .await?;
+        if rescued {
+            return Err(AppError::field(
+                "server",
+                "Deze server staat al in rescue-modus.",
+            ));
+        }
+        if iso {
+            return Err(AppError::field(
+                "server",
+                "Koppel eerst de ISO los voordat je rescue-modus inschakelt.",
+            ));
+        }
+        let password = crate::services::root_password();
+        machine.rescue(&password).await.map_err(failed)?;
+        sqlx::query(
+            "UPDATE services SET details = details || '{\"rescue\": true}'::jsonb, updated_at = now() WHERE id = $1",
+        )
+        .bind(id)
+        .execute(&state.db)
+        .await?;
+        Ok((StatusCode::ACCEPTED, Json(RescuePassword { password })))
+    })
+    .await
+}
+
+pub async fn leave_rescue(
+    State(state): State<AppState>,
+    actor: VpsActor,
+    Path(id): Path<Uuid>,
+) -> AppResult<StatusCode> {
+    actor.require("servers.rescue")?;
+    crate::locks::exclusive(format!("server {id}"), async {
+        let machine = machine(&state, actor.owner, id).await?;
+        let rescued: bool =
+            sqlx::query_scalar("SELECT details ? 'rescue' FROM services WHERE id = $1")
+                .bind(id)
+                .fetch_one(&state.db)
+                .await?;
+        if !rescued {
+            return Ok(StatusCode::NO_CONTENT);
+        }
+        machine.unrescue().await.map_err(failed)?;
+        sqlx::query(
+            "UPDATE services SET details = details - 'rescue', updated_at = now() WHERE id = $1",
+        )
+        .bind(id)
+        .execute(&state.db)
+        .await?;
+        Ok(StatusCode::NO_CONTENT)
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub struct GraphQuery {
+    #[serde(default = "default_timeframe")]
+    timeframe: String,
+}
+
+fn default_timeframe() -> String {
+    "hour".to_owned()
+}
+
+pub async fn graphs(
+    State(state): State<AppState>,
+    actor: VpsActor,
+    Path(id): Path<Uuid>,
+    axum::extract::Query(query): axum::extract::Query<GraphQuery>,
+) -> AppResult<Json<Vec<vps::Metric>>> {
+    actor.require("servers.view")?;
+    upstream_budget(&state, actor.owner)?;
+    if !matches!(query.timeframe.as_str(), "hour" | "day" | "week" | "month") {
+        return Err(AppError::field("timeframe", "Kies een periode."));
+    }
+    let machine = connect(&state, actor.owner, id, true).await?;
+    Ok(Json(
+        machine.metrics(&query.timeframe).await.map_err(failed)?,
+    ))
+}
+
+#[derive(Serialize)]
+pub struct ImageChoice {
+    id: String,
+    name: String,
+}
+
+pub async fn images(
+    State(state): State<AppState>,
+    actor: VpsActor,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Vec<ImageChoice>>> {
+    actor.require("servers.rebuild")?;
+    let integration_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT integration_id FROM services WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
+    )
+    .bind(id)
+    .bind(actor.owner)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    let Some(integration_id) = integration_id else {
+        return Ok(Json(Vec::new()));
+    };
+    let choices = match integrations::driver(&state, integration_id).await? {
+        integrations::Driver::Proxmox(client) => client
+            .settings()
+            .images
+            .iter()
+            .map(|image| ImageChoice {
+                id: image.template.to_string(),
+                name: image.name.clone(),
+            })
+            .collect(),
+        integrations::Driver::OpenStack(client) => client
+            .settings()
+            .images
+            .iter()
+            .map(|image| ImageChoice {
+                id: image.id.clone(),
+                name: image.name.clone(),
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    Ok(Json(choices))
+}
+
+#[derive(Deserialize)]
+pub struct RebuildInput {
+    image: String,
+    #[serde(default)]
+    ssh_key_ids: Vec<Uuid>,
+}
+
+pub async fn rebuild(
+    State(state): State<AppState>,
+    actor: VpsActor,
+    Path(id): Path<Uuid>,
+    Json(input): Json<RebuildInput>,
+) -> AppResult<StatusCode> {
+    actor.require("servers.rebuild")?;
+    if !actor.is_owner() && !input.ssh_key_ids.is_empty() {
+        actor.require("ssh_keys.view")?;
+    }
+    crate::services::start_rebuild(
+        &state,
+        id,
+        actor.owner,
+        crate::services::RebuildRequest {
+            image: input.image,
+            ssh_key_ids: input.ssh_key_ids,
+        },
+    )
+    .await?;
+    Ok(StatusCode::ACCEPTED)
 }
 
 #[derive(Serialize)]
@@ -144,7 +382,8 @@ pub async fn root_password(
         return Err(AppError::Forbidden);
     }
     let sealed: Option<String> = sqlx::query_scalar(
-        "SELECT details->>'root_password' FROM services WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
+        "SELECT CASE WHEN status = 'active' THEN details->>'root_password' END
+         FROM services WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
     )
     .bind(id)
     .bind(user.id)
@@ -156,13 +395,93 @@ pub async fn root_password(
     }))
 }
 
-pub async fn snapshots(
+#[derive(Serialize)]
+pub struct PanelLink {
+    url: String,
+}
+
+pub async fn panel_login(
     State(state): State<AppState>,
     user: CurrentUser,
     Path(id): Path<Uuid>,
+) -> AppResult<Json<PanelLink>> {
+    if user.via_api_token {
+        return Err(AppError::Forbidden);
+    }
+    match machine(&state, user.id, id).await? {
+        vps::Machine::VirtFusion(client, server) => Ok(Json(PanelLink {
+            url: client
+                .login_url(&user.id.to_string(), &server)
+                .await
+                .map_err(failed)?,
+        })),
+        _ => Err(AppError::NotFound),
+    }
+}
+
+pub async fn snapshots(
+    State(state): State<AppState>,
+    actor: VpsActor,
+    Path(id): Path<Uuid>,
 ) -> AppResult<Json<Vec<vps::Snapshot>>> {
-    let machine = machine(&state, &user, id).await?;
+    actor.require("snapshots.view")?;
+    upstream_budget(&state, actor.owner)?;
+    let machine = machine(&state, actor.owner, id).await?;
     Ok(Json(machine.snapshots().await.map_err(failed)?))
+}
+
+#[derive(Serialize)]
+pub struct ServerSnapshot {
+    server_id: Uuid,
+    server_name: String,
+    #[serde(flatten)]
+    snapshot: vps::Snapshot,
+}
+
+#[derive(Serialize)]
+pub struct SnapshotOverview {
+    snapshots: Vec<ServerSnapshot>,
+    used: usize,
+    limit: usize,
+}
+
+pub async fn all_snapshots(
+    State(state): State<AppState>,
+    actor: VpsActor,
+) -> AppResult<Json<SnapshotOverview>> {
+    actor.require("snapshots.view")?;
+    upstream_budget(&state, actor.owner)?;
+    let servers: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT id, name FROM services WHERE kind = 'vps' AND status = 'active' AND user_id = $1 ORDER BY name",
+    )
+    .bind(actor.owner)
+    .fetch_all(&state.db)
+    .await?;
+    let mut snapshots = Vec::new();
+    let mut capable = 0;
+    for (server_id, server_name) in &servers {
+        let Ok(machine) = machine(&state, actor.owner, *server_id).await else {
+            continue;
+        };
+        if !machine.features().snapshots {
+            continue;
+        }
+        capable += 1;
+        let Ok(found) = machine.snapshots().await else {
+            continue;
+        };
+        snapshots.extend(found.into_iter().map(|snapshot| ServerSnapshot {
+            server_id: *server_id,
+            server_name: server_name.clone(),
+            snapshot,
+        }));
+    }
+    snapshots.sort_by_key(|item| std::cmp::Reverse(item.snapshot.created_at));
+    Ok(Json(SnapshotOverview {
+        used: snapshots.len(),
+        limit: capable * MAX_SNAPSHOTS,
+        snapshots,
+    }))
 }
 
 #[derive(Deserialize)]
@@ -174,11 +493,22 @@ const MAX_SNAPSHOTS: usize = 3;
 
 pub async fn create_snapshot(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
     Json(input): Json<NewSnapshot>,
 ) -> AppResult<StatusCode> {
-    let machine = machine(&state, &user, id).await?;
+    actor.require("snapshots.create")?;
+    let key = format!("snapshots {id}");
+    crate::locks::exclusive(key, take_snapshot(&state, &actor, id, input)).await
+}
+
+async fn take_snapshot(
+    state: &AppState,
+    actor: &VpsActor,
+    id: Uuid,
+    input: NewSnapshot,
+) -> AppResult<StatusCode> {
+    let machine = machine(state, actor.owner, id).await?;
     if machine.snapshots().await.map_err(failed)?.len() >= MAX_SNAPSHOTS {
         return Err(AppError::field(
             "description",
@@ -212,10 +542,45 @@ fn identifier(name: &str) -> AppResult<&str> {
 
 pub async fn rollback_snapshot(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path((id, name)): Path<(Uuid, String)>,
 ) -> AppResult<StatusCode> {
-    let machine = machine(&state, &user, id).await?;
+    actor.require("servers.restore")?;
+    let machine = machine(&state, actor.owner, id).await?;
+    let held: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM services WHERE kind IN ('volume', 'floating_ip')
+                        AND status = 'suspended' AND details->>'suspended_from' = $1::text)",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await?;
+    if held {
+        return Err(AppError::field(
+            "snapshot",
+            "Er hangt een geblokkeerd volume of IP-adres aan deze server. Terugzetten kan pas als dat weer actief is.",
+        ));
+    }
+    let changed: Option<i64> = sqlx::query_scalar(
+        "SELECT (details->>'networks_changed_at')::bigint FROM services WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await?;
+    if let Some(changed) = changed {
+        let taken = machine
+            .snapshots()
+            .await
+            .map_err(failed)?
+            .into_iter()
+            .find(|snapshot| snapshot.name == name)
+            .and_then(|snapshot| snapshot.created_at);
+        if taken.is_none_or(|taken| taken <= changed) {
+            return Err(AppError::field(
+                "snapshot",
+                "Deze snapshot is van voor je laatste netwerkwijziging. Maak een nieuwe snapshot of koppel het netwerk eerst opnieuw.",
+            ));
+        }
+    }
     machine
         .rollback_snapshot(identifier(&name)?)
         .await
@@ -225,10 +590,11 @@ pub async fn rollback_snapshot(
 
 pub async fn delete_snapshot(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path((id, name)): Path<(Uuid, String)>,
 ) -> AppResult<StatusCode> {
-    let machine = machine(&state, &user, id).await?;
+    actor.require("snapshots.delete")?;
+    let machine = machine(&state, actor.owner, id).await?;
     machine
         .delete_snapshot(identifier(&name)?)
         .await
@@ -238,10 +604,12 @@ pub async fn delete_snapshot(
 
 pub async fn firewall(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Vec<vps::FirewallRule>>> {
-    let machine = machine(&state, &user, id).await?;
+    actor.require("firewalls.view")?;
+    upstream_budget(&state, actor.owner)?;
+    let machine = machine(&state, actor.owner, id).await?;
     Ok(Json(machine.firewall_rules().await.map_err(failed)?))
 }
 
@@ -269,12 +637,7 @@ fn valid_source(source: &str) -> bool {
         && prefix.parse::<u8>().is_ok_and(|prefix| prefix <= 32)
 }
 
-pub async fn add_firewall_rule(
-    State(state): State<AppState>,
-    user: CurrentUser,
-    Path(id): Path<Uuid>,
-    Json(mut rule): Json<vps::FirewallRule>,
-) -> AppResult<StatusCode> {
+pub fn validate_rule(rule: &mut vps::FirewallRule) -> AppResult<()> {
     rule.direction = rule.direction.to_lowercase();
     rule.action = rule.action.to_uppercase();
     if !matches!(rule.direction.as_str(), "in" | "out")
@@ -317,7 +680,36 @@ pub async fn add_firewall_rule(
             "Vul een IPv4-adres of -reeks in, zoals 203.0.113.4 of 10.0.0.0/8.",
         ));
     }
-    let machine = machine(&state, &user, id).await?;
+    Ok(())
+}
+
+pub async fn add_firewall_rule(
+    State(state): State<AppState>,
+    actor: VpsActor,
+    Path(id): Path<Uuid>,
+    Json(mut rule): Json<vps::FirewallRule>,
+) -> AppResult<StatusCode> {
+    actor.require("firewalls.rule_create")?;
+    validate_rule(&mut rule)?;
+    let _guard = crate::locks::service(&state.db, id).await?;
+    let machine = machine(&state, actor.owner, id).await?;
+    if rule.action != "ACCEPT" && !machine.can_block() {
+        return Err(AppError::field(
+            "action",
+            "Op dit platform kun je alleen verkeer toestaan.",
+        ));
+    }
+    if !machine.can_block()
+        && rule
+            .dport
+            .as_deref()
+            .is_some_and(|ports| ports.contains(','))
+    {
+        return Err(AppError::field(
+            "dport",
+            "Op dit platform geef je per regel één poort of reeks op.",
+        ));
+    }
     if machine.firewall_rules().await.map_err(failed)?.len() >= MAX_RULES_PER_SERVER {
         return Err(AppError::field(
             "dport",
@@ -330,10 +722,11 @@ pub async fn add_firewall_rule(
 
 pub async fn delete_firewall_rule(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path((id, rule)): Path<(Uuid, String)>,
 ) -> AppResult<StatusCode> {
-    let machine = machine(&state, &user, id).await?;
+    actor.require("firewalls.rule_delete")?;
+    let machine = machine(&state, actor.owner, id).await?;
     machine
         .delete_firewall_rule(identifier(&rule)?)
         .await
@@ -369,5 +762,84 @@ mod tests {
         assert!(valid_source("10.0.0.0/8"));
         assert!(!valid_source("10.0.0.0/40"));
         assert!(!valid_source("example.com"));
+    }
+}
+
+#[cfg(test)]
+mod rebuilds {
+    use axum::http::{Method, StatusCode};
+    use serde_json::json;
+    use sqlx::PgPool;
+
+    use crate::testing::{Client, NewService, fake_api, proxmox_integration, service};
+
+    fn node(_: &str, _: &str, _: &str) -> (u16, serde_json::Value) {
+        (200, json!({ "data": { "status": "running" } }))
+    }
+
+    #[sqlx::test]
+    #[ignore = "needs DATABASE_URL"]
+    async fn a_server_being_rebuilt_takes_no_other_actions(db: PgPool) {
+        let client = Client::new(db);
+        let (base, _) = fake_api(node).await;
+        let integration = proxmox_integration(&client.state, &base).await;
+        let (user, cookie) = client.register("rebuild@example.test").await;
+        let server = service(
+            &client.state,
+            NewService {
+                user,
+                subscription: None,
+                kind: "vps",
+                status: "active",
+                integration: Some(integration),
+                external_id: Some("710"),
+                details: json!({ "rebuilding": true }),
+            },
+        )
+        .await;
+
+        let power = client
+            .send(
+                Method::POST,
+                &format!("/vps/servers/{server}/power"),
+                Some(&cookie),
+                Some(json!({ "action": "reboot" })),
+            )
+            .await;
+        assert_eq!(power.status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(power.body["errors"]["server"].is_string());
+
+        let again = client
+            .send(
+                Method::POST,
+                &format!("/vps/servers/{server}/rebuild"),
+                Some(&cookie),
+                Some(json!({ "image": "nonexistent" })),
+            )
+            .await;
+        assert_eq!(again.status, StatusCode::UNPROCESSABLE_ENTITY);
+
+        let shown = client
+            .send(
+                Method::GET,
+                &format!("/vps/servers/{server}"),
+                Some(&cookie),
+                None,
+            )
+            .await;
+        assert_eq!(shown.status, StatusCode::OK);
+        assert_eq!(shown.body["details"]["rebuilding"], true);
+        assert_eq!(shown.body["features"]["rebuild"], true);
+
+        let (_, stranger) = client.register("rebuild-other@example.test").await;
+        let foreign = client
+            .send(
+                Method::GET,
+                &format!("/vps/servers/{server}/images"),
+                Some(&stranger),
+                None,
+            )
+            .await;
+        assert_eq!(foreign.status, StatusCode::NOT_FOUND);
     }
 }

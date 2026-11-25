@@ -6,7 +6,7 @@ use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::vps::{FirewallRule, Snapshot, Status};
+use super::vps::{FirewallRule, Metric, Snapshot, Status};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Credentials {
@@ -27,6 +27,8 @@ pub struct Settings {
     pub bridge: String,
     #[serde(default = "default_storage")]
     pub storage: String,
+    #[serde(default = "default_storage")]
+    pub iso_storage: String,
     pub gateway: Ipv4Addr,
     #[serde(default = "default_prefix")]
     pub prefix: u8,
@@ -38,6 +40,20 @@ pub struct Settings {
     pub verify_tls: bool,
     #[serde(default)]
     pub images: Vec<Image>,
+    #[serde(default)]
+    pub private_bridge: Option<String>,
+    #[serde(default = "default_vlan_from")]
+    pub vlan_from: u16,
+    #[serde(default = "default_vlan_to")]
+    pub vlan_to: u16,
+}
+
+fn default_vlan_from() -> u16 {
+    2000
+}
+
+fn default_vlan_to() -> u16 {
+    2999
 }
 
 fn default_verify_tls() -> bool {
@@ -77,6 +93,15 @@ pub struct NewServer<'a> {
     pub description: &'a str,
 }
 
+pub struct Rebuild<'a> {
+    pub vmid: u32,
+    pub scratch: u32,
+    pub template: u32,
+    pub password: &'a str,
+    pub ssh_keys: &'a [String],
+    pub disk_gb: u32,
+}
+
 pub struct Proxmox {
     base_url: String,
     credentials: Credentials,
@@ -94,6 +119,25 @@ fn encode_ssh_keys(keys: &[String]) -> String {
             _ => format!("%{byte:02X}"),
         })
         .collect()
+}
+
+const DISK_PREFIXES: [&str; 5] = ["scsi", "virtio", "sata", "ide", "unused"];
+
+pub fn disk_key(config: &Value, volid: &str) -> Option<String> {
+    config.as_object()?.iter().find_map(|(key, value)| {
+        let is_disk = DISK_PREFIXES.iter().any(|prefix| {
+            key.strip_prefix(prefix)
+                .is_some_and(|rest| !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()))
+        });
+        (is_disk && value.as_str()?.split(',').next()? == volid).then(|| key.clone())
+    })
+}
+
+pub fn free_disk_key(config: &Value) -> anyhow::Result<String> {
+    (1..=30)
+        .map(|index| format!("scsi{index}"))
+        .find(|key| config.get(key).is_none())
+        .context("deze server heeft geen vrije schijfplaats meer")
 }
 
 pub fn ip_range(settings: &Settings) -> impl Iterator<Item = Ipv4Addr> {
@@ -163,12 +207,16 @@ impl Proxmox {
     }
 
     async fn wait_for_task(&self, upid: &str) -> anyhow::Result<()> {
+        self.wait_for_task_up_to(upid, 600).await
+    }
+
+    async fn wait_for_task_up_to(&self, upid: &str, seconds: u32) -> anyhow::Result<()> {
         let path = format!(
             "/nodes/{}/tasks/{}/status",
             self.settings.node,
             upid.replace('!', "%21")
         );
-        for _ in 0..600 {
+        for _ in 0..seconds {
             let task = self.request(Method::GET, &path, None).await?;
             if task["status"] == "stopped" {
                 return match task["exitstatus"].as_str() {
@@ -202,13 +250,21 @@ impl Proxmox {
             .request(Method::GET, "/cluster/firewall/options", None)
             .await
             .unwrap_or_default();
-        let warning = if firewall["enable"].as_i64() == Some(1) {
-            ""
-        } else {
-            ", let op: de firewall van het datacenter staat uit, zet die aan zodat servers elkaars IP-adres niet kunnen overnemen"
-        };
+        let mut warnings = String::new();
+        if firewall["enable"].as_i64() != Some(1) {
+            warnings.push_str(", let op: de firewall van het datacenter staat uit, zet die aan zodat servers elkaars IP-adres niet kunnen overnemen");
+        }
+        if let Some(bridge) = self.private_bridge() {
+            self.request(
+                Method::GET,
+                &format!("/nodes/{}/network/{bridge}", self.settings.node),
+                None,
+            )
+            .await
+            .with_context(|| format!("bridge {bridge} niet gevonden"))?;
+        }
         Ok(format!(
-            "Proxmox VE {}{warning}",
+            "Proxmox VE {}{warnings}",
             version["version"].as_str().unwrap_or("?")
         ))
     }
@@ -303,6 +359,92 @@ impl Proxmox {
         self.power(server.vmid, "start").await
     }
 
+    pub async fn rebuild(&self, rebuild: &Rebuild<'_>) -> anyhow::Result<()> {
+        let vmid = rebuild.vmid;
+        if self
+            .status(vmid)
+            .await
+            .map(|status| status.state == "running")
+            .unwrap_or(false)
+        {
+            self.power(vmid, "stop").await?;
+        }
+        let cloned = self
+            .run(
+                Method::POST,
+                &format!("{}/clone", self.vm_path(rebuild.template)),
+                &[
+                    ("newid", rebuild.scratch.to_string()),
+                    ("name", format!("stacklane-rebuild-{vmid}")),
+                    ("full", "1".to_owned()),
+                    ("storage", self.settings.storage.clone()),
+                ],
+            )
+            .await;
+        let swapped = match cloned {
+            Ok(()) => self.swap_system_disk(rebuild).await,
+            Err(error) => Err(error),
+        };
+        if let Err(error) = self.destroy(rebuild.scratch).await {
+            tracing::warn!(vmid = rebuild.scratch, error = %format!("{error:#}"), "removing the rebuild clone failed");
+        }
+        swapped?;
+        self.power(vmid, "start").await
+    }
+
+    async fn swap_system_disk(&self, rebuild: &Rebuild<'_>) -> anyhow::Result<()> {
+        let vmid = rebuild.vmid;
+        let config = self.config(vmid).await?;
+        let old = config["scsi0"]
+            .as_str()
+            .and_then(|value| value.split(',').next())
+            .context("de server heeft geen systeemschijf")?
+            .to_owned();
+        self.config(rebuild.scratch).await?["scsi0"]
+            .as_str()
+            .context("de nieuwe systeemschijf ontbreekt")?;
+        let path = format!("{}/config", self.vm_path(vmid));
+        self.run(Method::POST, &path, &[("delete", "scsi0".to_owned())])
+            .await?;
+        let moved = self
+            .run(
+                Method::POST,
+                &format!("{}/move_disk", self.vm_path(rebuild.scratch)),
+                &[
+                    ("disk", "scsi0".to_owned()),
+                    ("target-vmid", vmid.to_string()),
+                    ("target-disk", "scsi0".to_owned()),
+                ],
+            )
+            .await;
+        if let Err(error) = moved {
+            self.run(Method::POST, &path, &[("scsi0", old)]).await.ok();
+            return Err(error);
+        }
+        if let Some(unused) = disk_key(&self.config(vmid).await?, &old) {
+            self.run(Method::POST, &path, &[("delete", unused)]).await?;
+        }
+        let mut options = vec![("cipassword", rebuild.password.to_owned())];
+        if rebuild.ssh_keys.is_empty() {
+            if config.get("sshkeys").is_some() {
+                options.push(("delete", "sshkeys".to_owned()));
+            }
+        } else {
+            options.push(("sshkeys", encode_ssh_keys(rebuild.ssh_keys)));
+        }
+        self.request(Method::POST, &path, Some(&options)).await?;
+        self.request(
+            Method::PUT,
+            &format!("{}/resize", self.vm_path(vmid)),
+            Some(&[
+                ("disk", "scsi0".to_owned()),
+                ("size", format!("{}G", rebuild.disk_gb)),
+            ]),
+        )
+        .await?;
+        Ok(())
+    }
+
     pub async fn bind_address(&self, vmid: u32, ipv4: Ipv4Addr) -> anyhow::Result<()> {
         let firewall = format!("{}/firewall", self.vm_path(vmid));
         self.request(
@@ -350,6 +492,113 @@ impl Proxmox {
         Ok(())
     }
 
+    pub fn private_bridge(&self) -> Option<&str> {
+        self.settings
+            .private_bridge
+            .as_deref()
+            .map(str::trim)
+            .filter(|bridge| !bridge.is_empty())
+    }
+
+    pub async fn attach_network(
+        &self,
+        vmid: u32,
+        vlan: u16,
+        address: &str,
+    ) -> anyhow::Result<String> {
+        let bridge = self
+            .private_bridge()
+            .context("er is geen bridge voor privénetwerken ingesteld")?;
+        let path = format!("{}/config", self.vm_path(vmid));
+        let config = self.request(Method::GET, &path, None).await?;
+        let index = (1..=7)
+            .find(|index| config.get(format!("net{index}")).is_none())
+            .context("deze server heeft geen vrije netwerkkaart meer")?;
+        self.run(
+            Method::POST,
+            &path,
+            &[
+                (
+                    &format!("net{index}"),
+                    format!("virtio,bridge={bridge},tag={vlan}"),
+                ),
+                (&format!("ipconfig{index}"), format!("ip={address}")),
+            ],
+        )
+        .await?;
+        Ok(format!("net{index}"))
+    }
+
+    pub async fn detach_network(&self, vmid: u32, port: &str) -> anyhow::Result<()> {
+        let index = port
+            .strip_prefix("net")
+            .filter(|index| matches!(*index, "1" | "2" | "3" | "4" | "5" | "6" | "7"))
+            .context("onbekende netwerkkaart")?;
+        let path = format!("{}/config", self.vm_path(vmid));
+        let config = self.request(Method::GET, &path, None).await?;
+        let present: Vec<String> = [format!("net{index}"), format!("ipconfig{index}")]
+            .into_iter()
+            .filter(|key| config.get(key).is_some())
+            .collect();
+        if present.is_empty() {
+            return Ok(());
+        }
+        self.run(Method::POST, &path, &[("delete", present.join(","))])
+            .await
+    }
+
+    pub async fn unbind_address(&self, vmid: u32, ipv4: Ipv4Addr) -> anyhow::Result<()> {
+        let set = format!("{}/firewall/ipset/ipfilter-net0", self.vm_path(vmid));
+        self.request(Method::DELETE, &format!("{set}/{ipv4}"), None)
+            .await
+            .ok();
+        let listed = self.request(Method::GET, &set, None).await?;
+        anyhow::ensure!(
+            !listed
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|entry| entry["cidr"]
+                    .as_str()
+                    .is_some_and(|cidr| cidr.trim_end_matches("/32") == ipv4.to_string())),
+            "het IP-adres staat nog in het IP-filter van de server"
+        );
+        Ok(())
+    }
+
+    pub async fn metrics(&self, vmid: u32, timeframe: &str) -> anyhow::Result<Vec<Metric>> {
+        if !matches!(timeframe, "hour" | "day" | "week" | "month") {
+            bail!("onbekende periode {timeframe}");
+        }
+        let rows = self
+            .request(
+                Method::GET,
+                &format!(
+                    "{}/rrddata?timeframe={timeframe}&cf=AVERAGE",
+                    self.vm_path(vmid)
+                ),
+                None,
+            )
+            .await?;
+        Ok(rows
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|row| {
+                Some(Metric {
+                    time: row["time"].as_i64()?,
+                    cpu: row["cpu"].as_f64(),
+                    memory: row["mem"].as_f64(),
+                    max_memory: row["maxmem"].as_f64(),
+                    net_in: row["netin"].as_f64(),
+                    net_out: row["netout"].as_f64(),
+                    disk_read: row["diskread"].as_f64(),
+                    disk_write: row["diskwrite"].as_f64(),
+                })
+            })
+            .collect())
+    }
+
     pub async fn status(&self, vmid: u32) -> anyhow::Result<Status> {
         let current = self
             .request(
@@ -360,11 +609,11 @@ impl Proxmox {
             .await?;
         Ok(Status {
             state: current["status"].as_str().unwrap_or("unknown").to_owned(),
-            cpu: current["cpu"].as_f64().unwrap_or(0.0),
+            cpu: current["cpu"].as_f64(),
             cpus: current["cpus"].as_u64().unwrap_or(0),
-            memory: current["mem"].as_u64().unwrap_or(0),
+            memory: current["mem"].as_u64(),
             max_memory: current["maxmem"].as_u64().unwrap_or(0),
-            uptime: current["uptime"].as_u64().unwrap_or(0),
+            uptime: current["uptime"].as_u64(),
         })
     }
 
@@ -427,6 +676,227 @@ impl Proxmox {
             .await?;
         if let Some(upid) = upid.as_str() {
             self.wait_for_task(upid).await?;
+        }
+        Ok(())
+    }
+
+    async fn config(&self, vmid: u32) -> anyhow::Result<Value> {
+        self.request(Method::GET, &format!("{}/config", self.vm_path(vmid)), None)
+            .await
+    }
+
+    pub async fn create_volume(&self, vmid: u32, size_gb: u32) -> anyhow::Result<String> {
+        let key = free_disk_key(&self.config(vmid).await?)?;
+        self.run(
+            Method::POST,
+            &format!("{}/config", self.vm_path(vmid)),
+            &[(&key, format!("{}:{size_gb}", self.settings.storage))],
+        )
+        .await?;
+        let config = self.config(vmid).await?;
+        config[&key]
+            .as_str()
+            .and_then(|value| value.split(',').next())
+            .map(str::to_owned)
+            .context("Proxmox maakte geen schijf aan")
+    }
+
+    async fn unused_key(&self, vmid: u32, volid: &str) -> anyhow::Result<String> {
+        let key = disk_key(&self.config(vmid).await?, volid)
+            .context("de schijf staat niet meer bij deze server")?;
+        if key.starts_with("unused") {
+            return Ok(key);
+        }
+        self.run(
+            Method::POST,
+            &format!("{}/config", self.vm_path(vmid)),
+            &[("delete", key)],
+        )
+        .await?;
+        disk_key(&self.config(vmid).await?, volid)
+            .context("de losgekoppelde schijf is niet gevonden")
+    }
+
+    pub async fn detach_volume(&self, vmid: u32, volid: &str) -> anyhow::Result<()> {
+        self.unused_key(vmid, volid).await.map(|_| ())
+    }
+
+    pub async fn attach_volume(&self, from: u32, volid: &str, to: u32) -> anyhow::Result<String> {
+        let unused = self.unused_key(from, volid).await?;
+        let target = free_disk_key(&self.config(to).await?)?;
+        if from == to {
+            self.run(
+                Method::POST,
+                &format!("{}/config", self.vm_path(to)),
+                &[(&target, volid.to_owned())],
+            )
+            .await?;
+        } else {
+            self.run(
+                Method::POST,
+                &format!("{}/move_disk", self.vm_path(from)),
+                &[
+                    ("disk", unused),
+                    ("target-vmid", to.to_string()),
+                    ("target-disk", target.clone()),
+                ],
+            )
+            .await?;
+        }
+        let config = self.config(to).await?;
+        config[&target]
+            .as_str()
+            .and_then(|value| value.split(',').next())
+            .map(str::to_owned)
+            .context("de schijf staat niet bij de nieuwe server")
+    }
+
+    pub async fn delete_volume(&self, vmid: u32, volid: &str) -> anyhow::Result<()> {
+        if disk_key(&self.config(vmid).await?, volid).is_none() {
+            return Ok(());
+        }
+        let unused = self.unused_key(vmid, volid).await?;
+        self.run(
+            Method::POST,
+            &format!("{}/config", self.vm_path(vmid)),
+            &[("delete", unused)],
+        )
+        .await
+    }
+
+    pub async fn stacklane_isos(&self) -> anyhow::Result<Vec<String>> {
+        let content = self
+            .request(
+                Method::GET,
+                &format!(
+                    "/nodes/{}/storage/{}/content?content=iso",
+                    self.settings.node, self.settings.iso_storage
+                ),
+                None,
+            )
+            .await?;
+        let prefix = format!("{}:iso/", self.settings.iso_storage);
+        Ok(content
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|item| item["volid"].as_str())
+            .filter_map(|volid| volid.strip_prefix(&prefix))
+            .filter(|file| file.starts_with("stacklane-") && file.ends_with(".iso"))
+            .map(str::to_owned)
+            .collect())
+    }
+
+    fn iso_volume(&self, file: &str) -> String {
+        format!("{}:iso/{file}", self.settings.iso_storage)
+    }
+
+    pub async fn import_iso(&self, file: &str, url: &str) -> anyhow::Result<()> {
+        let upid = self
+            .request(
+                Method::POST,
+                &format!(
+                    "/nodes/{}/storage/{}/download-url",
+                    self.settings.node, self.settings.iso_storage
+                ),
+                Some(&[
+                    ("content", "iso".to_owned()),
+                    ("filename", file.to_owned()),
+                    ("url", url.to_owned()),
+                    ("verify-certificates", "1".to_owned()),
+                ]),
+            )
+            .await?;
+        let Some(upid) = upid.as_str() else {
+            return Ok(());
+        };
+        if let Err(error) = self.wait_for_task_up_to(upid, 3600).await {
+            self.stop_task(upid).await.ok();
+            self.delete_iso(file).await.ok();
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    async fn stop_task(&self, upid: &str) -> anyhow::Result<()> {
+        self.request(
+            Method::DELETE,
+            &format!(
+                "/nodes/{}/tasks/{}",
+                self.settings.node,
+                upid.replace('!', "%21")
+            ),
+            None,
+        )
+        .await
+        .map(|_| ())
+    }
+
+    pub async fn delete_iso(&self, file: &str) -> anyhow::Result<()> {
+        let volume = self.iso_volume(file);
+        self.request(
+            Method::DELETE,
+            &format!(
+                "/nodes/{}/storage/{}/content/{}",
+                self.settings.node,
+                self.settings.iso_storage,
+                volume.replace('/', "%2F")
+            ),
+            None,
+        )
+        .await
+        .map(|_| ())
+    }
+
+    pub async fn mount_iso(&self, vmid: u32, file: &str, uefi: bool) -> anyhow::Result<()> {
+        let mut options = vec![
+            ("ide2", format!("{},media=cdrom", self.iso_volume(file))),
+            ("boot", "order=ide2;scsi0".to_owned()),
+        ];
+        let config = self.config(vmid).await?;
+        if uefi {
+            options.push(("bios", "ovmf".to_owned()));
+            if config.get("efidisk0").is_none() {
+                options.push((
+                    "efidisk0",
+                    format!("{}:1,efitype=4m,pre-enrolled-keys=0", self.settings.storage),
+                ));
+            }
+        } else if config.get("bios").is_some() {
+            options.push(("delete", "bios".to_owned()));
+        }
+        self.run(
+            Method::POST,
+            &format!("{}/config", self.vm_path(vmid)),
+            &options,
+        )
+        .await?;
+        self.restart_if_running(vmid).await
+    }
+
+    pub async fn unmount_iso(&self, vmid: u32) -> anyhow::Result<()> {
+        self.run(
+            Method::POST,
+            &format!("{}/config", self.vm_path(vmid)),
+            &[
+                ("ide2", "none,media=cdrom".to_owned()),
+                ("boot", "order=scsi0".to_owned()),
+            ],
+        )
+        .await?;
+        self.restart_if_running(vmid).await
+    }
+
+    async fn restart_if_running(&self, vmid: u32) -> anyhow::Result<()> {
+        let status = self
+            .request(
+                Method::GET,
+                &format!("{}/status/current", self.vm_path(vmid)),
+                None,
+            )
+            .await?;
+        if status["status"] == "running" {
+            self.power(vmid, "reboot").await?;
         }
         Ok(())
     }
@@ -587,6 +1057,43 @@ mod tests {
         (Proxmox::new(&base, credentials, settings()).unwrap(), calls)
     }
 
+    fn stuck_download(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+        match (method, path) {
+            ("POST", path) if path.ends_with("/download-url") => (
+                200,
+                json!({ "data": "UPID:pve:1:2:3:download:iso:root@pam:" }),
+            ),
+            ("GET", path) if path.contains("/tasks/") => (503, json!({ "message": "busy" })),
+            _ => (200, json!({ "data": null })),
+        }
+    }
+
+    #[tokio::test]
+    async fn an_abandoned_iso_download_is_stopped_and_removed() {
+        let (base, calls) = crate::testing::fake_api(stuck_download).await;
+        let credentials = Credentials {
+            token_id: "t".into(),
+            token_secret: "s".into(),
+        };
+        let client = Proxmox::new(&base, credentials, settings()).unwrap();
+        assert!(
+            client
+                .import_iso("stacklane-x.iso", "https://example.test/x.iso")
+                .await
+                .is_err()
+        );
+        let calls = calls.lock().unwrap().clone();
+        assert!(
+            calls
+                .iter()
+                .any(|call| call.starts_with("DELETE /api2/json/nodes/pve/tasks/UPID"))
+        );
+        assert!(calls.iter().any(
+            |call| call.starts_with("DELETE /api2/json/nodes/pve/storage/")
+                && call.contains("stacklane-x.iso")
+        ));
+    }
+
     fn filtering_node(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
         match (method, path) {
             ("GET", path) if path.ends_with("/ipset/ipfilter-net0") => {
@@ -639,6 +1146,159 @@ mod tests {
         assert!(calls.contains(&"POST /api2/json/nodes/pve/qemu/101/status/stop".to_owned()));
     }
 
+    static REBUILT: std::sync::Mutex<
+        std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
+    > = std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+    fn rebuilding_node(method: &str, path: &str, body: &str) -> (u16, serde_json::Value) {
+        let Some(rest) = path.strip_prefix("/api2/json/nodes/pve/qemu/") else {
+            return (200, json!({ "data": null }));
+        };
+        let (vm, action) = rest.split_once('/').unwrap_or((rest, ""));
+        let form: std::collections::BTreeMap<String, String> =
+            url::form_urlencoded::parse(body.as_bytes())
+                .into_owned()
+                .collect();
+        let mut vms = REBUILT.lock().unwrap();
+        match (method, action) {
+            ("GET", "status/current") => {
+                return (200, json!({ "data": { "status": "running" } }));
+            }
+            ("POST", "clone") => {
+                let id = form["newid"].clone();
+                let disk = format!("local:vm-{id}-disk-0,size=2G");
+                vms.insert(id, [("scsi0".to_owned(), disk)].into());
+            }
+            ("GET", "config") => {
+                return (
+                    200,
+                    json!({ "data": vms.get(vm).cloned().unwrap_or_default() }),
+                );
+            }
+            ("POST", "config") => {
+                let config = vms.entry(vm.to_owned()).or_default();
+                for (key, value) in form {
+                    if key == "delete" {
+                        for gone in value.split(',') {
+                            if let Some(old) = config.remove(gone)
+                                && gone.starts_with("scsi")
+                            {
+                                let volid = old.split(',').next().unwrap().to_owned();
+                                config.insert("unused0".to_owned(), volid);
+                            }
+                        }
+                    } else {
+                        config.retain(|key, existing| {
+                            !(key.starts_with("unused") && existing == &value)
+                        });
+                        config.insert(key, value);
+                    }
+                }
+            }
+            ("POST", "move_disk") => {
+                let disk = vms.get_mut(vm).unwrap().remove(&form["disk"]).unwrap();
+                vms.entry(form["target-vmid"].clone())
+                    .or_default()
+                    .insert(form["target-disk"].clone(), disk);
+            }
+            ("DELETE", "") => {
+                vms.remove(vm.split('?').next().unwrap());
+            }
+            _ => {}
+        }
+        (200, json!({ "data": null }))
+    }
+
+    fn graphing_node(_: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+        if path.contains("/rrddata?timeframe=day&cf=AVERAGE") {
+            return (
+                200,
+                json!({ "data": [
+                    { "time": 1764000000, "cpu": 0.25, "mem": 512.0, "maxmem": 1024.0, "netin": 10.5 },
+                    { "time": 1764000060 },
+                    { "cpu": 0.5 },
+                ] }),
+            );
+        }
+        (404, json!({ "data": null }))
+    }
+
+    #[tokio::test]
+    async fn reads_usage_history() {
+        let (base, _) = crate::testing::fake_api(graphing_node).await;
+        let credentials = Credentials {
+            token_id: "t".into(),
+            token_secret: "s".into(),
+        };
+        let client = Proxmox::new(&base, credentials, settings()).unwrap();
+        let points = client.metrics(101, "day").await.unwrap();
+        assert_eq!(points.len(), 2);
+        assert_eq!(points[0].cpu, Some(0.25));
+        assert_eq!(points[0].max_memory, Some(1024.0));
+        assert_eq!(points[1].cpu, None);
+        assert!(client.metrics(101, "year; rm").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn a_rebuild_swaps_only_the_system_disk() {
+        REBUILT.lock().unwrap().insert(
+            "700".to_owned(),
+            [
+                (
+                    "scsi0".to_owned(),
+                    "local:vm-700-disk-0,size=20G".to_owned(),
+                ),
+                (
+                    "scsi1".to_owned(),
+                    "local:vm-700-disk-1,size=50G".to_owned(),
+                ),
+                (
+                    "net0".to_owned(),
+                    "virtio,bridge=vmbr0,firewall=1".to_owned(),
+                ),
+            ]
+            .into(),
+        );
+        let (base, calls) = crate::testing::fake_api(rebuilding_node).await;
+        let credentials = Credentials {
+            token_id: "t".into(),
+            token_secret: "s".into(),
+        };
+        let client = Proxmox::new(&base, credentials, settings()).unwrap();
+        client
+            .rebuild(&Rebuild {
+                vmid: 700,
+                scratch: 701,
+                template: 9000,
+                password: "nieuw-geheim",
+                ssh_keys: &["ssh-ed25519 AAAA jan".to_owned()],
+                disk_gb: 20,
+            })
+            .await
+            .unwrap();
+
+        let vms = REBUILT.lock().unwrap().clone();
+        let server = &vms["700"];
+        assert_eq!(server["scsi0"], "local:vm-701-disk-0,size=2G");
+        assert_eq!(server["scsi1"], "local:vm-700-disk-1,size=50G");
+        assert_eq!(server["net0"], "virtio,bridge=vmbr0,firewall=1");
+        assert_eq!(server["cipassword"], "nieuw-geheim");
+        assert!(server.contains_key("sshkeys"));
+        assert!(!server.keys().any(|key| key.starts_with("unused")));
+        assert!(!vms.contains_key("701"));
+        let calls = calls.lock().unwrap().clone();
+        assert!(calls.iter().any(
+            |call| call.starts_with("PUT /api2/json/nodes/pve/qemu/700/resize")
+                && call.contains("size=20G")
+        ));
+        assert!(
+            calls
+                .last()
+                .unwrap()
+                .starts_with("POST /api2/json/nodes/pve/qemu/700/status/start")
+        );
+    }
+
     fn settings() -> Settings {
         serde_json::from_value(json!({
             "node": "pve",
@@ -647,6 +1307,26 @@ mod tests {
             "ip_to": "10.10.10.102",
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn finds_disks_by_volume() {
+        let config = serde_json::json!({
+            "scsi0": "local-lvm:vm-101-disk-0,size=20G",
+            "scsi1": "local-lvm:vm-101-disk-1,size=10G",
+            "unused0": "local-lvm:vm-101-disk-2",
+            "scsihw": "virtio-scsi-pci",
+        });
+        assert_eq!(
+            super::disk_key(&config, "local-lvm:vm-101-disk-1").as_deref(),
+            Some("scsi1")
+        );
+        assert_eq!(
+            super::disk_key(&config, "local-lvm:vm-101-disk-2").as_deref(),
+            Some("unused0")
+        );
+        assert_eq!(super::disk_key(&config, "local-lvm:vm-101-disk-9"), None);
+        assert_eq!(super::free_disk_key(&config).unwrap(), "scsi2");
     }
 
     #[test]

@@ -334,8 +334,8 @@ pub async fn reset(pool: &PgPool) -> anyhow::Result<()> {
 
     sqlx::query(
         "TRUNCATE sessions, notifications, ticket_messages, tickets, invoice_lines, invoices,
-                  subscription_items, subscriptions, services, products, users, integrations
-                  RESTART IDENTITY CASCADE",
+                  subscription_items, subscriptions, services, products, users, integrations,
+                  domain_extensions RESTART IDENTITY CASCADE",
     )
     .execute(&mut *seed.transaction)
     .await?;

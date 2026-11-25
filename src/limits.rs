@@ -55,6 +55,56 @@ pub const TICKET_REPLY: Rule = Rule {
     max: 60,
     window: Duration::from_secs(60 * 60),
 };
+pub const INVITE: Rule = Rule {
+    name: "invite",
+    max: 20,
+    window: Duration::from_secs(60 * 60),
+};
+pub const CHECKOUT: Rule = Rule {
+    name: "checkout",
+    max: 10,
+    window: Duration::from_secs(10 * 60),
+};
+pub const VAT_CHECK: Rule = Rule {
+    name: "vat-check",
+    max: 10,
+    window: Duration::from_secs(60 * 60),
+};
+pub const PANEL_LOGIN: Rule = Rule {
+    name: "panel-login",
+    max: 20,
+    window: Duration::from_secs(10 * 60),
+};
+pub const VPS_UPSTREAM: Rule = Rule {
+    name: "vps-upstream",
+    max: 120,
+    window: Duration::from_secs(60),
+};
+pub const RDNS: Rule = Rule {
+    name: "rdns",
+    max: 30,
+    window: Duration::from_secs(60 * 60),
+};
+pub const UNKNOWN_PAYMENT: Rule = Rule {
+    name: "unknown-payment",
+    max: 60,
+    window: Duration::from_secs(60 * 60),
+};
+pub const DOMAIN_CHANGE: Rule = Rule {
+    name: "domain-change",
+    max: 20,
+    window: Duration::from_secs(60 * 60),
+};
+pub const REGISTRAR_READ: Rule = Rule {
+    name: "registrar-read",
+    max: 60,
+    window: Duration::from_secs(60),
+};
+pub const GAME_PANEL: Rule = Rule {
+    name: "game-panel",
+    max: 120,
+    window: Duration::from_secs(60),
+};
 pub const DOMAIN_SEARCH: Rule = Rule {
     name: "domain-search",
     max: 30,
@@ -100,6 +150,16 @@ fn window_of(name: &str) -> Duration {
         REAUTH,
         TICKET,
         TICKET_REPLY,
+        INVITE,
+        RDNS,
+        UNKNOWN_PAYMENT,
+        DOMAIN_CHANGE,
+        GAME_PANEL,
+        REGISTRAR_READ,
+        VPS_UPSTREAM,
+        PANEL_LOGIN,
+        CHECKOUT,
+        VAT_CHECK,
         DOMAIN_SEARCH,
     ]
     .into_iter()

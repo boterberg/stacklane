@@ -1,26 +1,33 @@
 import {
+  AdjustmentsHorizontalIcon,
+  ArchiveBoxIcon,
   BookOpenIcon,
+  CameraIcon,
   CircleStackIcon,
   CloudIcon,
+  Cog6ToothIcon,
   CreditCardIcon,
+  CubeIcon,
+  DocumentDuplicateIcon,
   DocumentTextIcon,
   GlobeAltIcon,
+  GlobeEuropeAfricaIcon,
   HomeIcon,
   IdentificationIcon,
-  LifebuoyIcon,
-  QuestionMarkCircleIcon,
-  ServerStackIcon,
-  ArchiveBoxIcon,
-  WindowIcon,
-  GlobeEuropeAfricaIcon,
   InboxStackIcon,
-  CubeIcon,
-  LinkIcon,
-  WrenchScrewdriverIcon,
-  Cog6ToothIcon,
-  AdjustmentsHorizontalIcon,
-  DocumentDuplicateIcon,
   KeyIcon,
+  LifebuoyIcon,
+  LinkIcon,
+  MapPinIcon,
+  PlayCircleIcon,
+  QuestionMarkCircleIcon,
+  ReceiptPercentIcon,
+  ServerStackIcon,
+  ShareIcon,
+  ShieldCheckIcon,
+  UsersIcon,
+  WindowIcon,
+  WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline'
 import type { ComponentType, SVGProps } from 'react'
 
@@ -34,6 +41,8 @@ export type NavLink = {
   icon: NavIcon
   external?: boolean
   opensSection?: boolean
+  exact?: boolean
+  permission?: string
 }
 
 export type NavGroup = {
@@ -63,7 +72,7 @@ export const navigation: NavEntry[] = [
     label: 'Domeinnamen',
     icon: GlobeAltIcon,
     children: [
-      { label: 'Domeinen', to: '/domains', icon: GlobeEuropeAfricaIcon },
+      { label: 'Domeinen', to: '/domains', icon: GlobeEuropeAfricaIcon, exact: true },
       { label: 'WHOIS-profielen', to: '/domains/whois-profiles', icon: IdentificationIcon },
     ],
   },
@@ -92,8 +101,10 @@ export const adminNavigation: NavGroup = {
   children: [
     { label: 'Alle tickets', to: '/admin/tickets', icon: InboxStackIcon },
     { label: 'Alle facturen', to: '/admin/invoices', icon: DocumentDuplicateIcon },
+    { label: 'Btw-overzicht', to: '/admin/vat', icon: ReceiptPercentIcon },
     { label: 'Diensten', to: '/admin/services', icon: ServerStackIcon },
     { label: 'Producten', to: '/admin/products', icon: CubeIcon },
+    { label: 'Domeinextensies', to: '/admin/domain-extensions', icon: GlobeAltIcon },
     { label: 'Koppelingen', to: '/admin/integrations', icon: LinkIcon },
     { label: 'Instellingen', to: '/admin/settings', icon: AdjustmentsHorizontalIcon },
     { label: 'Systeem', to: '/admin/system', icon: Cog6ToothIcon },
@@ -110,8 +121,30 @@ export const vpsSection: NavSection = {
   title: 'VPS',
   back: '/',
   groups: [
-    { label: 'Compute', children: [{ label: 'Servers', to: '/vps/servers', icon: ServerStackIcon }] },
-    { label: 'Toegang', children: [{ label: 'SSH-sleutels', to: '/vps/ssh-keys', icon: KeyIcon }] },
+    { label: 'Compute', children: [{ label: 'Servers', to: '/vps/servers', icon: ServerStackIcon, permission: 'servers.view' }] },
+    {
+      label: 'Opslag',
+      children: [
+        { label: 'Volumes', to: '/vps/volumes', icon: CircleStackIcon, permission: 'volumes.view' },
+        { label: 'Snapshots', to: '/vps/snapshots', icon: CameraIcon, permission: 'snapshots.view' },
+        { label: "ISO's", to: '/vps/isos', icon: PlayCircleIcon, permission: 'isos.view' },
+      ],
+    },
+    {
+      label: 'Netwerk',
+      children: [
+        { label: 'Floating IPs', to: '/vps/floating-ips', icon: MapPinIcon, permission: 'floating_ips.view' },
+        { label: 'Netwerken', to: '/vps/networks', icon: ShareIcon, permission: 'networks.view' },
+        { label: 'Firewalls', to: '/vps/firewalls', icon: ShieldCheckIcon, permission: 'firewalls.view' },
+      ],
+    },
+    {
+      label: 'Toegang',
+      children: [
+        { label: 'SSH-sleutels', to: '/vps/ssh-keys', icon: KeyIcon, permission: 'ssh_keys.view' },
+        { label: 'Gebruikers', to: '/vps/users', icon: UsersIcon },
+      ],
+    },
   ],
 }
 

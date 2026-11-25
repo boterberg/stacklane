@@ -5,6 +5,7 @@ use uuid::Uuid;
 use crate::error::AppResult;
 use crate::settings::Billing;
 use crate::state::AppState;
+use crate::vat;
 
 pub struct Line {
     pub subscription_id: Option<Uuid>,
@@ -30,7 +31,37 @@ pub async fn issue(
     due_at: Date,
     billing: &Billing,
 ) -> AppResult<(i64, i64)> {
-    let total: i64 = lines.iter().map(|line| line.amount_cents).sum();
+    let (country, verified_vat_number): (String, Option<String>) = sqlx::query_as(
+        "SELECT country::text, CASE WHEN is_business AND tax_id_verified_at IS NOT NULL THEN tax_id END
+         FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_one(&state.db)
+    .await?;
+    let decision = vat::decide(
+        &vat::Seller {
+            country: &billing.home_country,
+            rate: billing.tax_rate_basis_points,
+            oss: billing.oss,
+        },
+        &vat::Buyer {
+            country: &country,
+            verified_vat_number: verified_vat_number.is_some(),
+        },
+    );
+    let amounts: Vec<i64> = lines
+        .iter()
+        .map(|line| {
+            vat::convert(
+                line.amount_cents,
+                billing.tax_rate_basis_points,
+                decision.rate,
+            )
+        })
+        .collect();
+    let total: i64 = amounts.iter().sum();
+    let customer_vat_number =
+        verified_vat_number.filter(|_| decision.scheme == vat::Scheme::ReverseCharge);
     let snapshot: Value = sqlx::query_scalar(
         "SELECT jsonb_build_object(
             'name', COALESCE(NULLIF(trim(first_name || ' ' || last_name), ''), email::text),
@@ -44,19 +75,23 @@ pub async fn issue(
 
     let mut transaction = state.db.begin().await?;
     let invoice_id: i64 = sqlx::query_scalar(
-        "INSERT INTO invoices (user_id, status, issued_at, due_at, tax_rate_basis_points, total_cents, tax_cents, billing_snapshot)
-         VALUES ($1, 'open', $2, $3, $4, $5, $6, $7) RETURNING id",
+        "INSERT INTO invoices (user_id, status, issued_at, due_at, tax_rate_basis_points, total_cents, tax_cents, billing_snapshot,
+                               vat_scheme, vat_country, customer_vat_number)
+         VALUES ($1, 'open', $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
     )
     .bind(user_id)
     .bind(OffsetDateTime::now_utc().date())
     .bind(due_at)
-    .bind(billing.tax_rate_basis_points)
+    .bind(decision.rate)
     .bind(cents(total))
-    .bind(cents(tax_included(total, billing.tax_rate_basis_points)))
+    .bind(cents(tax_included(total, decision.rate)))
     .bind(snapshot)
+    .bind(decision.scheme.as_str())
+    .bind(&decision.country)
+    .bind(customer_vat_number)
     .fetch_one(&mut *transaction)
     .await?;
-    for line in lines {
+    for (line, amount) in lines.iter().zip(&amounts) {
         sqlx::query(
             "INSERT INTO invoice_lines (id, invoice_id, subscription_id, description, period_start, period_end, amount_cents)
              VALUES ($1, $2, $3, $4, $5, $6, $7)",
@@ -67,7 +102,7 @@ pub async fn issue(
         .bind(&line.description)
         .bind(line.period_start)
         .bind(line.period_end)
-        .bind(cents(line.amount_cents))
+        .bind(cents(*amount))
         .execute(&mut *transaction)
         .await?;
     }

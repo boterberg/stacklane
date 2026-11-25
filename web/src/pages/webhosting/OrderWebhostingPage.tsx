@@ -1,6 +1,6 @@
 import { Radio, RadioGroup } from '@headlessui/react'
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -75,9 +75,14 @@ export function OrderWebhostingPage() {
             </RadioGroup>
           </Card>
           <Card title={t('Website')}>
-            <Field label={t('Domeinnaam')} description={t('Het domein van je website, bijvoorbeeld jouwbedrijf.nl.')} error={errors.name}>
+            <Field label={t('Domeinnaam')} description={t('Het domein van je website, bijvoorbeeld jouwbedrijf.nl. Heb je er nog geen?')} error={errors.name}>
               {(id) => <Input id={id} invalid={!!errors.name} placeholder="jouwbedrijf.nl" value={name} onChange={(event) => setName(event.target.value)} />}
             </Field>
+            <p className="mt-3 text-sm">
+              <Link to="/domains/register" className="font-medium text-zinc-800 underline-offset-4 hover:underline dark:text-white">
+                {t('Registreer eerst een domein')}
+              </Link>
+            </p>
           </Card>
         </div>
         <div>

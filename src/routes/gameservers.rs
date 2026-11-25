@@ -70,6 +70,9 @@ fn clean_path(path: &str) -> AppResult<String> {
 }
 
 async fn panel(state: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<(Pterodactyl, String)> {
+    state
+        .limits
+        .check(&crate::limits::GAME_PANEL, &user.id.to_string())?;
     let access: Access = sqlx::query_as(
         "SELECT status, integration_id, details->>'identifier' AS identifier FROM services
          WHERE id = $1 AND kind = 'gameserver' AND user_id = $2",

@@ -23,6 +23,7 @@ mod services;
 mod settings;
 mod state;
 mod updates;
+mod vat;
 
 #[cfg(test)]
 mod testing;

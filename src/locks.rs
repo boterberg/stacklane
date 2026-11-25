@@ -20,6 +20,17 @@ impl Drop for Guard {
     }
 }
 
+pub async fn transaction(
+    connection: &mut sqlx::PgConnection,
+    key: impl Into<String>,
+) -> sqlx::Result<()> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(key.into())
+        .execute(connection)
+        .await?;
+    Ok(())
+}
+
 pub async fn exclusive<T>(key: String, body: impl Future<Output = AppResult<T>>) -> AppResult<T> {
     let fresh = held()
         .lock()
@@ -33,6 +44,15 @@ pub async fn exclusive<T>(key: String, body: impl Future<Output = AppResult<T>>)
     }
     let _guard = Guard(key);
     body.await
+}
+
+pub async fn service(
+    db: &sqlx::PgPool,
+    id: uuid::Uuid,
+) -> sqlx::Result<sqlx::Transaction<'static, sqlx::Postgres>> {
+    let mut guard = db.begin().await?;
+    transaction(&mut guard, format!("service {id}")).await?;
+    Ok(guard)
 }
 
 #[cfg(test)]

@@ -19,6 +19,8 @@ pub struct Payment {
     pub mandate_id: Option<String>,
     #[serde(default)]
     pub details: Value,
+    #[serde(default)]
+    pub metadata: Value,
     #[serde(rename = "_links", default)]
     links: Value,
 }
@@ -155,6 +157,7 @@ impl Client {
             .send(
                 self.http
                     .post(format!("{}/payments", self.base_url))
+                    .header("Idempotency-Key", payment.payment_id)
                     .json(&body),
             )
             .await?;

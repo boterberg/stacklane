@@ -25,6 +25,25 @@ pub fn greeting(first_name: &str, english: bool) -> String {
     }
 }
 
+pub async fn refuse_if_just_mailed(state: &AppState, user_id: Uuid, email: &str) -> AppResult<()> {
+    let recent: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM email_verifications
+                        WHERE lower(email::text) = lower($2) AND user_id <> $1
+                          AND created_at > now() - interval '10 minutes')",
+    )
+    .bind(user_id)
+    .bind(email)
+    .fetch_one(&state.db)
+    .await?;
+    if recent {
+        return Err(AppError::field(
+            "email",
+            "Er is net al een bevestiging naar dit adres gestuurd. Probeer het over een paar minuten opnieuw.",
+        ));
+    }
+    Ok(())
+}
+
 pub async fn send(state: &AppState, user_id: Uuid, email: &str) -> AppResult<()> {
     let (first_name, locale, current): (String, String, String) =
         sqlx::query_as("SELECT first_name, locale, email::text FROM users WHERE id = $1")
@@ -212,6 +231,7 @@ pub async fn resend(State(state): State<AppState>, user: CurrentUser) -> AppResu
     if verified && !pending {
         return Ok(StatusCode::NO_CONTENT);
     }
+    refuse_if_just_mailed(&state, user.id, &email).await?;
     send(&state, user.id, &email).await?;
     Ok(StatusCode::ACCEPTED)
 }

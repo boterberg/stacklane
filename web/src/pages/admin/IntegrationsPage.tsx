@@ -18,6 +18,9 @@ const kindLabels: Record<string, string> = {
   virtfusion: 'VirtFusion',
   directadmin: 'DirectAdmin',
   plesk: 'Plesk',
+  cpanel: 'cPanel & WHM',
+  openprovider: 'Openprovider',
+  powerdns: 'PowerDNS',
 }
 
 const emptyForm = {
@@ -30,7 +33,11 @@ const emptyForm = {
   token_secret: '',
   node: 'pve',
   bridge: 'vmbr0',
+  private_bridge: '',
+  vlan_from: '2000',
+  vlan_to: '2999',
   storage: 'local',
+  iso_storage: 'local',
   ip_from: '',
   ip_to: '',
   gateway: '',
@@ -41,6 +48,19 @@ const emptyForm = {
   wh_username: '',
   wh_secret: '',
   wh_ip: '',
+  dns_server: 'localhost',
+  credential_id: '',
+  credential_secret: '',
+  region: '',
+  network_id: '',
+  floating_network_id: '',
+  os_images: '',
+  api_token: '',
+  hypervisor_group_id: '1',
+  vf_images: '',
+  op_username: '',
+  op_password: '',
+  op_nameservers: 'ns1.openprovider.nl\nns2.openprovider.be\nns3.openprovider.eu',
 }
 
 function parseImages(text: string) {
@@ -49,6 +69,14 @@ function parseImages(text: string) {
     .map((line) => line.trim().match(/^(\d+)\s+(.+)$/))
     .filter((match): match is RegExpMatchArray => match !== null)
     .map((match) => ({ template: Number(match[1]), name: match[2].trim() }))
+}
+
+function parseCloudImages(text: string) {
+  return text
+    .split('\n')
+    .map((line) => line.trim().match(/^(\S+)\s+(.+)$/))
+    .filter((match): match is RegExpMatchArray => match !== null)
+    .map((match) => ({ id: match[1], name: match[2].trim() }))
 }
 
 type IntegrationInput = {
@@ -60,6 +88,18 @@ type IntegrationInput = {
 }
 
 function payload(form: typeof emptyForm): IntegrationInput {
+  if (form.kind === 'openprovider') {
+    return {
+      kind: form.kind,
+      name: form.name,
+      base_url: form.base_url || 'https://api.openprovider.eu',
+      credentials: { username: form.op_username.trim(), password: form.op_password },
+      settings: { nameservers: form.op_nameservers.split(/\s+/).filter(Boolean) },
+    }
+  }
+  if (form.kind === 'cpanel') {
+    return { kind: form.kind, name: form.name, base_url: form.base_url, credentials: { username: form.wh_username.trim() || 'root', api_token: form.wh_secret.trim() } }
+  }
   if (form.kind === 'directadmin') {
     return {
       kind: form.kind,
@@ -69,8 +109,34 @@ function payload(form: typeof emptyForm): IntegrationInput {
       settings: { ip: form.wh_ip.trim() },
     }
   }
+  if (form.kind === 'powerdns') {
+    return { kind: form.kind, name: form.name, base_url: form.base_url, credentials: { api_key: form.wh_secret.trim() }, settings: { server_id: form.dns_server.trim() || 'localhost' } }
+  }
   if (form.kind === 'plesk') {
     return { kind: form.kind, name: form.name, base_url: form.base_url, credentials: { api_key: form.wh_secret.trim() }, settings: { ip: form.wh_ip.trim() } }
+  }
+  if (form.kind === 'virtfusion') {
+    return {
+      kind: form.kind,
+      name: form.name,
+      base_url: form.base_url,
+      credentials: { api_token: form.api_token.trim() },
+      settings: { hypervisor_group_id: Number(form.hypervisor_group_id) || 0, images: parseImages(form.vf_images) },
+    }
+  }
+  if (form.kind === 'openstack') {
+    return {
+      kind: form.kind,
+      name: form.name,
+      base_url: form.base_url,
+      credentials: { application_credential_id: form.credential_id.trim(), application_credential_secret: form.credential_secret.trim() },
+      settings: {
+        region: form.region.trim() || null,
+        network_id: form.network_id.trim(),
+        floating_network_id: form.floating_network_id.trim() || null,
+        images: parseCloudImages(form.os_images),
+      },
+    }
   }
   if (form.kind === 'proxmox') {
     return {
@@ -84,7 +150,11 @@ function payload(form: typeof emptyForm): IntegrationInput {
       settings: {
         node: form.node.trim(),
         bridge: form.bridge.trim(),
+        private_bridge: form.private_bridge.trim() || null,
+        vlan_from: Number(form.vlan_from) || 0,
+        vlan_to: Number(form.vlan_to) || 0,
         storage: form.storage.trim(),
+        iso_storage: form.iso_storage.trim(),
         ip_from: form.ip_from.trim(),
         ip_to: form.ip_to.trim(),
         gateway: form.gateway.trim(),
@@ -149,46 +219,174 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
             <Select id={id} value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value })}>
               <option value="pterodactyl">{t('Pterodactyl (gameservers)')}</option>
               <option value="proxmox">{t('Proxmox VE (VPS)')}</option>
+              <option value="cpanel">{t('cPanel & WHM (webhosting)')}</option>
               <option value="directadmin">{t('DirectAdmin (webhosting)')}</option>
               <option value="plesk">{t('Plesk (webhosting)')}</option>
-              <option value="openstack" disabled>
-                {t('{name}, komt eraan', { name: 'OpenStack' })}
-              </option>
-              <option value="virtfusion" disabled>
-                {t('{name}, komt eraan', { name: 'VirtFusion' })}
-              </option>
+              <option value="openstack">{t('OpenStack (VPS)')}</option>
+              <option value="virtfusion">{t('VirtFusion (VPS)')}</option>
+              <option value="openprovider">{t('Openprovider (domeinen)')}</option>
+              <option value="powerdns">{t('PowerDNS (reverse DNS)')}</option>
             </Select>
           )}
         </Field>
         <Field label={t('Naam')} description={t('Alleen voor jezelf, bijvoorbeeld Gamenode Amsterdam.')} error={errors.name}>
           {(id) => <Input id={id} value={form.name} invalid={!!errors.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />}
         </Field>
-        <Field label={t('Adres van het panel')} error={errors.base_url}>
+        <Field
+          label={form.kind === 'openstack' ? t('Adres van Keystone') : form.kind === 'openprovider' ? t('Adres van de API') : t('Adres van het panel')}
+          description={form.kind === 'openprovider' ? t('Leeg laten voor de gewone API van Openprovider.') : undefined}
+          error={errors.base_url}
+        >
           {(id) => (
-            <Input id={id} placeholder={form.kind === 'directadmin' ? 'https://server.jouwbedrijf.nl:2222' : form.kind === 'plesk' ? 'https://server.jouwbedrijf.nl:8443' : t('https://panel.jouwbedrijf.nl')} value={form.base_url} invalid={!!errors.base_url} onChange={(event) => setForm({ ...form, base_url: event.target.value })} />
+            <Input
+              id={id}
+              placeholder={
+                form.kind === 'openstack'
+                  ? 'https://keystone.jouwbedrijf.nl:5000/v3'
+                  : form.kind === 'openprovider'
+                    ? 'https://api.openprovider.eu'
+                    : form.kind === 'cpanel'
+                      ? 'https://server.jouwbedrijf.nl:2087'
+                      : form.kind === 'directadmin'
+                        ? 'https://server.jouwbedrijf.nl:2222'
+                        : form.kind === 'plesk'
+                          ? 'https://server.jouwbedrijf.nl:8443'
+                          : form.kind === 'powerdns'
+                            ? 'https://dns.jouwbedrijf.nl:8081'
+                          : t('https://panel.jouwbedrijf.nl')
+              }
+              value={form.base_url}
+              invalid={!!errors.base_url}
+              onChange={(event) => setForm({ ...form, base_url: event.target.value })}
+            />
           )}
         </Field>
-        {form.kind === 'directadmin' || form.kind === 'plesk' ? (
+        {form.kind === 'openstack' && (
           <>
-            {form.kind === 'directadmin' && (
-              <Field label={t('Gebruikersnaam')} description={t('Een beheerder of reseller in DirectAdmin.')} error={errors.credentials}>
-                {(id) => <Input id={id} autoComplete="off" placeholder="admin" value={form.wh_username} onChange={(event) => setForm({ ...form, wh_username: event.target.value })} />}
+            <Field label={t('Application credential-ID')} description={t('Identity → Application Credentials in Horizon, of openstack application credential create.')} error={errors.credentials}>
+              {(id) => <Input id={id} autoComplete="off" value={form.credential_id} onChange={(event) => setForm({ ...form, credential_id: event.target.value })} />}
+            </Field>
+            <Field label={t('Geheim van de credential')}>
+              {(id) => <Input id={id} type="password" autoComplete="off" value={form.credential_secret} onChange={(event) => setForm({ ...form, credential_secret: event.target.value })} />}
+            </Field>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Field label={t('Regio')} description={t('Leeg laten als er maar één is.')}>
+                {(id) => <Input id={id} placeholder="RegionOne" value={form.region} onChange={(event) => setForm({ ...form, region: event.target.value })} />}
+              </Field>
+              <Field label={t('Netwerk-ID')} error={errors.settings}>
+                {(id) => <Input id={id} value={form.network_id} onChange={(event) => setForm({ ...form, network_id: event.target.value })} />}
+              </Field>
+            </div>
+            <Field
+              label={t('Extern netwerk voor floating IPs')}
+              description={t('De ID van het externe netwerk waar floating IPs vandaan komen. Leeg laten als je geen floating IPs verkoopt.')}
+            >
+              {(id) => <Input id={id} value={form.floating_network_id} onChange={(event) => setForm({ ...form, floating_network_id: event.target.value })} />}
+            </Field>
+            <Field label={t('Besturingssystemen')} description={t('Per regel de ID van een image en de naam die klanten zien.')}>
+              {(id) => (
+                <textarea
+                  id={id}
+                  rows={4}
+                  value={form.os_images}
+                  placeholder="0b5c1a2e-... Debian 13"
+                  onChange={(event) => setForm({ ...form, os_images: event.target.value })}
+                  className="block w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-sm text-zinc-700 shadow-xs dark:border-white/10 dark:bg-white/10 dark:text-zinc-300"
+                />
+              )}
+            </Field>
+          </>
+        )}
+        {form.kind === 'openprovider' && (
+          <>
+            <Field label={t('Gebruikersnaam')} description={t('Van je Openprovider-account. Maak bij voorkeur een aparte API-gebruiker aan.')} error={errors.credentials}>
+              {(id) => <Input id={id} autoComplete="off" value={form.op_username} onChange={(event) => setForm({ ...form, op_username: event.target.value })} />}
+            </Field>
+            <Field label={t('Wachtwoord')}>
+              {(id) => <Input id={id} type="password" autoComplete="new-password" value={form.op_password} onChange={(event) => setForm({ ...form, op_password: event.target.value })} />}
+            </Field>
+            <Field label={t('Standaard nameservers')} description={t('Een per regel. Nieuwe domeinen krijgen deze nameservers.')} error={errors.settings}>
+              {(id) => (
+                <textarea
+                  id={id}
+                  rows={3}
+                  value={form.op_nameservers}
+                  onChange={(event) => setForm({ ...form, op_nameservers: event.target.value })}
+                  className="block w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-sm text-zinc-700 shadow-xs dark:border-white/10 dark:bg-white/10 dark:text-zinc-300"
+                />
+              )}
+            </Field>
+          </>
+        )}
+        {form.kind === 'virtfusion' && (
+          <>
+            <Field label={t('API-token')} description={t('Configuration → API in VirtFusion.')} error={errors.credentials}>
+              {(id) => <Input id={id} type="password" autoComplete="off" value={form.api_token} onChange={(event) => setForm({ ...form, api_token: event.target.value })} />}
+            </Field>
+            <Field label={t('Hypervisorgroep')} description={t('Het nummer van de groep waarop nieuwe servers komen.')} error={errors.settings}>
+              {(id) => <Input id={id} inputMode="numeric" value={form.hypervisor_group_id} onChange={(event) => setForm({ ...form, hypervisor_group_id: event.target.value })} />}
+            </Field>
+            <Field label={t('Besturingssystemen')} description={t('Per regel het nummer van een template en de naam die klanten zien.')}>
+              {(id) => (
+                <textarea
+                  id={id}
+                  rows={4}
+                  value={form.vf_images}
+                  placeholder="8 Debian 12"
+                  onChange={(event) => setForm({ ...form, vf_images: event.target.value })}
+                  className="block w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-sm text-zinc-700 shadow-xs dark:border-white/10 dark:bg-white/10 dark:text-zinc-300"
+                />
+              )}
+            </Field>
+          </>
+        )}
+        {form.kind === 'powerdns' && (
+          <>
+            <Field label={t('API-sleutel')} description={t('De api-key uit pdns.conf. Stacklane zet alleen PTR-records in reverse-zones die al bestaan.')} error={errors.credentials}>
+              {(id) => <Input id={id} type="password" autoComplete="off" value={form.wh_secret} onChange={(event) => setForm({ ...form, wh_secret: event.target.value })} />}
+            </Field>
+            <Field label={t('Server-ID')} description={t('Meestal localhost.')} error={errors.settings}>
+              {(id) => <Input id={id} value={form.dns_server} onChange={(event) => setForm({ ...form, dns_server: event.target.value })} />}
+            </Field>
+          </>
+        )}
+        {form.kind === 'openstack' || form.kind === 'virtfusion' || form.kind === 'openprovider' || form.kind === 'powerdns' ? null : form.kind === 'cpanel' || form.kind === 'directadmin' || form.kind === 'plesk' ? (
+          <>
+            {(form.kind === 'cpanel' || form.kind === 'directadmin') && (
+              <Field
+                label={form.kind === 'cpanel' ? t('WHM-gebruiker') : t('Gebruikersnaam')}
+                description={form.kind === 'cpanel' ? t('Meestal root, of een reseller.') : t('Een beheerder of reseller in DirectAdmin.')}
+                error={errors.credentials}
+              >
+                {(id) => (
+                  <Input
+                    id={id}
+                    autoComplete="off"
+                    placeholder={form.kind === 'cpanel' ? 'root' : 'admin'}
+                    value={form.wh_username}
+                    onChange={(event) => setForm({ ...form, wh_username: event.target.value })}
+                  />
+                )}
               </Field>
             )}
             <Field
-              label={form.kind === 'directadmin' ? t('Inlogsleutel') : t('API-sleutel')}
+              label={form.kind === 'cpanel' ? t('API-token') : form.kind === 'directadmin' ? t('Inlogsleutel') : t('API-sleutel')}
               description={
-                form.kind === 'directadmin'
-                  ? t('Login Keys in DirectAdmin. Sta CMD_API_ACCOUNT_USER, CMD_API_SELECT_USERS, CMD_API_PACKAGES_USER en CMD_API_LOGIN_KEYS toe.')
-                  : t('Maak er een aan met plesk bin secret_key -c.')
+                form.kind === 'cpanel'
+                  ? t('Development → Manage API Tokens in WHM.')
+                  : form.kind === 'directadmin'
+                    ? t('Login Keys in DirectAdmin. Sta CMD_API_ACCOUNT_USER, CMD_API_SELECT_USERS, CMD_API_PACKAGES_USER en CMD_API_LOGIN_KEYS toe.')
+                    : t('Maak er een aan met plesk bin secret_key -c.')
               }
               error={form.kind === 'plesk' ? errors.credentials : undefined}
             >
               {(id) => <Input id={id} type="password" autoComplete="off" value={form.wh_secret} onChange={(event) => setForm({ ...form, wh_secret: event.target.value })} />}
             </Field>
-            <Field label={t('IP-adres voor websites')} description={t('Het gedeelde IP-adres waarop nieuwe websites komen.')} error={errors.settings}>
-              {(id) => <Input id={id} placeholder="203.0.113.20" value={form.wh_ip} onChange={(event) => setForm({ ...form, wh_ip: event.target.value })} />}
-            </Field>
+            {form.kind !== 'cpanel' && (
+              <Field label={t('IP-adres voor websites')} description={t('Het gedeelde IP-adres waarop nieuwe websites komen.')} error={errors.settings}>
+                {(id) => <Input id={id} placeholder="203.0.113.20" value={form.wh_ip} onChange={(event) => setForm({ ...form, wh_ip: event.target.value })} />}
+              </Field>
+            )}
           </>
         ) : form.kind === 'proxmox' ? (
           <>
@@ -203,6 +401,9 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
               <Field label={t('Bridge')}>{(id) => <Input id={id} value={form.bridge} onChange={(event) => setForm({ ...form, bridge: event.target.value })} />}</Field>
               <Field label={t('Opslag')}>{(id) => <Input id={id} value={form.storage} onChange={(event) => setForm({ ...form, storage: event.target.value })} />}</Field>
             </div>
+            <Field label={t("Opslag voor ISO's")} description={t('Een opslag met het type ISO-image, zoals local.')}>
+              {(id) => <Input id={id} value={form.iso_storage} onChange={(event) => setForm({ ...form, iso_storage: event.target.value })} />}
+            </Field>
             <div className="grid gap-6 sm:grid-cols-2">
               <Field label={t('Eerste IP-adres')} error={errors.settings}>
                 {(id) => <Input id={id} placeholder="203.0.113.10" value={form.ip_from} onChange={(event) => setForm({ ...form, ip_from: event.target.value })} />}
@@ -214,6 +415,18 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
               <Field label={t('Prefix')}>{(id) => <Input id={id} inputMode="numeric" value={form.prefix} onChange={(event) => setForm({ ...form, prefix: event.target.value })} />}</Field>
             </div>
             <Field label={t('DNS-server')}>{(id) => <Input id={id} value={form.dns} onChange={(event) => setForm({ ...form, dns: event.target.value })} />}</Field>
+            <Field
+              label={t('Bridge voor privénetwerken')}
+              description={t('Een bridge waarop elk netwerk een eigen VLAN krijgt, zoals vmbr1. Leeg laten als klanten geen privénetwerken mogen maken.')}
+            >
+              {(id) => <Input id={id} placeholder="vmbr1" value={form.private_bridge} onChange={(event) => setForm({ ...form, private_bridge: event.target.value })} />}
+            </Field>
+            {form.private_bridge.trim() && (
+              <div className="grid gap-6 sm:grid-cols-2">
+                <Field label={t('Eerste VLAN')}>{(id) => <Input id={id} inputMode="numeric" value={form.vlan_from} onChange={(event) => setForm({ ...form, vlan_from: event.target.value })} />}</Field>
+                <Field label={t('Laatste VLAN')}>{(id) => <Input id={id} inputMode="numeric" value={form.vlan_to} onChange={(event) => setForm({ ...form, vlan_to: event.target.value })} />}</Field>
+              </div>
+            )}
             <Field label={t('Besturingssystemen')} description={t('Per regel het nummer van een cloud-init-template en de naam die klanten zien.')}>
               {(id) => (
                 <textarea

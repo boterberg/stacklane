@@ -177,11 +177,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Vul het IP-adres in waarop nieuwe websites komen." => {
             "Enter the IP address new websites are placed on."
         }
-        "Op dit moment kun je gameserver-, VPS- en webhostingproducten aanmaken." => {
-            "Right now you can create game server, VPS and web hosting products."
-        }
-        "Kies een koppeling met DirectAdmin of Plesk." => {
-            "Choose an integration with DirectAdmin or Plesk."
+        "Vul de WHM-gebruiker en een API-token in." => "Enter the WHM user and an API token.",
+        "Kies een koppeling met cPanel, DirectAdmin of Plesk." => {
+            "Choose an integration with cPanel, DirectAdmin or Plesk."
         }
         "Kies een hostingpakket." => "Choose a hosting package.",
         "Dit webhostingpakket is nog niet klaar." => "This web hosting package is not ready yet.",
@@ -191,8 +189,8 @@ fn english(message: &str) -> Option<&'static str> {
         "Vul het token-ID (gebruiker@realm!naam) en het geheim in." => {
             "Enter the token ID (user@realm!name) and the secret."
         }
-        "Vul de node, de gateway en een geldige reeks IP-adressen in." => {
-            "Enter the node, the gateway and a valid range of IP addresses."
+        "Vul de node, de gateway, een geldige reeks IP-adressen en een VLAN-reeks tussen 1 en 4094 in." => {
+            "Enter the node, the gateway, a valid range of IP addresses and a VLAN range between 1 and 4094."
         }
         "In de demo kun je niets bestellen." => "You cannot order anything in the demo.",
         "Kies een pakket." => "Choose a plan.",
@@ -209,10 +207,130 @@ fn english(message: &str) -> Option<&'static str> {
         "Kies een richting en of het verkeer mag." => {
             "Choose a direction and whether traffic is allowed."
         }
+        "Op dit platform kun je alleen verkeer toestaan." => {
+            "On this platform you can only allow traffic."
+        }
+        "Vul het ID en het geheim van de application credential in." => {
+            "Enter the ID and secret of the application credential."
+        }
+        "Vul het netwerk en minstens één image in." => {
+            "Enter the network and at least one image."
+        }
+        "Op dit platform geef je per regel één poort of reeks op." => {
+            "On this platform each rule takes one port or range."
+        }
+        "Vul een API-token van VirtFusion in." => "Enter a VirtFusion API token.",
+        "Vul de hypervisorgroep en minstens één besturingssysteem in." => {
+            "Enter the hypervisor group and at least one operating system."
+        }
+        "Kies een pakket van VirtFusion." => "Choose a VirtFusion package.",
+        "Vul een voornaam in." => "Enter a first name.",
+        "Vul een achternaam in." => "Enter a last name.",
+        "Vul een straat in." => "Enter a street.",
+        "Vul een huisnummer in." => "Enter a house number.",
+        "Vul een postcode in." => "Enter a postcode.",
+        "Vul een plaats in." => "Enter a city.",
+        "Vul een telefoonnummer in met landcode, zoals +31 612345678." => {
+            "Enter a phone number with country code, such as +31 612345678."
+        }
+        "De naam of het bedrijf van de houder wijzig je met een verhuizing naar een nieuw profiel." => {
+            "To change the holder's name or company, move the domain to a new profile."
+        }
+        "Dit profiel hoort nog bij een domein." => "This profile still belongs to a domain.",
+        "Vul de gebruikersnaam en het wachtwoord van Openprovider in." => {
+            "Enter the Openprovider username and password."
+        }
+        "Vul minstens twee geldige nameservers in." => "Enter at least two valid name servers.",
+        "Vul een extensie in, zoals nl of co.uk." => "Enter an extension, such as nl or co.uk.",
+        "Vul een prijs van 0 of hoger in." => "Enter a price of 0 or more.",
+        "Kies een koppeling met een registrar." => "Choose an integration with a registrar.",
+        "Deze extensie staat er al." => "This extension already exists.",
+        "Vul een domeinnaam in, zoals jouwbedrijf of jouwbedrijf.nl." => {
+            "Enter a domain name, such as yourcompany or yourcompany.nl."
+        }
+        "Vul een geldige domeinnaam in." => "Enter a valid domain name.",
+        "Deze extensie kun je niet bestellen." => "This extension cannot be ordered.",
+        "Kies een WHOIS-profiel." => "Choose a WHOIS profile.",
+        "Vul de autorisatiecode van je huidige provider in." => {
+            "Enter the authorisation code from your current provider."
+        }
+        "Dit is een premium domein. Neem contact met ons op voor de prijs." => {
+            "This is a premium domain. Contact us for the price."
+        }
+        "Dit domein is nog vrij. Registreer het in plaats van het te verhuizen." => {
+            "This domain is still available. Register it instead of transferring it."
+        }
+        "Dit domein is al bezet." => "This domain is already taken.",
+        "Dit domein is al besteld." => "This domain has already been ordered.",
+        "Dit domein is nog niet klaar." => "This domain is not ready yet.",
+        "Vul twee tot zes geldige nameservers in." => "Enter two to six valid name servers.",
+        "Kies een flavor." => "Choose a flavor.",
         "Kies TCP, UDP of ICMP." => "Choose TCP, UDP or ICMP.",
         "Vul een IPv4-adres of -reeks in, zoals 203.0.113.4 of 10.0.0.0/8." => {
             "Enter an IPv4 address or range, such as 203.0.113.4 or 10.0.0.0/8."
         }
+        "Kies een kwartaal van 1 tot en met 4." => "Choose a quarter from 1 to 4.",
+        "Geef de firewall een naam van hoogstens 60 tekens." => {
+            "Give the firewall a name of at most 60 characters."
+        }
+        "Een firewall heeft hoogstens 50 regels." => "A firewall has at most 50 rules.",
+        "Deze server kan geen firewall van Stacklane gebruiken." => {
+            "This server cannot use a Stacklane firewall."
+        }
+        "Kies een van je eigen servers." => "Choose one of your own servers.",
+        "Kies een grootte van minimaal 10 GB en maximaal 1 TB." => {
+            "Choose a size of at least 10 GB and at most 1 TB."
+        }
+        "Kies een server." => "Choose a server.",
+        "Kies een van je actieve servers." => "Choose one of your active servers.",
+        "Dit volume kan niet bij deze server. Kies een server op hetzelfde platform." => {
+            "This volume cannot go with this server. Choose a server on the same platform."
+        }
+        "Je hebt al 10 volumes. Zeg er eerst een op." => {
+            "You already have 10 volumes. Cancel one first."
+        }
+        "Dit volume is nog niet klaar." => "This volume is not ready yet.",
+        "Dit platform kan geen volumes beheren." => "This platform cannot manage volumes.",
+        "Dit volume zit niet aan een server vast." => "This volume is not attached to a server.",
+        "Koppel het volume eerst los van de huidige server." => {
+            "Detach the volume from its current server first."
+        }
+        "Kies een koppeling met Proxmox VE of OpenStack." => {
+            "Choose a Proxmox VE or OpenStack integration."
+        }
+        "Dit platform kan geen ISO's gebruiken." => "This platform cannot use ISOs.",
+        "Geef de ISO een naam van hoogstens 60 tekens." => {
+            "Give the ISO a name of at most 60 characters."
+        }
+        "Kies BIOS of UEFI." => "Choose BIOS or UEFI.",
+        "Je hebt al 2 ISO's. Verwijder er eerst een." => {
+            "You already have 2 ISOs. Delete one first."
+        }
+        "Je hebt minimaal één actieve VPS nodig voordat je ISO's kunt importeren." => {
+            "You need at least one active VPS before you can import ISOs."
+        }
+        "Koppel de ISO eerst los van de server." => "Detach the ISO from the server first.",
+        "Wacht tot de ISO klaar is met importeren." => "Wait until the ISO has finished importing.",
+        "Koppel eerst de huidige ISO los." => "Detach the current ISO first.",
+        "Kies minimaal één recht." => "Choose at least one permission.",
+        "Je kunt alleen rechten geven die je zelf hebt." => {
+            "You can only grant permissions you have yourself."
+        }
+        "Er is geen account met dit e-mailadres. Vraag de persoon eerst een account aan te maken." => {
+            "There is no account with this email address. Ask the person to create an account first."
+        }
+        "Dit is de eigenaar van deze omgeving." => "This is the owner of this environment.",
+        "Je kunt hoogstens 25 gebruikers toegang geven." => {
+            "You can give access to at most 25 users."
+        }
+        "Deze gebruiker heeft al toegang." => "This user already has access.",
+        "Vul een e-mailadres in." => "Enter an email address.",
+        "Kies een ISO die klaar is." => "Choose an ISO that is ready.",
+        "Kies het land van je bedrijf." => "Choose the country of your business.",
+        "Vul een btw-nummer uit de EU in, zoals NL123456789B01." => {
+            "Enter an EU VAT number, such as NL123456789B01."
+        }
+        "Dit btw-nummer is niet geldig volgens VIES." => "VIES says this VAT number is not valid.",
         "Vul je voornaam in." => "Enter your first name.",
         "In de demo kun je het e-mailadres niet wijzigen." => {
             "You cannot change the email address in the demo."
@@ -241,6 +359,7 @@ fn english(message: &str) -> Option<&'static str> {
         "Het is even te druk. Probeer het over een paar seconden opnieuw." => {
             "It is busy right now. Try again in a few seconds."
         }
+        "Gebruik hoogstens 100 tekens." => "Use at most 100 characters.",
         "Vul hoogstens 15 poorten of reeksen in, zoals 22, 80,443 of 8000:8100." => {
             "Enter at most 15 ports or ranges, such as 22, 80,443 or 8000:8100."
         }
@@ -257,11 +376,157 @@ fn english(message: &str) -> Option<&'static str> {
             "Something went wrong at the platform. Try again later or contact support."
         }
         "In de demo kun je dit niet wijzigen." => "You cannot change this in the demo.",
+        "Deze gebruiker heeft rechten die jij niet hebt. Vraag de eigenaar om dit aan te passen." => {
+            "This user has rights you do not have. Ask the owner to change this."
+        }
         "Deze domeinnaam is al in gebruik bij een ander pakket." => {
             "This domain name is already used by another package."
         }
         "Hier loopt al een actie. Probeer het over een paar seconden opnieuw." => {
             "Something is already running here. Try again in a few seconds."
+        }
+        "Een server kan samen hoogstens 100 poorten of reeksen uit firewalls krijgen. Koppel minder firewalls aan deze server." => {
+            "A server can get at most 100 ports or ranges from firewalls in total. Attach fewer firewalls to this server."
+        }
+        "Een gekoppelde server is nu niet actief, dus de regels kunnen er niet af. Koppel die server eerst los of wacht tot hij weer actief is." => {
+            "An attached server is not active right now, so its rules cannot be removed. Detach that server first or wait until it is active again."
+        }
+        "Kies waar je de floating IP wilt hebben." => "Choose where you want the floating IP.",
+        "Je hebt al 10 floating IPs. Zeg er eerst een op." => {
+            "You already have 10 floating IPs. Cancel one first."
+        }
+        "Kies een aantal. Je kunt in totaal 10 floating IPs hebben." => {
+            "Choose a number. You can have 10 floating IPs in total."
+        }
+        "Deze floating IP is nog niet klaar." => "This floating IP is not ready yet.",
+        "Dit platform kan geen floating IPs beheren." => {
+            "This platform cannot manage floating IPs."
+        }
+        "Deze floating IP is niet aan een server gekoppeld." => {
+            "This floating IP is not attached to a server."
+        }
+        "Deze floating IP kan niet naar deze server. Kies een server op hetzelfde platform." => {
+            "This floating IP cannot go to this server. Choose a server on the same platform."
+        }
+        "Op dit moment kun je gameserver-, VPS-, volume-, floating IP- en webhostingproducten aanmaken." => {
+            "Right now you can create game server, VPS, volume, floating IP and web hosting products."
+        }
+        "Kies een koppeling met Proxmox VE, of OpenStack met een extern netwerk voor floating IPs." => {
+            "Choose a Proxmox VE connection, or OpenStack with an external network for floating IPs."
+        }
+        "Gebruik hoogstens 60 letters, cijfers, spaties, punten, streepjes of liggende streepjes." => {
+            "Use at most 60 letters, digits, spaces, dots, hyphens or underscores."
+        }
+        "Op dit platform kun je geen netwerken maken." => {
+            "You cannot create networks on this platform."
+        }
+        "Kies een privé IP-bereik, zoals 10.1.0.0/24, met een netmasker van /16 tot /28." => {
+            "Choose a private IP range, such as 10.1.0.0/24, with a netmask from /16 to /28."
+        }
+        "Je hebt al 10 netwerken. Verwijder er eerst een." => {
+            "You already have 10 networks. Delete one first."
+        }
+        "Je hebt al een netwerk met deze naam." => "You already have a network with this name.",
+        "Dit IP-bereik overlapt met een van je andere netwerken." => {
+            "This IP range overlaps with one of your other networks."
+        }
+        "Op dit platform is geen ruimte meer voor nieuwe netwerken." => {
+            "There is no room for new networks on this platform."
+        }
+        "Koppel eerst alle servers los van dit netwerk." => {
+            "Detach all servers from this network first."
+        }
+        "Deze server staat op een ander platform dan het netwerk." => {
+            "This server is on a different platform than the network."
+        }
+        "Deze server zit al in drie netwerken." => "This server is already in three networks.",
+        "Het IP-bereik van dit netwerk klopt niet." => "The IP range of this network is not valid.",
+        "Dit netwerk heeft geen vrije adressen meer." => "This network has no free addresses left.",
+        "Herbouwen is mislukt. Probeer het opnieuw of neem contact op met support." => {
+            "Rebuilding failed. Try again or contact support."
+        }
+        "Stacklane werd herstart tijdens het herbouwen. Probeer het opnieuw." => {
+            "Stacklane restarted while rebuilding. Please try again."
+        }
+        "Deze server kun je alleen in het panel van VirtFusion herbouwen." => {
+            "You can only rebuild this server in the VirtFusion panel."
+        }
+        "Deze server wordt al herbouwd." => "This server is already being rebuilt.",
+        "Deze server wordt herbouwd. Wacht tot dat klaar is." => {
+            "This server is being rebuilt. Wait until it is done."
+        }
+        "Dit platform heeft geen rescue-modus." => "This platform has no rescue mode.",
+        "Deze server staat al in rescue-modus." => "This server is already in rescue mode.",
+        "Koppel eerst de ISO los voordat je rescue-modus inschakelt." => {
+            "Detach the ISO before you turn on rescue mode."
+        }
+        "Zet eerst de rescue-modus uit." => "Turn off rescue mode first.",
+        "Dit IP-adres hoort niet bij deze server." => {
+            "This IP address does not belong to this server."
+        }
+        "Vul een volledige hostnaam in, zoals mail.jouwdomein.nl." => {
+            "Enter a full hostname, such as mail.yourdomain.com."
+        }
+        "Laat deze hostnaam eerst met een A-record naar dit IP-adres wijzen." => {
+            "Point this hostname to this IP address with an A record first."
+        }
+        "Voor dit IP-adres kun je hier geen reverse DNS instellen." => {
+            "You cannot set reverse DNS for this IP address here."
+        }
+        "Vul de server-ID van PowerDNS in, meestal localhost." => {
+            "Enter the PowerDNS server ID, usually localhost."
+        }
+        "In de demo kun je geen eigen account aanmaken. Log in als klant of beheerder." => {
+            "You cannot create your own account in the demo. Sign in as a customer or as an administrator."
+        }
+        "Bestel floating IPs onder VPS, Floating IPs." => {
+            "Order floating IPs under VPS, Floating IPs."
+        }
+        "Bevestig eerst je eigen e-mailadres voordat je iemand toegang geeft." => {
+            "Confirm your own email address before you give someone access."
+        }
+        "Deze persoon heeft het e-mailadres nog niet bevestigd. Vraag dat eerst te doen." => {
+            "This person has not confirmed their email address yet. Ask them to do that first."
+        }
+        "Deze server wordt nu herbouwd. Probeer het daarna opnieuw." => {
+            "This server is being rebuilt right now. Try again afterwards."
+        }
+        "Er hangt een geblokkeerd volume of IP-adres aan deze server. Terugzetten kan pas als dat weer actief is." => {
+            "A blocked volume or IP address belongs to this server. You can restore a snapshot once it is active again."
+        }
+        "Je hebt een actieve VPS op dit platform nodig voor een privénetwerk." => {
+            "You need an active VPS on this platform for a private network."
+        }
+        "Er draaien nog diensten op je account. Wacht tot ze beëindigd zijn of vraag ons ze te stoppen." => {
+            "Services are still running on your account. Wait until they have ended or ask us to stop them."
+        }
+        "Verwijder eerst je privénetwerken onder VPS, Netwerken." => {
+            "Delete your private networks under VPS, Networks first."
+        }
+        "Er is net al een bevestiging naar dit adres gestuurd. Probeer het over een paar minuten opnieuw." => {
+            "A confirmation was just sent to this address. Try again in a few minutes."
+        }
+        "Je hebt al 10 domeinen besteld die nog niet betaald zijn. Betaal of annuleer die eerst." => {
+            "You already have 10 domain orders that are not paid yet. Pay or cancel those first."
+        }
+        "Deze snapshot is van voor je laatste netwerkwijziging. Maak een nieuwe snapshot of koppel het netwerk eerst opnieuw." => {
+            "This snapshot is older than your last network change. Make a new snapshot or attach the network again first."
+        }
+        "Deze DNS-server beheert nog reverse DNS van actieve adressen. Zeg die eerst op of wacht tot de opruiming klaar is." => {
+            "This DNS server still manages reverse DNS for active addresses. Terminate those first or wait until the cleanup has finished."
+        }
+        "Je hebt al 50 SSH-sleutels. Verwijder er eerst een." => {
+            "You already have 50 SSH keys. Delete one first."
+        }
+        "Je hebt al 20 profielen. Verwijder er eerst een." => {
+            "You already have 20 profiles. Delete one first."
+        }
+        "Kies hoogstens 10 SSH-sleutels." => "Choose at most 10 SSH keys.",
+        "Gebruik hoogstens 32 tekens." => "Use at most 32 characters.",
+        "Gebruik hoogstens 20 tekens." => "Use at most 20 characters.",
+        "Gebruik hoogstens 200 tekens." => "Use at most 200 characters.",
+        "Je hebt al 10 bestellingen die nog niet betaald zijn. Betaal of annuleer die eerst." => {
+            "You already have 10 orders that are not paid yet. Pay or cancel those first."
         }
         _ => return None,
     })

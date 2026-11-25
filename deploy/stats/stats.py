@@ -16,10 +16,11 @@ OUTPUT = os.environ.get("STACKLANE_STATS_OUTPUT", "/srv/stacklane-stats/stats.js
 IGNORED = set(filter(None, os.environ.get("STACKLANE_STATS_IGNORE", "127.0.0.1 ::1").split()))
 KEEP_DAYS = 2
 HISTORY_DAYS = 30
+MAX_PANELS_PER_DAY = 50000
 
-DEB = re.compile(r"^/apt/pool/.+/stacklane_([0-9.]+)_[a-z0-9]+\.deb$")
+DEB = re.compile(r"^/apt/pool/.+/stacklane_([0-9]{1,6}(?:\.[0-9]{1,6}){0,4})_[a-z0-9]+\.deb$")
 INDEX = re.compile(r"^/apt/dists/stable/main/binary-[a-z0-9]+/Packages$")
-PANEL = re.compile(r"^stacklane/([0-9.]+)")
+PANEL = re.compile(r"^stacklane/([0-9]{1,6}(?:\.[0-9]{1,6}){0,4})$")
 
 
 def load_state():
@@ -36,9 +37,11 @@ def entries():
         with opener(path, "rt", errors="replace") as handle:
             for line in handle:
                 try:
-                    yield json.loads(line)
+                    entry = json.loads(line)
                 except ValueError:
                     continue
+                if isinstance(entry, dict):
+                    yield entry
 
 
 def count(values):
@@ -80,7 +83,9 @@ def main():
         if INDEX.match(uri) and panel:
             salt = state["salts"].setdefault(day, secrets.token_hex(32))
             key = hmac.new(bytes.fromhex(salt), ip.encode(), hashlib.sha256).hexdigest()[:24]
-            state["days"].setdefault(day, {})[key] = panel.group(1)
+            seen = state["days"].setdefault(day, {})
+            if key in seen or len(seen) < MAX_PANELS_PER_DAY:
+                seen[key] = panel.group(1)
     state["last_ts"] = newest
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")

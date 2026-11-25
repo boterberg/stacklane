@@ -1,11 +1,14 @@
 mod account;
 mod admin_billing;
+mod admin_domains;
 mod admin_provisioning;
 mod admin_settings;
+mod admin_vat;
 mod api_tokens;
 mod auth;
 pub mod billing;
 mod dashboard;
+mod domains;
 mod email_verification;
 mod gameservers;
 mod health;
@@ -19,7 +22,15 @@ mod support;
 mod system;
 mod two_factor;
 mod vps;
+pub mod vps_access;
+pub mod vps_firewalls;
+mod vps_floating_ips;
+pub mod vps_isos;
+mod vps_networks;
+pub(crate) mod vps_rdns;
+mod vps_volumes;
 mod webhosting;
+pub mod whois_profiles;
 
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -48,10 +59,88 @@ pub fn router(state: AppState) -> Router {
             "/account/payment-defaults",
             get(account::payment_defaults).put(account::update_payment_defaults),
         )
+        .route("/vps/access", get(vps_access::me))
+        .route(
+            "/vps/members",
+            get(vps_access::index).post(vps_access::create),
+        )
+        .route(
+            "/vps/members/{id}",
+            put(vps_access::update).delete(vps_access::destroy),
+        )
+        .route("/account/shared-access", get(vps_access::shared))
+        .route("/account/shared-access/{owner}", delete(vps_access::leave))
+        .route(
+            "/account/shared-access/{owner}/accept",
+            post(vps_access::accept),
+        )
         .route("/vps/servers", get(vps::index))
+        .route("/vps/snapshots", get(vps::all_snapshots))
+        .route("/vps/isos", get(vps_isos::index).post(vps_isos::create))
+        .route("/vps/isos/{id}", delete(vps_isos::destroy))
+        .route(
+            "/vps/servers/{id}/iso",
+            get(vps_isos::server)
+                .post(vps_isos::mount)
+                .delete(vps_isos::unmount),
+        )
+        .route("/vps/floating-ips", get(vps_floating_ips::index))
+        .route("/vps/floating-ips/options", get(vps_floating_ips::options))
+        .route("/vps/floating-ips/order", post(shop::place_floating_ips))
+        .route(
+            "/vps/floating-ips/{id}/attach",
+            post(vps_floating_ips::attach),
+        )
+        .route(
+            "/vps/floating-ips/{id}/detach",
+            post(vps_floating_ips::detach),
+        )
+        .route(
+            "/vps/networks",
+            get(vps_networks::index).post(vps_networks::create),
+        )
+        .route(
+            "/vps/networks/{id}",
+            get(vps_networks::show)
+                .put(vps_networks::update)
+                .delete(vps_networks::destroy),
+        )
+        .route("/vps/networks/{id}/servers", post(vps_networks::attach))
+        .route(
+            "/vps/networks/{id}/servers/{server}",
+            delete(vps_networks::detach),
+        )
+        .route("/vps/volumes", get(vps_volumes::index))
+        .route("/vps/volumes/options", get(vps_volumes::options))
+        .route("/vps/volumes/{id}/attach", post(vps_volumes::attach))
+        .route("/vps/volumes/{id}/detach", post(vps_volumes::detach))
+        .route("/vps/firewalls/servers", get(vps_firewalls::servers))
+        .route(
+            "/vps/firewalls",
+            get(vps_firewalls::index).post(vps_firewalls::create),
+        )
+        .route(
+            "/vps/firewalls/{id}",
+            get(vps_firewalls::show)
+                .put(vps_firewalls::update)
+                .delete(vps_firewalls::destroy),
+        )
         .route("/vps/servers/{id}", get(vps::show))
+        .route("/vps/servers/{id}/networks", get(vps_networks::server))
+        .route("/vps/servers/{id}/images", get(vps::images))
+        .route("/vps/servers/{id}/graphs", get(vps::graphs))
+        .route(
+            "/vps/servers/{id}/rdns",
+            get(vps_rdns::index).put(vps_rdns::update),
+        )
+        .route(
+            "/vps/servers/{id}/rescue",
+            post(vps::enter_rescue).delete(vps::leave_rescue),
+        )
+        .route("/vps/servers/{id}/rebuild", post(vps::rebuild))
         .route("/vps/servers/{id}/power", post(vps::power))
         .route("/vps/servers/{id}/password", get(vps::root_password))
+        .route("/vps/servers/{id}/panel", post(vps::panel_login))
         .route(
             "/vps/servers/{id}/snapshots",
             get(vps::snapshots).post(vps::create_snapshot),
@@ -78,6 +167,21 @@ pub fn router(state: AppState) -> Router {
         .route("/webhosting/{id}", get(webhosting::show))
         .route("/webhosting/{id}/panel", post(webhosting::panel_login))
         .route("/ssh-keys", get(ssh_keys::index).post(ssh_keys::create))
+        .route("/domains/search", get(domains::search))
+        .route("/domains/orders", post(domains::order))
+        .route("/domains", get(domains::index))
+        .route("/domains/{id}", get(domains::show))
+        .route("/domains/{id}/nameservers", put(domains::set_nameservers))
+        .route("/domains/{id}/auth-code", post(domains::auth_code))
+        .route("/domains/{id}/lock", put(domains::set_lock))
+        .route(
+            "/whois-profiles",
+            get(whois_profiles::index).post(whois_profiles::create),
+        )
+        .route(
+            "/whois-profiles/{id}",
+            put(whois_profiles::update).delete(whois_profiles::destroy),
+        )
         .route("/ssh-keys/{id}", delete(ssh_keys::destroy))
         .route("/account/password", put(security::change_password))
         .route("/account/two-factor", get(two_factor::status))
@@ -179,6 +283,14 @@ pub fn router(state: AppState) -> Router {
             get(admin_provisioning::catalog),
         )
         .route(
+            "/admin/domain-extensions",
+            get(admin_domains::index).post(admin_domains::create),
+        )
+        .route(
+            "/admin/domain-extensions/{id}",
+            put(admin_domains::update).delete(admin_domains::destroy),
+        )
+        .route(
             "/admin/products",
             get(admin_provisioning::products).post(admin_provisioning::create_product),
         )
@@ -192,6 +304,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/admin/customers", get(admin_provisioning::customers))
         .route("/admin/invoices", get(admin_billing::index))
+        .route("/admin/reports/vat", get(admin_vat::report))
         .route("/admin/invoices/{id}", get(admin_billing::show))
         .route("/admin/invoices/{id}/pdf", get(admin_billing::pdf))
         .route(
@@ -350,6 +463,9 @@ async fn security_headers(
 }
 
 fn demo_allows(method: &axum::http::Method, path: &str) -> bool {
+    if path == "/api/auth/register" {
+        return false;
+    }
     let Some(admin) = path.strip_prefix("/api/admin/") else {
         return true;
     };
@@ -483,5 +599,6 @@ mod tests {
             "/api/admin/invoices/100001/mark-paid"
         ));
         assert!(demo_allows(&Method::POST, "/api/auth/login"));
+        assert!(!demo_allows(&Method::POST, "/api/auth/register"));
     }
 }

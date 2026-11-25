@@ -11,7 +11,8 @@ use uuid::Uuid;
 use crate::auth::CurrentAdmin;
 use crate::error::{AppError, AppResult};
 use crate::integrations::{
-    self, IntegrationSummary, KINDS, directadmin, plesk, proxmox, pterodactyl, webhosting,
+    self, IntegrationSummary, KINDS, cpanel, directadmin, openprovider, openstack, plesk, proxmox,
+    pterodactyl, virtfusion, webhosting,
 };
 use crate::services;
 use crate::state::AppState;
@@ -130,7 +131,15 @@ pub async fn create_integration(
         errors.insert("kind", "Kies een type.".to_owned());
     } else if !matches!(
         input.kind.as_str(),
-        "pterodactyl" | "proxmox" | "directadmin" | "plesk"
+        "pterodactyl"
+            | "proxmox"
+            | "openstack"
+            | "virtfusion"
+            | "directadmin"
+            | "plesk"
+            | "openprovider"
+            | "cpanel"
+            | "powerdns"
     ) {
         errors.insert(
             "kind",
@@ -159,14 +168,37 @@ pub async fn create_integration(
             .is_ok_and(|credentials| {
                 credentials.token_id.contains('!') && !credentials.token_secret.trim().is_empty()
             }),
+        "openprovider" => {
+            serde_json::from_value::<openprovider::Credentials>(input.credentials.clone())
+                .is_ok_and(|credentials| {
+                    !credentials.username.trim().is_empty() && !credentials.password.is_empty()
+                })
+        }
+        "virtfusion" => {
+            serde_json::from_value::<virtfusion::Credentials>(input.credentials.clone())
+                .is_ok_and(|credentials| !credentials.api_token.trim().is_empty())
+        }
+        "openstack" => serde_json::from_value::<openstack::Credentials>(input.credentials.clone())
+            .is_ok_and(|credentials| {
+                !credentials.application_credential_id.trim().is_empty()
+                    && !credentials.application_credential_secret.trim().is_empty()
+            }),
         "directadmin" => serde_json::from_value::<directadmin::Credentials>(
             input.credentials.clone(),
         )
         .is_ok_and(|credentials| {
             !credentials.username.trim().is_empty() && !credentials.login_key.is_empty()
         }),
+        "cpanel" => serde_json::from_value::<cpanel::Credentials>(input.credentials.clone())
+            .is_ok_and(|credentials| {
+                !credentials.username.trim().is_empty() && !credentials.api_token.trim().is_empty()
+            }),
         "plesk" => serde_json::from_value::<plesk::Credentials>(input.credentials.clone())
             .is_ok_and(|credentials| !credentials.api_key.trim().is_empty()),
+        "powerdns" => {
+            serde_json::from_value::<integrations::powerdns::Credentials>(input.credentials.clone())
+                .is_ok_and(|credentials| !credentials.api_key.trim().is_empty())
+        }
         _ => true,
     };
     if !credentials_ok {
@@ -174,28 +206,104 @@ pub async fn create_integration(
             "credentials",
             match input.kind.as_str() {
                 "proxmox" => "Vul het token-ID (gebruiker@realm!naam) en het geheim in.",
+                "openstack" => "Vul het ID en het geheim van de application credential in.",
+                "virtfusion" => "Vul een API-token van VirtFusion in.",
                 "directadmin" => "Vul de gebruikersnaam en een inlogsleutel van DirectAdmin in.",
                 "plesk" => "Vul een API-sleutel van Plesk in.",
+                "cpanel" => "Vul de WHM-gebruiker en een API-token in.",
+                "openprovider" => "Vul de gebruikersnaam en het wachtwoord van Openprovider in.",
                 _ => "Vul de application- en de client-API-sleutel in.",
             }
             .to_owned(),
         );
     }
-    let settings = if input.kind == "proxmox" {
-        match serde_json::from_value::<proxmox::Settings>(input.settings) {
+    let settings = if input.kind == "openprovider" {
+        let mut settings = serde_json::from_value::<openprovider::Settings>(input.settings.clone())
+            .unwrap_or(openprovider::Settings {
+                nameservers: openprovider::default_nameservers(),
+            });
+        settings.nameservers = settings
+            .nameservers
+            .iter()
+            .map(|server| server.trim().trim_end_matches('.').to_lowercase())
+            .filter(|server| !server.is_empty())
+            .collect();
+        if settings.nameservers.len() < 2
+            || settings
+                .nameservers
+                .iter()
+                .any(|server| openprovider::split_domain(server).is_none())
+        {
+            errors.insert(
+                "settings",
+                "Vul minstens twee geldige nameservers in.".to_owned(),
+            );
+        }
+        serde_json::to_value(settings).map_err(anyhow::Error::from)?
+    } else if input.kind == "virtfusion" {
+        match serde_json::from_value::<virtfusion::Settings>(input.settings.clone()) {
+            Ok(settings) if settings.hypervisor_group_id > 0 && !settings.images.is_empty() => {
+                serde_json::to_value(settings).map_err(anyhow::Error::from)?
+            }
+            _ => {
+                errors.insert(
+                    "settings",
+                    "Vul de hypervisorgroep en minstens één besturingssysteem in.".to_owned(),
+                );
+                Value::Null
+            }
+        }
+    } else if input.kind == "openstack" {
+        match serde_json::from_value::<openstack::Settings>(input.settings.clone()) {
             Ok(settings)
-                if settings.ip_from <= settings.ip_to && !settings.node.trim().is_empty() =>
+                if !settings.network_id.trim().is_empty() && !settings.images.is_empty() =>
             {
                 serde_json::to_value(settings).map_err(anyhow::Error::from)?
             }
             _ => {
                 errors.insert(
                     "settings",
-                    "Vul de node, de gateway en een geldige reeks IP-adressen in.".to_owned(),
+                    "Vul het netwerk en minstens één image in.".to_owned(),
                 );
                 Value::Null
             }
         }
+    } else if input.kind == "proxmox" {
+        match serde_json::from_value::<proxmox::Settings>(input.settings) {
+            Ok(settings)
+                if settings.ip_from <= settings.ip_to
+                    && !settings.node.trim().is_empty()
+                    && (1..=4094).contains(&settings.vlan_from)
+                    && settings.vlan_from <= settings.vlan_to
+                    && settings.vlan_to <= 4094 =>
+            {
+                serde_json::to_value(settings).map_err(anyhow::Error::from)?
+            }
+            _ => {
+                errors.insert(
+                    "settings",
+                    "Vul de node, de gateway, een geldige reeks IP-adressen en een VLAN-reeks tussen 1 en 4094 in."
+                        .to_owned(),
+                );
+                Value::Null
+            }
+        }
+    } else if input.kind == "powerdns" {
+        let server_id = input.settings["server_id"]
+            .as_str()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .unwrap_or("localhost");
+        if !server_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        {
+            errors.insert(
+                "settings",
+                "Vul de server-ID van PowerDNS in, meestal localhost.".to_owned(),
+            );
+        }
+        json!({ "server_id": server_id })
     } else if matches!(input.kind.as_str(), "directadmin" | "plesk") {
         let ip = input.settings["ip"]
             .as_str()
@@ -274,6 +382,21 @@ pub async fn delete_integration(
             "Er draaien nog diensten op deze koppeling.",
         ));
     }
+    let holds_ptrs: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM integrations WHERE id = $1 AND kind = 'powerdns')
+            AND (EXISTS (SELECT 1 FROM ptr_cleanups)
+                 OR EXISTS (SELECT 1 FROM services WHERE kind IN ('vps', 'floating_ip')
+                            AND status <> 'terminated' AND details ? 'ipv4'))",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await?;
+    if holds_ptrs {
+        return Err(AppError::field(
+            "id",
+            "Deze DNS-server beheert nog reverse DNS van actieve adressen. Zeg die eerst op of wacht tot de opruiming klaar is.",
+        ));
+    }
     sqlx::query("DELETE FROM integrations WHERE id = $1")
         .bind(id)
         .execute(&state.db)
@@ -286,20 +409,25 @@ pub async fn catalog(
     _admin: CurrentAdmin,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Value>> {
+    let failed = |error: anyhow::Error| AppError::field("integration", format!("{error:#}"));
     let driver = integrations::driver(&state, id).await?;
     if let Some(hosting) = webhosting::Hosting::from_driver(&driver) {
-        return Ok(Json(hosting.plans().await.map_err(|error| {
-            AppError::field("integration", format!("{error:#}"))
-        })?));
+        return Ok(Json(hosting.plans().await.map_err(failed)?));
     }
-    let catalog = driver
-        .pterodactyl()?
-        .catalog()
-        .await
-        .map_err(|error| AppError::field("integration", format!("{error:#}")))?;
-    Ok(Json(
-        serde_json::to_value(catalog).map_err(anyhow::Error::from)?,
-    ))
+    match driver {
+        integrations::Driver::OpenStack(client) => {
+            Ok(Json(client.flavors().await.map_err(failed)?))
+        }
+        integrations::Driver::VirtFusion(client) => {
+            Ok(Json(client.packages().await.map_err(failed)?))
+        }
+        driver => {
+            let catalog = driver.pterodactyl()?.catalog().await.map_err(failed)?;
+            Ok(Json(
+                serde_json::to_value(catalog).map_err(anyhow::Error::from)?,
+            ))
+        }
+    }
 }
 
 pub async fn products(
@@ -333,10 +461,14 @@ pub async fn create_product(
             "De prijs kan niet negatief zijn.".to_owned(),
         );
     }
-    if !matches!(input.kind.as_str(), "gameserver" | "vps" | "webhosting") {
+    if !matches!(
+        input.kind.as_str(),
+        "gameserver" | "vps" | "webhosting" | "volume" | "floating_ip"
+    ) {
         errors.insert(
             "kind",
-            "Op dit moment kun je gameserver-, VPS- en webhostingproducten aanmaken.".to_owned(),
+            "Op dit moment kun je gameserver-, VPS-, volume-, floating IP- en webhostingproducten aanmaken."
+                .to_owned(),
         );
     }
     if input.integration_id.is_none() {
@@ -354,16 +486,16 @@ pub async fn create_product(
         }
         None => None,
     };
-    let specs = match input.kind.as_str() {
-        "webhosting" => {
+    let specs = match (input.kind.as_str(), integration_kind.as_deref()) {
+        ("webhosting", kind) => {
             let plan = input.provisioning["plan"]
                 .as_str()
                 .map(str::trim)
                 .unwrap_or_default();
-            if !matches!(integration_kind.as_deref(), Some("directadmin" | "plesk")) {
+            if !matches!(kind, Some("cpanel" | "directadmin" | "plesk")) {
                 errors.insert(
                     "integration_id",
-                    "Kies een koppeling met DirectAdmin of Plesk.".to_owned(),
+                    "Kies een koppeling met cPanel, DirectAdmin of Plesk.".to_owned(),
                 );
                 Value::Null
             } else if plan.is_empty() {
@@ -373,19 +505,72 @@ pub async fn create_product(
                 json!({ "plan": plan })
             }
         }
-        "vps" => match serde_json::from_value::<proxmox::ProductConfig>(input.provisioning.clone())
-        {
-            Ok(config) if config.cores >= 1 && config.memory_mb >= 256 && config.disk_gb >= 5 => {
-                proxmox::product_details(&config)
+        ("vps", Some("virtfusion")) => {
+            match serde_json::from_value::<virtfusion::ProductConfig>(input.provisioning.clone()) {
+                Ok(config) if config.package_id > 0 => virtfusion::product_details(&config),
+                _ => {
+                    errors.insert("provisioning", "Kies een pakket van VirtFusion.".to_owned());
+                    Value::Null
+                }
             }
-            _ => {
+        }
+        ("volume", kind) => {
+            if !matches!(kind, Some("proxmox" | "openstack")) {
                 errors.insert(
-                    "provisioning",
-                    "Geef minstens 1 core, 256 MB geheugen en 5 GB schijf op.".to_owned(),
+                    "integration_id",
+                    "Kies een koppeling met Proxmox VE of OpenStack.".to_owned(),
                 );
-                Value::Null
             }
-        },
+            json!({ "per_gb": true })
+        }
+        ("floating_ip", kind) => {
+            let usable = match (kind, input.integration_id) {
+                (Some("proxmox"), _) => true,
+                (Some("openstack"), Some(id)) => sqlx::query_scalar::<_, Option<String>>(
+                    "SELECT settings->>'floating_network_id' FROM integrations WHERE id = $1",
+                )
+                .bind(id)
+                .fetch_one(&state.db)
+                .await?
+                .is_some_and(|network| !network.trim().is_empty()),
+                _ => false,
+            };
+            if !usable {
+                errors.insert(
+                    "integration_id",
+                    "Kies een koppeling met Proxmox VE, of OpenStack met een extern netwerk voor floating IPs."
+                        .to_owned(),
+                );
+            }
+            json!({ "per_ip": true })
+        }
+        ("vps", Some("openstack")) => {
+            match serde_json::from_value::<openstack::ProductConfig>(input.provisioning.clone()) {
+                Ok(config) if !config.flavor_id.trim().is_empty() => {
+                    openstack::product_details(&config)
+                }
+                _ => {
+                    errors.insert("provisioning", "Kies een flavor.".to_owned());
+                    Value::Null
+                }
+            }
+        }
+        ("vps", _) => {
+            match serde_json::from_value::<proxmox::ProductConfig>(input.provisioning.clone()) {
+                Ok(config)
+                    if config.cores >= 1 && config.memory_mb >= 256 && config.disk_gb >= 5 =>
+                {
+                    proxmox::product_details(&config)
+                }
+                _ => {
+                    errors.insert(
+                        "provisioning",
+                        "Geef minstens 1 core, 256 MB geheugen en 5 GB schijf op.".to_owned(),
+                    );
+                    Value::Null
+                }
+            }
+        }
         _ => match serde_json::from_value::<pterodactyl::ProductConfig>(input.provisioning.clone())
         {
             Ok(config)

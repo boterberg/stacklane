@@ -46,6 +46,8 @@ const PLATFORM_FAILED: &str =
 const CUSTOMER_SAFE: &[&str] = &[
     "Stacklane werd herstart tijdens het leveren. Probeer het opnieuw.",
     "Stacklane werd herstart tijdens het importeren.",
+    crate::services::REBUILD_FAILED,
+    crate::services::REBUILD_INTERRUPTED,
     "De server van dit volume is opgeheven.",
     "dit bestand is te groot om hier te openen",
 ];

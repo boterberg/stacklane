@@ -3,7 +3,7 @@ use serde_json::json;
 use sqlx::PgPool;
 
 use crate::auth;
-use crate::testing::{Client, PASSWORD};
+use crate::testing::{Client, PASSWORD, shared_member};
 use tower::ServiceExt;
 
 async fn verification_token(client: &Client, user: uuid::Uuid, email: &str) -> String {
@@ -284,6 +284,7 @@ async fn a_password_change_revokes_api_tokens_and_reset_links(db: PgPool) {
     .execute(&client.state.db)
     .await
     .unwrap();
+    let parked = verification_token(&client, user, "parked@example.test").await;
     let changed = client
         .send(
             Method::PUT,
@@ -300,6 +301,63 @@ async fn a_password_change_revokes_api_tokens_and_reset_links(db: PgPool) {
         .await
         .unwrap();
     assert_eq!(resets, 0);
+    let moved = client
+        .send(
+            Method::POST,
+            "/auth/verify-email",
+            None,
+            Some(json!({ "token": parked })),
+        )
+        .await;
+    assert_eq!(moved.status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn recovering_a_squatted_address_drops_what_the_squatter_left(db: PgPool) {
+    let client = Client::new(db);
+    let (squatted, _) = client.register("squatted@example.test").await;
+    let (helper, _) = client.register("squatter@example.test").await;
+    sqlx::query(
+        "INSERT INTO vps_members (id, owner_id, user_id, permissions, accepted_at)
+         VALUES ($1, $2, $3, '{servers.console}', now())",
+    )
+    .bind(uuid::Uuid::new_v4())
+    .bind(squatted)
+    .bind(helper)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE users SET totp_secret = 'planted' WHERE id = $1")
+        .bind(squatted)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES ($1, $2, now() + interval '1 hour')",
+    )
+    .bind(auth::hash_token("recover"))
+    .bind(squatted)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    let reset = client
+        .send(
+            Method::POST,
+            "/auth/reset-password",
+            None,
+            Some(json!({ "token": "recover", "password": "Another-pass-678" })),
+        )
+        .await;
+    assert_eq!(reset.status, StatusCode::NO_CONTENT);
+    let (members, totp): (i64, Option<String>) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM vps_members WHERE owner_id = $1), totp_secret FROM users WHERE id = $1",
+    )
+    .bind(squatted)
+    .fetch_one(&client.state.db)
+    .await
+    .unwrap();
+    assert_eq!((members, totp), (0, None));
 }
 
 #[sqlx::test]
@@ -663,6 +721,69 @@ async fn a_failed_suspension_is_retried_on_the_next_run(db: PgPool) {
 
 #[sqlx::test]
 #[ignore = "needs DATABASE_URL"]
+async fn a_suspended_volume_is_detached_from_its_server(db: PgPool) {
+    use crate::testing::{NewService, fake_api, make_admin, proxmox_integration, service};
+    let client = Client::new(db);
+    let (base, calls) = fake_api(steady_node).await;
+    let integration = proxmox_integration(&client.state, &base).await;
+    let (user, _) = client.register("volume@example.test").await;
+    let (admin, admin_cookie) = client.register("volume-staff@example.test").await;
+    make_admin(&client.state, admin).await;
+    let vps = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "active",
+            integration: Some(integration),
+            external_id: Some("300"),
+            details: json!({}),
+        },
+    )
+    .await;
+    let volume = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: None,
+            kind: "volume",
+            status: "active",
+            integration: Some(integration),
+            external_id: Some("local:vm-300-disk-1"),
+            details: json!({ "host": "300", "server_id": vps.to_string(), "size_gb": 10 }),
+        },
+    )
+    .await;
+
+    let reply = client
+        .send(
+            Method::POST,
+            &format!("/admin/services/{volume}/suspend"),
+            Some(&admin_cookie),
+            None,
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::NO_CONTENT, "{}", reply.body);
+    assert!(
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|call| call == "POST /api2/json/nodes/pve/qemu/300/config delete=scsi1")
+    );
+    let details: serde_json::Value =
+        sqlx::query_scalar("SELECT details FROM services WHERE id = $1")
+            .bind(volume)
+            .fetch_one(&client.state.db)
+            .await
+            .unwrap();
+    assert!(details.get("server_id").is_none());
+    assert_eq!(details["suspended_from"], vps.to_string());
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
 async fn billing_runs_never_overlap(db: PgPool) {
     let client = Client::new(db);
     let mut other = client.state.db.acquire().await.unwrap();
@@ -681,6 +802,213 @@ async fn billing_runs_never_overlap(db: PgPool) {
         .unwrap();
     let run = crate::renewals::run_once(&client.state).await.unwrap();
     assert_eq!(run.invoices + run.suspended + run.ended + run.expired, 0);
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn shared_access_needs_consent_and_ends_with_the_owner(db: PgPool) {
+    let client = Client::new(db);
+    let (owner, owner_cookie) = client.register("vps-owner@example.test").await;
+    let (member, member_cookie) = client.register("vps-member@example.test").await;
+    let unverified = client
+        .send(
+            Method::POST,
+            "/vps/members",
+            Some(&owner_cookie),
+            Some(json!({ "email": "vps-member@example.test", "permissions": ["servers.view"] })),
+        )
+        .await;
+    assert_eq!(unverified.status, StatusCode::UNPROCESSABLE_ENTITY);
+    crate::testing::verify(&client, &[owner]).await;
+    let unverified = client
+        .send(
+            Method::POST,
+            "/vps/members",
+            Some(&owner_cookie),
+            Some(json!({ "email": "vps-member@example.test", "permissions": ["servers.view"] })),
+        )
+        .await;
+    assert_eq!(unverified.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(unverified.body["errors"]["email"].is_string());
+    crate::testing::verify(&client, &[member]).await;
+    let invited = client
+        .send(
+            Method::POST,
+            "/vps/members",
+            Some(&owner_cookie),
+            Some(json!({ "email": "vps-member@example.test", "permissions": ["servers.view"] })),
+        )
+        .await;
+    assert_eq!(invited.status, StatusCode::CREATED, "{}", invited.body);
+    let owner_header = owner.to_string();
+    let as_member = |cookie: String| {
+        let owner_header = owner_header.clone();
+        let client = &client;
+        async move {
+            client
+                .send_with(
+                    Method::GET,
+                    "/vps/access",
+                    Some(&cookie),
+                    None,
+                    &[("x-vps-owner", &owner_header)],
+                )
+                .await
+                .status
+        }
+    };
+    assert_eq!(
+        as_member(member_cookie.clone()).await,
+        StatusCode::FORBIDDEN
+    );
+
+    let accepted = client
+        .send(
+            Method::POST,
+            &format!("/account/shared-access/{owner}/accept"),
+            Some(&member_cookie),
+            None,
+        )
+        .await;
+    assert_eq!(accepted.status, StatusCode::NO_CONTENT);
+    assert_eq!(as_member(member_cookie.clone()).await, StatusCode::OK);
+
+    let deleted = client
+        .send(
+            Method::POST,
+            "/account/delete",
+            Some(&owner_cookie),
+            Some(json!({ "password": PASSWORD })),
+        )
+        .await;
+    assert_eq!(deleted.status, StatusCode::NO_CONTENT, "{}", deleted.body);
+    assert_eq!(as_member(member_cookie).await, StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_member_needs_the_matching_right_for_every_firewall_change(db: PgPool) {
+    let client = Client::new(db);
+    let (owner, owner_cookie) = client.register("fw-owner@example.test").await;
+    let rules = json!([
+        { "type": "in", "action": "ACCEPT", "proto": "tcp", "dport": "22", "source": "203.0.113.4" },
+        { "type": "in", "action": "DROP", "proto": "tcp", "dport": "22" },
+    ]);
+    let created = client
+        .send(
+            Method::POST,
+            "/vps/firewalls",
+            Some(&owner_cookie),
+            Some(json!({ "name": "ssh-guard", "rules": rules })),
+        )
+        .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    let id = created.body["id"].as_str().unwrap().to_owned();
+    let member = shared_member(
+        &client,
+        &owner_cookie,
+        owner,
+        "fw-member@example.test",
+        &["firewalls.view", "firewalls.update", "firewalls.create"],
+    )
+    .await;
+    let owner_header = owner.to_string();
+    let put = |body: serde_json::Value| {
+        let (client, member, owner_header, id) =
+            (&client, member.clone(), owner_header.clone(), id.clone());
+        async move {
+            client
+                .send_with(
+                    Method::PUT,
+                    &format!("/vps/firewalls/{id}"),
+                    Some(&member),
+                    Some(body),
+                    &[("x-vps-owner", &owner_header)],
+                )
+                .await
+                .status
+        }
+    };
+    let reversed = json!([rules[1], rules[0]]);
+    assert_eq!(
+        put(json!({ "name": "ssh-guard", "rules": reversed })).await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        put(json!({ "name": "ssh-guard", "rules": rules, "auto_assign": true })).await,
+        StatusCode::FORBIDDEN
+    );
+    let empty_auto = client
+        .send_with(
+            Method::POST,
+            "/vps/firewalls",
+            Some(&member),
+            Some(json!({ "name": "auto", "auto_assign": true, "rules": [] })),
+            &[("x-vps-owner", &owner_header)],
+        )
+        .await;
+    assert_eq!(empty_auto.status, StatusCode::FORBIDDEN);
+    assert_eq!(
+        put(json!({ "name": "renamed", "rules": rules })).await,
+        StatusCode::OK
+    );
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn concurrent_iso_imports_respect_the_quota(db: PgPool) {
+    use crate::testing::{NewService, fake_api, proxmox_integration, service};
+    let client = std::sync::Arc::new(Client::new(db));
+    let (base, _) = fake_api(steady_node).await;
+    let integration = proxmox_integration(&client.state, &base).await;
+    let (user, cookie) = client.register("iso@example.test").await;
+    service(
+        &client.state,
+        NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "active",
+            integration: Some(integration),
+            external_id: Some("300"),
+            details: json!({}),
+        },
+    )
+    .await;
+    let imports: Vec<_> = (0..6)
+        .map(|index| {
+            let (client, cookie) = (client.clone(), cookie.clone());
+            tokio::spawn(async move {
+                client
+                    .send(
+                        Method::POST,
+                        "/vps/isos",
+                        Some(&cookie),
+                        Some(json!({ "name": format!("race {index}"), "url": "https://1.1.1.1/x.iso", "firmware": "bios" })),
+                    )
+                    .await
+                    .status
+            })
+        })
+        .collect();
+    let mut created = 0;
+    for import in imports {
+        if import.await.unwrap() == StatusCode::CREATED {
+            created += 1;
+        }
+    }
+    assert_eq!(created, 2);
+    for _ in 0..100 {
+        let importing: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM vps_isos WHERE status = 'importing'")
+                .fetch_one(&client.state.db)
+                .await
+                .unwrap();
+        if importing == 0 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
 }
 
 #[sqlx::test]
@@ -816,6 +1144,52 @@ async fn password_checks_stop_after_ten_tries(db: PgPool) {
         )
         .await;
     assert_eq!(reply.status, StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_delegate_cannot_remove_a_stronger_member(db: PgPool) {
+    let client = Client::new(db);
+    let (owner, owner_cookie) = client.register("rank-owner@example.test").await;
+    let delegate = shared_member(
+        &client,
+        &owner_cookie,
+        owner,
+        "rank-delegate@example.test",
+        &["access.users", "servers.view"],
+    )
+    .await;
+    shared_member(
+        &client,
+        &owner_cookie,
+        owner,
+        "rank-admin@example.test",
+        &["access.users", "servers.view", "servers.rebuild"],
+    )
+    .await;
+    let members = client
+        .send(Method::GET, "/vps/members", Some(&owner_cookie), None)
+        .await;
+    let stronger = members
+        .body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|member| member["email"] == "rank-admin@example.test")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let removed = client
+        .send_with(
+            Method::DELETE,
+            &format!("/vps/members/{stronger}"),
+            Some(&delegate),
+            None,
+            &[("x-vps-owner", &owner.to_string())],
+        )
+        .await;
+    assert_eq!(removed.status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[sqlx::test]
@@ -1001,6 +1375,102 @@ async fn an_older_address_does_not_block_saving_the_profile(db: PgPool) {
     assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
 }
 
+const KEPT_ISO: &str = "5a1e0000-0000-4000-8000-000000000001";
+
+fn iso_storage(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+    match (method, path) {
+        ("GET", path) if path.contains("/content?content=iso") => (
+            200,
+            json!({ "data": [
+                { "volid": "local:iso/stacklane-5a1e0000000040008000000000000001.iso" },
+                { "volid": "local:iso/stacklane-0rphan.iso" },
+                { "volid": "local:iso/debian-13.iso" },
+            ] }),
+        ),
+        _ => (200, json!({ "data": null })),
+    }
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn iso_files_nobody_owns_are_removed(db: PgPool) {
+    use crate::testing::{fake_api, proxmox_integration};
+    let client = Client::new(db);
+    let (base, calls) = fake_api(iso_storage).await;
+    let integration = proxmox_integration(&client.state, &base).await;
+    let (user, _) = client.register("iso-sweep@example.test").await;
+    sqlx::query(
+        "INSERT INTO vps_isos (id, user_id, integration_id, name, url, firmware, status, external_id)
+         VALUES ($1, $2, $3, 'kept', 'https://1.1.1.1/x.iso', 'bios', 'ready', 'stacklane-5a1e0000000040008000000000000001.iso')",
+    )
+    .bind(uuid::Uuid::parse_str(KEPT_ISO).unwrap())
+    .bind(user)
+    .bind(integration)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    crate::routes::vps_isos::remove_unused(&client.state)
+        .await
+        .unwrap();
+    let deletes: Vec<String> = calls
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|call| call.starts_with("DELETE"))
+        .cloned()
+        .collect();
+    assert_eq!(deletes.len(), 1, "{deletes:?}");
+    assert!(deletes[0].contains("stacklane-0rphan.iso"));
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn one_server_cannot_collect_unlimited_firewall_rules(db: PgPool) {
+    use crate::testing::{NewService, fake_api, proxmox_integration, service};
+    let client = Client::new(db);
+    let (base, _) = fake_api(steady_node).await;
+    let integration = proxmox_integration(&client.state, &base).await;
+    let (user, cookie) = client.register("fw-crowd@example.test").await;
+    let server = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "active",
+            integration: Some(integration),
+            external_id: Some("300"),
+            details: json!({}),
+        },
+    )
+    .await;
+    let ports: String = (1000..1015)
+        .map(|port| port.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let rules: Vec<_> = (0..4)
+        .map(|_| json!({ "type": "in", "action": "ACCEPT", "proto": "tcp", "dport": ports }))
+        .collect();
+    let save = |name: &str| {
+        let body = json!({ "name": name, "rules": rules, "server_ids": [server] });
+        let (client, cookie) = (&client, cookie.clone());
+        async move {
+            client
+                .send(Method::POST, "/vps/firewalls", Some(&cookie), Some(body))
+                .await
+        }
+    };
+    let first = save("first").await;
+    assert_eq!(first.status, StatusCode::CREATED, "{}", first.body);
+    let second = save("second").await;
+    assert_eq!(
+        second.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        second.body
+    );
+}
+
 fn filtering_node(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
     match (method, path) {
         ("GET", path) if path.ends_with("/ipset/ipfilter-net0") => {
@@ -1072,11 +1542,8 @@ fn provisioning_node(method: &str, path: &str, _: &str) -> (u16, serde_json::Val
     }
 }
 
-#[sqlx::test]
-#[ignore = "needs DATABASE_URL"]
-async fn a_proxmox_vps_is_delivered(db: PgPool) {
+async fn deliver_a_proxmox_vps(client: Client, invite_first: bool) {
     use crate::testing::{NewService, fake_api, proxmox_integration, service};
-    let client = Client::new(db);
     let (base, calls) = fake_api(provisioning_node).await;
     let integration = proxmox_integration(&client.state, &base).await;
     sqlx::query(
@@ -1097,7 +1564,20 @@ async fn a_proxmox_vps_is_delivered(db: PgPool) {
     .execute(&client.state.db)
     .await
     .unwrap();
-    let (user, _) = client.register("delivered@example.test").await;
+    let (user, cookie) = client.register("delivered@example.test").await;
+    if invite_first {
+        let (helper, _) = client.register("helper@example.test").await;
+        crate::testing::verify(&client, &[user, helper]).await;
+        let invited = client
+            .send(
+                Method::POST,
+                "/vps/members",
+                Some(&cookie),
+                Some(json!({ "email": "helper@example.test", "permissions": ["servers.view"] })),
+            )
+            .await;
+        assert_eq!(invited.status, StatusCode::CREATED, "{}", invited.body);
+    }
     let vps = service(
         &client.state,
         NewService {
@@ -1135,4 +1615,447 @@ async fn a_proxmox_vps_is_delivered(db: PgPool) {
     assert!(calls.lock().unwrap().iter().any(|call| {
         call.starts_with("POST /api2/json/nodes/pve/qemu/9000/clone") && call.contains("newid=720")
     }));
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_proxmox_vps_is_delivered(db: PgPool) {
+    deliver_a_proxmox_vps(Client::new(db), false).await;
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn an_invite_never_breaks_the_next_delivery(
+    _: sqlx::postgres::PgPoolOptions,
+    options: sqlx::postgres::PgConnectOptions,
+) {
+    let db = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .unwrap();
+    deliver_a_proxmox_vps(Client::new(db), true).await;
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn sessions_stay_small_and_few(db: PgPool) {
+    let client = Client::new(db);
+    let (user, _) = client.register("sessions@example.test").await;
+    for _ in 0..55 {
+        auth::create_session(&client.state, user, true, Some("x".repeat(300_000)))
+            .await
+            .unwrap();
+    }
+    let (count, longest): (i64, Option<i32>) =
+        sqlx::query_as("SELECT count(*), max(length(user_agent)) FROM sessions WHERE user_id = $1")
+            .bind(user)
+            .fetch_one(&client.state.db)
+            .await
+            .unwrap();
+    assert_eq!((count, longest), (50, Some(256)));
+}
+
+async fn cancel(client: &Client, cookie: &str, subscription: uuid::Uuid) -> StatusCode {
+    let code: String = sqlx::query_scalar("SELECT code FROM subscriptions WHERE id = $1")
+        .bind(subscription)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    client
+        .send(
+            Method::POST,
+            &format!("/billing/subscriptions/{code}/cancel"),
+            Some(cookie),
+            None,
+        )
+        .await
+        .status
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn cancelling_keeps_the_invoice_for_days_already_used(db: PgPool) {
+    let client = Client::new(db);
+    let (user, cookie) = client.register("overdue@example.test").await;
+    let billing = open_invoice(&client, user).await;
+    sqlx::query("UPDATE subscriptions SET expires_at = now() - interval '5 days' WHERE id = $1")
+        .bind(billing.subscription)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE invoice_lines SET period_start = CURRENT_DATE - 5 WHERE invoice_id = $1")
+        .bind(billing.invoice)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(
+        cancel(&client, &cookie, billing.subscription).await,
+        StatusCode::OK
+    );
+    let status: String = sqlx::query_scalar("SELECT status FROM invoices WHERE id = $1")
+        .bind(billing.invoice)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(status, "open");
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn cancelling_an_unpaid_order_releases_it_at_once(db: PgPool) {
+    let client = Client::new(db);
+    let (user, cookie) = client.register("withdraw@example.test").await;
+    let billing = open_invoice(&client, user).await;
+    sqlx::query("UPDATE subscriptions SET status = 'pending', expires_at = now() WHERE id = $1")
+        .bind(billing.subscription)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    let service = crate::testing::service(
+        &client.state,
+        crate::testing::NewService {
+            user,
+            subscription: Some(billing.subscription),
+            kind: "domain",
+            status: "pending",
+            integration: None,
+            external_id: None,
+            details: json!({}),
+        },
+    )
+    .await;
+    assert_eq!(
+        cancel(&client, &cookie, billing.subscription).await,
+        StatusCode::OK
+    );
+    let state: (String, String, String) = sqlx::query_as(
+        "SELECT s.status, sv.status, v.status FROM subscriptions s, services sv, invoices v
+         WHERE s.id = $1 AND sv.id = $2 AND v.id = $3",
+    )
+    .bind(billing.subscription)
+    .bind(service)
+    .bind(billing.invoice)
+    .fetch_one(&client.state.db)
+    .await
+    .unwrap();
+    assert_eq!(
+        state,
+        (
+            "expired".to_owned(),
+            "terminated".to_owned(),
+            "cancelled".to_owned()
+        )
+    );
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_server_being_rebuilt_keeps_its_state_until_done(db: PgPool) {
+    let client = Client::new(db);
+    let (user, _) = client.register("rebuilding@example.test").await;
+    let server = crate::testing::service(
+        &client.state,
+        crate::testing::NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "active",
+            integration: None,
+            external_id: None,
+            details: json!({ "rebuilding": true }),
+        },
+    )
+    .await;
+    for action in ["suspend", "terminate"] {
+        assert!(
+            crate::services::change_state_because(&client.state, server, action, "admin")
+                .await
+                .is_err()
+        );
+    }
+    let status: String = sqlx::query_scalar("SELECT status FROM services WHERE id = $1")
+        .bind(server)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(status, "active");
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn an_api_token_never_opens_rescue_or_an_iso(db: PgPool) {
+    let client = Client::new(db);
+    let (_, cookie) = client.register("vps-token@example.test").await;
+    let created = client
+        .send(
+            Method::POST,
+            "/account/api-tokens",
+            Some(&cookie),
+            Some(json!({ "name": "script", "scopes": ["vps:write"], "expires_in_days": null })),
+        )
+        .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    let bearer = format!("Bearer {}", created.body["secret"].as_str().unwrap());
+    let server = uuid::Uuid::new_v4();
+    for (path, body) in [
+        (format!("/vps/servers/{server}/rescue"), json!({})),
+        (
+            format!("/vps/servers/{server}/iso"),
+            json!({ "iso_id": uuid::Uuid::new_v4() }),
+        ),
+    ] {
+        let reply = client
+            .send_with(
+                Method::POST,
+                &path,
+                None,
+                Some(body),
+                &[("authorization", &bearer)],
+            )
+            .await;
+        assert_eq!(reply.status, StatusCode::FORBIDDEN, "{path}");
+    }
+}
+
+const UNFINISHED: &str = "0b5e0000-0000-4000-8000-000000000733";
+
+fn unfinished_node(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+    match (method, path) {
+        ("GET", "/api2/json/nodes/pve/qemu/733/config") => (
+            200,
+            json!({ "data": { "description": format!("Stacklane {UNFINISHED} vps") } }),
+        ),
+        ("GET", path) if path.ends_with("/status/current") => {
+            (200, json!({ "data": { "status": "stopped" } }))
+        }
+        _ => (200, json!({ "data": null })),
+    }
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn terminating_an_unfinished_vps_removes_its_vm(db: PgPool) {
+    let client = Client::new(db);
+    let (base, calls) = crate::testing::fake_api(unfinished_node).await;
+    let integration = crate::testing::proxmox_integration(&client.state, &base).await;
+    let (user, _) = client.register("unfinished@example.test").await;
+    let service = crate::testing::service(
+        &client.state,
+        crate::testing::NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "failed",
+            integration: Some(integration),
+            external_id: None,
+            details: json!({ "vmid": 733, "ipv4": "192.0.2.73" }),
+        },
+    )
+    .await;
+    let id: uuid::Uuid = UNFINISHED.parse().unwrap();
+    sqlx::query("UPDATE services SET id = $2 WHERE id = $1")
+        .bind(service)
+        .bind(id)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    crate::services::change_state_because(&client.state, id, "terminate", "admin")
+        .await
+        .unwrap();
+    assert!(
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|call| call.starts_with("DELETE /api2/json/nodes/pve/qemu/733"))
+    );
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn one_customer_cannot_flood_the_hypervisor_with_server_reads(db: PgPool) {
+    let client = Client::new(db);
+    let (_, cookie) = client.register("vps-flood@example.test").await;
+    let path = format!("/vps/servers/{}/snapshots", uuid::Uuid::new_v4());
+    let mut last = StatusCode::OK;
+    for _ in 0..=120 {
+        last = client
+            .send(Method::GET, &path, Some(&cookie), None)
+            .await
+            .status;
+    }
+    assert_eq!(last, StatusCode::TOO_MANY_REQUESTS);
+}
+
+fn refusing_registrar(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+    match (method, path) {
+        ("POST", "/v1/auth/login") => (200, json!({ "code": 0, "data": { "token": "t" } })),
+        ("PUT", _) => (500, json!({ "code": 1, "desc": "down" })),
+        _ => (200, json!({ "code": 0, "data": {} })),
+    }
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_whois_change_the_registrar_refuses_is_not_kept(db: PgPool) {
+    let client = Client::new(db);
+    let (_, cookie) = client.register("whois-sync@example.test").await;
+    let profile = json!({
+        "first_name": "Ada", "last_name": "Jansen", "company": null,
+        "email": "ada@example.test", "phone": "+31 612345678", "street": "Dorpsstraat",
+        "house_number": "1", "zipcode": "1234AB", "city": "Utrecht", "country": "NL",
+    });
+    let created = client
+        .send(
+            Method::POST,
+            "/whois-profiles",
+            Some(&cookie),
+            Some(profile.clone()),
+        )
+        .await;
+    assert!(created.status.is_success(), "{}", created.body);
+    let id = created.body["id"].as_str().unwrap().to_owned();
+    let (base, calls) = crate::testing::fake_api(refusing_registrar).await;
+    let sealed = crate::integrations::seal_credentials(
+        &client.state,
+        &json!({ "username": "u", "password": "p" }),
+    )
+    .unwrap();
+    let integration = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO integrations (id, kind, name, base_url, credentials, settings)
+         VALUES ($1, 'openprovider', 'Registrar', $2, $3, '{}')",
+    )
+    .bind(integration)
+    .bind(&base)
+    .bind(sealed)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO whois_profile_handles (whois_profile_id, integration_id, handle) VALUES ($1::uuid, $2, 'AJ000001-NL')",
+    )
+    .bind(&id)
+    .bind(integration)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    let path = format!("/whois-profiles/{id}");
+
+    let mut moved = profile.clone();
+    moved["email"] = json!("other@example.test");
+    let refused = client
+        .send(Method::PUT, &path, Some(&cookie), Some(moved))
+        .await;
+    assert!(!refused.status.is_success(), "{}", refused.body);
+    assert!(
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|call| call.starts_with("PUT /v1/customers/AJ000001-NL"))
+    );
+    let email: String = sqlx::query_scalar("SELECT email FROM whois_profiles WHERE id = $1::uuid")
+        .bind(&id)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(email, "ada@example.test");
+
+    let mut renamed = profile;
+    renamed["company"] = json!("Jansen BV");
+    let saved = client
+        .send(Method::PUT, &path, Some(&cookie), Some(renamed))
+        .await;
+    assert!(saved.status.is_success(), "{}", saved.body);
+    let handles: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM whois_profile_handles WHERE whois_profile_id = $1::uuid",
+    )
+    .bind(&id)
+    .fetch_one(&client.state.db)
+    .await
+    .unwrap();
+    assert_eq!(handles, 0);
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn ssh_keys_stay_few_and_small(db: PgPool) {
+    use base64::Engine;
+    let client = Client::new(db);
+    let (_, cookie) = client.register("ssh-cap@example.test").await;
+    let key = |n: u32| {
+        let mut blob = Vec::new();
+        blob.extend_from_slice(&11u32.to_be_bytes());
+        blob.extend_from_slice(b"ssh-ed25519");
+        blob.extend_from_slice(&32u32.to_be_bytes());
+        blob.extend_from_slice(&n.to_be_bytes());
+        blob.extend_from_slice(&[7; 28]);
+        format!(
+            "ssh-ed25519 {}",
+            base64::engine::general_purpose::STANDARD.encode(blob)
+        )
+    };
+    let huge = format!("{} {}", key(0), "x".repeat(20 * 1024));
+    let refused = client
+        .send(
+            Method::POST,
+            "/ssh-keys",
+            Some(&cookie),
+            Some(json!({ "name": "huge", "public_key": huge })),
+        )
+        .await;
+    assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY);
+    for n in 1..=50 {
+        let added = client
+            .send(
+                Method::POST,
+                "/ssh-keys",
+                Some(&cookie),
+                Some(json!({ "name": format!("key {n}"), "public_key": key(n) })),
+            )
+            .await;
+        assert_eq!(added.status, StatusCode::CREATED, "{}", added.body);
+    }
+    let full = client
+        .send(
+            Method::POST,
+            "/ssh-keys",
+            Some(&cookie),
+            Some(json!({ "name": "one more", "public_key": key(51) })),
+        )
+        .await;
+    assert_eq!(full.status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn account_details_that_land_on_invoices_stay_short(db: PgPool) {
+    let client = Client::new(db);
+    let (_, cookie) = client.register("long-address@example.test").await;
+    let mut account = client
+        .send(Method::GET, "/account", Some(&cookie), None)
+        .await
+        .body;
+    account["city"] = json!("x".repeat(101));
+    let refused = client
+        .send(
+            Method::PUT,
+            "/account",
+            Some(&cookie),
+            Some(account.clone()),
+        )
+        .await;
+    assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        refused.body["errors"]["city"].is_string(),
+        "{}",
+        refused.body
+    );
+    account["city"] = json!("Utrecht");
+    let saved = client
+        .send(Method::PUT, "/account", Some(&cookie), Some(account))
+        .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
 }

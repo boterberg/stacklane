@@ -120,6 +120,7 @@ export default defineConfig({
             { text: 'Tickets', link: '/docs/guides/tickets' },
             { text: 'Gameservers', link: '/docs/guides/gameservers' },
             { text: 'VPS', link: '/docs/guides/vps' },
+            { text: 'Domeinen', link: '/docs/guides/domains' },
             { text: 'Webhosting', link: '/docs/guides/webhosting' },
             { text: 'Facturatie', link: '/docs/guides/billing' },
             { text: 'Importeren', link: '/docs/guides/import' },

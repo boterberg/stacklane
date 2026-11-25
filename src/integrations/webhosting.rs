@@ -64,6 +64,7 @@ pub fn password() -> String {
 }
 
 pub enum Hosting<'a> {
+    Cpanel(&'a super::cpanel::Cpanel),
     DirectAdmin(&'a super::directadmin::DirectAdmin),
     Plesk(&'a super::plesk::Plesk),
 }
@@ -77,6 +78,7 @@ pub fn plesk_parts(external_id: &str) -> (&str, &str) {
 impl Hosting<'_> {
     pub fn from_driver(driver: &super::Driver) -> Option<Hosting<'_>> {
         match driver {
+            super::Driver::Cpanel(client) => Some(Hosting::Cpanel(client)),
             super::Driver::DirectAdmin(client) => Some(Hosting::DirectAdmin(client)),
             super::Driver::Plesk(client) => Some(Hosting::Plesk(client)),
             _ => None,
@@ -85,6 +87,7 @@ impl Hosting<'_> {
 
     pub fn panel_name(&self) -> &'static str {
         match self {
+            Self::Cpanel(_) => "cPanel",
             Self::DirectAdmin(_) => "DirectAdmin",
             Self::Plesk(_) => "Plesk",
         }
@@ -92,6 +95,7 @@ impl Hosting<'_> {
 
     pub fn panel_url(&self) -> String {
         match self {
+            Self::Cpanel(client) => client.panel_url(),
             Self::DirectAdmin(client) => client.panel_url(),
             Self::Plesk(client) => client.panel_url(),
         }
@@ -99,6 +103,7 @@ impl Hosting<'_> {
 
     pub async fn plans(&self) -> anyhow::Result<serde_json::Value> {
         match self {
+            Self::Cpanel(client) => client.plans().await,
             Self::DirectAdmin(client) => client.plans().await,
             Self::Plesk(client) => client.plans().await,
         }
@@ -106,6 +111,7 @@ impl Hosting<'_> {
 
     pub async fn create(&self, account: &NewAccount<'_>) -> anyhow::Result<String> {
         match self {
+            Self::Cpanel(client) => client.create(account).await,
             Self::DirectAdmin(client) => client.create(account).await,
             Self::Plesk(client) => {
                 client.create(account).await?;
@@ -117,6 +123,7 @@ impl Hosting<'_> {
 
     pub async fn login_url(&self, external_id: &str, user_ip: &str) -> anyhow::Result<String> {
         match self {
+            Self::Cpanel(client) => client.login_url(external_id).await,
             Self::DirectAdmin(client) => client.login_url(external_id).await,
             Self::Plesk(client) => client.login_url(plesk_parts(external_id).0, user_ip).await,
         }

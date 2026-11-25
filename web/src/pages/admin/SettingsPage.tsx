@@ -2,18 +2,11 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
-import { Checkbox, Field, Input } from '../../components/ui/Field'
+import { Checkbox, Field, Input, Select } from '../../components/ui/Field'
 import { PageHeader } from '../../components/ui/Heading'
 import { ApiError } from '../../lib/api'
-import {
-  usePaymentSettings,
-  useSavePaymentSettings,
-  useSaveSettings,
-  useSettings,
-  type BillingSettings,
-  type Company,
-  type PaymentSettings,
-} from '../../lib/admin'
+import { usePaymentSettings, useSavePaymentSettings, useSaveSettings, useSettings, type BillingSettings, type Company, type PaymentSettings } from '../../lib/admin'
+import { countries } from '../../lib/countries'
 import { t } from '../../lib/i18n'
 
 function Saved({ show }: { show: boolean }) {
@@ -72,17 +65,40 @@ function BillingForm({ initial }: { initial: BillingSettings }) {
   const [billing, setBilling] = useState(initial)
   const save = useSaveSettings()
   const errors = save.error instanceof ApiError ? save.error.fieldErrors : {}
-  const number = (key: keyof BillingSettings, scale = 1) => ({
+  const number = (key: 'tax_rate_basis_points' | 'payment_term_days' | 'renewal_notice_days' | 'suspend_after_days', scale = 1) => ({
     inputMode: 'numeric' as const,
     value: String(billing[key] / scale),
     onChange: (event: { target: { value: string } }) => setBilling({ ...billing, [key]: Math.round(Number(event.target.value.replace(',', '.')) * scale) || 0 }),
   })
   return (
-    <FormCard title={t('Facturatie')} description={t('Wanneer Stacklane factureert en wat er gebeurt als een klant niet betaalt.')} onSubmit={() => save.mutate({ billing })} pending={save.isPending} saved={save.isSuccess}>
+    <FormCard
+      title={t('Facturatie')}
+      description={t('Wanneer Stacklane factureert en wat er gebeurt als een klant niet betaalt.')}
+      onSubmit={() => save.mutate({ billing })}
+      pending={save.isPending}
+      saved={save.isSuccess}
+    >
       <div className="grid gap-6 sm:grid-cols-2">
-        <Field label={t('Btw-tarief (%)')} description={t('Je prijzen zijn inclusief btw.')} error={errors.tax_rate_basis_points}>
+        <Field label={t('Land van je bedrijf')} error={errors.home_country}>
+          {(id) => (
+            <Select id={id} value={billing.home_country} onChange={(event) => setBilling({ ...billing, home_country: event.target.value })}>
+              {countries().map((country) => (
+                <option key={country.code} value={country.code}>
+                  {country.name}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field label={t('Btw-tarief (%)')} description={t('Je prijzen zijn inclusief dit tarief.')} error={errors.tax_rate_basis_points}>
           {(id) => <Input id={id} {...number('tax_rate_basis_points', 100)} />}
         </Field>
+        <div className="sm:col-span-2">
+          <Checkbox label={t('OSS-regeling gebruiken')} checked={billing.oss} onChange={(event) => setBilling({ ...billing, oss: event.target.checked })} />
+          <p className="mt-1 text-sm text-zinc-500 dark:text-white/60">
+            {t('Particulieren in een ander EU-land betalen dan het btw-tarief van hun eigen land. Zakelijke klanten met een geldig EU-btw-nummer krijgen altijd verlegde btw.')}
+          </p>
+        </div>
         <Field label={t('Betaaltermijn (dagen)')}>{(id) => <Input id={id} {...number('payment_term_days')} />}</Field>
         <Field label={t('Factuur maken (dagen voor verlengen)')}>{(id) => <Input id={id} {...number('renewal_notice_days')} />}</Field>
         <Field label={t('Opschorten na (dagen te laat)')} error={errors.billing}>
@@ -114,10 +130,22 @@ function PaymentsForm({ initial }: { initial: PaymentSettings }) {
       saved={save.isSuccess}
     >
       <div className="space-y-4">
-        <Checkbox label={t('Mollie: iDEAL, Bancontact, kaart en automatisch incasseren')} checked={form.mollie_enabled} onChange={(event) => setForm({ ...form, mollie_enabled: event.target.checked })} />
+        <Checkbox
+          label={t('Mollie: iDEAL, Bancontact, kaart en automatisch incasseren')}
+          checked={form.mollie_enabled}
+          onChange={(event) => setForm({ ...form, mollie_enabled: event.target.checked })}
+        />
         <Field label={t('API-sleutel van Mollie')} description={t('Begint met live_ of test_. De webhook stelt Stacklane zelf in.')} error={errors.mollie_key}>
           {(id) => (
-            <Input id={id} type="password" autoComplete="off" placeholder={initial.mollie_configured ? stored : 'live_...'} invalid={!!errors.mollie_key} value={form.mollie_key} onChange={(event) => setForm({ ...form, mollie_key: event.target.value })} />
+            <Input
+              id={id}
+              type="password"
+              autoComplete="off"
+              placeholder={initial.mollie_configured ? stored : 'live_...'}
+              invalid={!!errors.mollie_key}
+              value={form.mollie_key}
+              onChange={(event) => setForm({ ...form, mollie_key: event.target.value })}
+            />
           )}
         </Field>
       </div>
@@ -125,7 +153,15 @@ function PaymentsForm({ initial }: { initial: PaymentSettings }) {
         <Checkbox label={t('Stripe: creditcards en opgeslagen kaarten')} checked={form.stripe_enabled} onChange={(event) => setForm({ ...form, stripe_enabled: event.target.checked })} />
         <Field label={t('Geheime sleutel van Stripe')} error={errors.stripe_secret_key}>
           {(id) => (
-            <Input id={id} type="password" autoComplete="off" placeholder={initial.stripe_configured ? stored : 'sk_live_...'} invalid={!!errors.stripe_secret_key} value={form.stripe_secret_key} onChange={(event) => setForm({ ...form, stripe_secret_key: event.target.value })} />
+            <Input
+              id={id}
+              type="password"
+              autoComplete="off"
+              placeholder={initial.stripe_configured ? stored : 'sk_live_...'}
+              invalid={!!errors.stripe_secret_key}
+              value={form.stripe_secret_key}
+              onChange={(event) => setForm({ ...form, stripe_secret_key: event.target.value })}
+            />
           )}
         </Field>
         <Field
@@ -138,12 +174,23 @@ function PaymentsForm({ initial }: { initial: PaymentSettings }) {
           }
         >
           {(id) => (
-            <Input id={id} type="password" autoComplete="off" placeholder={initial.stripe_webhook_configured ? stored : 'whsec_...'} value={form.stripe_webhook_secret} onChange={(event) => setForm({ ...form, stripe_webhook_secret: event.target.value })} />
+            <Input
+              id={id}
+              type="password"
+              autoComplete="off"
+              placeholder={initial.stripe_webhook_configured ? stored : 'whsec_...'}
+              value={form.stripe_webhook_secret}
+              onChange={(event) => setForm({ ...form, stripe_webhook_secret: event.target.value })}
+            />
           )}
         </Field>
       </div>
       <div className="border-t border-zinc-200 pt-6 dark:border-white/10">
-        <Checkbox label={t('Overboeking: toon je IBAN op facturen en bij het betalen')} checked={form.bank_transfer_enabled} onChange={(event) => setForm({ ...form, bank_transfer_enabled: event.target.checked })} />
+        <Checkbox
+          label={t('Overboeking: toon je IBAN op facturen en bij het betalen')}
+          checked={form.bank_transfer_enabled}
+          onChange={(event) => setForm({ ...form, bank_transfer_enabled: event.target.checked })}
+        />
       </div>
     </FormCard>
   )

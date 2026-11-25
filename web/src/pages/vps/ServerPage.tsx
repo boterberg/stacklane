@@ -1,4 +1,4 @@
-import { ArrowPathIcon, CameraIcon, EyeIcon, GlobeAltIcon, PlayIcon, PlusIcon, PowerIcon, ServerIcon, StopIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, ArrowTopRightOnSquareIcon, CameraIcon, ExclamationTriangleIcon, EyeIcon, GlobeAltIcon, PlayIcon, PowerIcon, ServerIcon, StopIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { useState } from 'react'
 import { useParams } from 'react-router'
 
@@ -7,7 +7,7 @@ import { Button, ButtonLink } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { Field, Input, Select } from '../../components/ui/Field'
+import { Field, Input } from '../../components/ui/Field'
 import { Tabs } from '../../components/ui/Tabs'
 import { ApiError } from '../../lib/api'
 import { formatBytes, formatDate, formatDuration } from '../../lib/format'
@@ -22,16 +22,26 @@ import {
   useFirewall,
   usePower,
   useRollbackSnapshot,
+  usePanelLogin,
   useRootPassword,
   useSnapshots,
   useVpsServer,
-  type FirewallRule,
+  type Features,
   type LiveStatus,
   type Snapshot,
   type VpsServer,
 } from '../../lib/vps'
+import { isManaged } from '../../lib/firewall'
+import { RuleForm, RuleList } from './FirewallRules'
+import { LinkedCard, ServerFloatingIps, ServerNetworks, ServerVolumes } from './ServerAttached'
+import { ServerGraphs } from './ServerGraphs'
+import { ServerIso } from './ServerIso'
+import { ServerRdns } from './ServerRdns'
+import { ServerRebuild } from './ServerRebuild'
+import { ServerRescue } from './ServerRescue'
+import { useCan, useVpsAccess } from '../../lib/vpsAccess'
 
-type Tab = 'overview' | 'snapshots' | 'firewall'
+type Tab = 'overview' | 'graphs' | 'networks' | 'firewall' | 'rdns' | 'floating' | 'volumes' | 'snapshots' | 'rebuild' | 'rescue' | 'iso'
 
 function errorText(error: Error | null) {
   return error instanceof ApiError ? (Object.values(error.fieldErrors)[0] ?? error.message) : error?.message
@@ -46,8 +56,21 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   )
 }
 
-function Overview({ server, live }: { server: VpsServer; live: LiveStatus | null }) {
+function Overview({
+  server,
+  live,
+  features,
+  linked,
+  onOpen,
+}: {
+  server: VpsServer
+  live: LiveStatus | null
+  features: Features | null
+  linked: { volumes: boolean; floating: boolean; networks: boolean }
+  onOpen: (tab: Tab) => void
+}) {
   const password = useRootPassword(server.id)
+  const isOwner = useVpsAccess().data?.is_owner !== false
   return (
     <div className="grid max-w-5xl gap-6 lg:grid-cols-2">
       <Card title={t('Server')}>
@@ -60,7 +83,11 @@ function Overview({ server, live }: { server: VpsServer; live: LiveStatus | null
           </Row>
           <Row label={t('Inloggen')}>
             <span className="block">ssh root@{server.details.ipv4}</span>
-            {password.data ? (
+            {features?.panel ? (
+              <span className="mt-1 block">{t('Het rootwachtwoord en de console vind je in het panel van VirtFusion.')}</span>
+            ) : !isOwner ? (
+              <span className="mt-1 block">{t('Alleen de eigenaar van de server kan het rootwachtwoord zien.')}</span>
+            ) : password.data ? (
               <code className="mt-2 block font-mono text-zinc-800 dark:text-white">{password.data.password ?? t('Niet beschikbaar')}</code>
             ) : (
               <Button size="sm" icon={EyeIcon} className="mt-2" disabled={password.isPending} onClick={() => password.mutate()}>
@@ -74,14 +101,17 @@ function Overview({ server, live }: { server: VpsServer; live: LiveStatus | null
         {live ? (
           <dl className="divide-y divide-zinc-200 dark:divide-white/10">
             <Row label={t('Status')}>{live.state === 'running' ? t('Draait') : t('Uit')}</Row>
-            <Row label={t('Processor')}>{t('{percent}% van {cores} vCPU', { percent: Math.round(live.cpu * 100), cores: live.cpus })}</Row>
-            <Row label={t('Geheugen')}>{t('{used} van {total}', { used: formatBytes(live.memory), total: formatBytes(live.max_memory) })}</Row>
-            <Row label={t('Uptime')}>{live.uptime > 0 ? formatDuration(live.uptime * 1000) : '-'}</Row>
+            <Row label={t('Processor')}>
+              {live.cpu === null ? t('{cores} vCPU', { cores: live.cpus }) : t('{percent}% van {cores} vCPU', { percent: Math.round(live.cpu * 100), cores: live.cpus })}
+            </Row>
+            <Row label={t('Geheugen')}>{live.memory === null ? formatBytes(live.max_memory) : t('{used} van {total}', { used: formatBytes(live.memory), total: formatBytes(live.max_memory) })}</Row>
+            {live.uptime !== null && <Row label={t('Uptime')}>{live.uptime > 0 ? formatDuration(live.uptime * 1000) : '-'}</Row>}
           </dl>
         ) : (
           <p className="text-sm text-zinc-500 dark:text-white/70">{t('De server geeft nu geen gegevens door.')}</p>
         )}
       </Card>
+      <LinkedCard serverId={server.id} show={linked} onOpen={onOpen} />
     </div>
   )
 }
@@ -106,7 +136,9 @@ function Snapshots({ server }: { server: VpsServer }) {
           }}
         >
           <div className="min-w-48 flex-1">
-            <Field label={t('Omschrijving')}>{(id) => <Input id={id} placeholder={t('Bijvoorbeeld voor de update')} value={description} onChange={(event) => setDescription(event.target.value)} />}</Field>
+            <Field label={t('Omschrijving')}>
+              {(id) => <Input id={id} placeholder={t('Bijvoorbeeld voor de update')} value={description} onChange={(event) => setDescription(event.target.value)} />}
+            </Field>
           </div>
           <Button type="submit" variant="primary" icon={CameraIcon} disabled={create.isPending}>
             {create.isPending ? t('Bezig...') : t('Snapshot maken')}
@@ -150,102 +182,55 @@ function Snapshots({ server }: { server: VpsServer }) {
           else remove.mutate(confirm.snapshot.name, done)
         }}
       >
-        {confirm?.action === 'rollback'
-          ? t('Alles wat na deze snapshot op de server is veranderd, gaat verloren.')
-          : t('De snapshot is daarna weg.')}
+        {confirm?.action === 'rollback' ? t('Alles wat na deze snapshot op de server is veranderd, gaat verloren.') : t('De snapshot is daarna weg.')}
       </ConfirmDialog>
     </div>
   )
 }
 
-const emptyRule: { type: 'in' | 'out'; action: string; proto: string; dport: string; source: string; comment: string } = { type: 'in', action: 'ACCEPT', proto: 'tcp', dport: '', source: '', comment: '' }
-
 function Firewall({ server }: { server: VpsServer }) {
   const { data: rules, isPending } = useFirewall(server.id, true)
   const add = useAddFirewallRule(server.id)
   const remove = useDeleteFirewallRule(server.id)
-  const [rule, setRule] = useState(emptyRule)
   const errors = add.error instanceof ApiError ? add.error.fieldErrors : {}
 
   return (
     <div className="max-w-4xl space-y-6">
       <Card title={t('Regel toevoegen')} description={t('Zonder regels is al het verkeer toegestaan. Regels gelden van boven naar beneden.')}>
-        <form
-          noValidate
-          className="grid gap-4 sm:grid-cols-3"
-          onSubmit={(event) => {
-            event.preventDefault()
-            add.mutate(rule, { onSuccess: () => setRule(emptyRule) })
-          }}
-        >
-          <Field label={t('Richting')}>
-            {(id) => (
-              <Select id={id} value={rule.type} onChange={(event) => setRule({ ...rule, type: event.target.value as 'in' | 'out' })}>
-                <option value="in">{t('Inkomend')}</option>
-                <option value="out">{t('Uitgaand')}</option>
-              </Select>
-            )}
-          </Field>
-          <Field label={t('Actie')} error={errors.action}>
-            {(id) => (
-              <Select id={id} value={rule.action} onChange={(event) => setRule({ ...rule, action: event.target.value })}>
-                <option value="ACCEPT">{t('Toestaan')}</option>
-                <option value="DROP">{t('Blokkeren')}</option>
-              </Select>
-            )}
-          </Field>
-          <Field label={t('Protocol')} error={errors.proto}>
-            {(id) => (
-              <Select id={id} value={rule.proto} onChange={(event) => setRule({ ...rule, proto: event.target.value })}>
-                <option value="tcp">TCP</option>
-                <option value="udp">UDP</option>
-                <option value="icmp">ICMP</option>
-              </Select>
-            )}
-          </Field>
-          <Field label={t('Poort')} error={errors.dport}>
-            {(id) => <Input id={id} placeholder="22" invalid={!!errors.dport} value={rule.dport} onChange={(event) => setRule({ ...rule, dport: event.target.value })} />}
-          </Field>
-          <Field label={t('Vanaf IP-adres')} error={errors.source}>
-            {(id) => <Input id={id} placeholder={t('Iedereen')} invalid={!!errors.source} value={rule.source} onChange={(event) => setRule({ ...rule, source: event.target.value })} />}
-          </Field>
-          <Field label={t('Notitie')}>{(id) => <Input id={id} value={rule.comment} onChange={(event) => setRule({ ...rule, comment: event.target.value })} />}</Field>
-          <div className="flex justify-end sm:col-span-3">
-            <Button type="submit" variant="primary" icon={PlusIcon} disabled={add.isPending}>
-              {t('Regel toevoegen')}
-            </Button>
-          </div>
-        </form>
+        <RuleForm pending={add.isPending} errors={errors} onAdd={(rule, done) => add.mutate(rule, { onSuccess: done })} />
         {errors.server && <p className="mt-3 text-sm font-medium text-red-500 dark:text-red-400">{errors.server}</p>}
       </Card>
       {!isPending && (rules ?? []).length === 0 ? (
         <EmptyState title={t('Geen regels')} description={t('Al het verkeer naar deze server is toegestaan.')} />
       ) : (
-        <ul className="divide-y divide-zinc-200 rounded-xl border border-zinc-200 bg-white dark:divide-white/10 dark:border-white/10 dark:bg-white/10">
-          {(rules ?? []).map((item: FirewallRule) => (
-            <li key={item.id} className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 text-sm">
-              <div className="flex flex-wrap items-center gap-3">
-                <Badge color={item.action === 'ACCEPT' ? 'green' : 'red'}>{item.action === 'ACCEPT' ? t('Toestaan') : t('Blokkeren')}</Badge>
-                <span className="text-zinc-800 dark:text-white">
-                  {item.type === 'in' ? t('Inkomend') : t('Uitgaand')} · {(item.proto ?? t('alles')).toUpperCase()}
-                  {item.dport ? ` · ${t('poort {port}', { port: item.dport })}` : ''}
-                </span>
-                <span className="text-zinc-500 dark:text-white/60">{item.source ? t('vanaf {source}', { source: item.source }) : t('vanaf iedereen')}</span>
-                {item.comment && <span className="text-zinc-400 dark:text-white/50">{item.comment}</span>}
-              </div>
-              <Button size="sm" icon={TrashIcon} disabled={remove.isPending} onClick={() => remove.mutate(item.id)}>
-                {t('Verwijderen')}
-              </Button>
-            </li>
-          ))}
-        </ul>
+        <RuleList rules={rules ?? []} pending={remove.isPending} canDelete={(rule) => !isManaged(rule)} onDelete={(rule) => remove.mutate(rule.id)} />
       )}
     </div>
   )
 }
 
+function PanelButton({ id }: { id: string }) {
+  const login = usePanelLogin(id)
+  function open() {
+    const tab = window.open('about:blank', '_blank')
+    login.mutate(undefined, {
+      onSuccess: ({ url }) => {
+        if (tab) tab.location.href = url
+        else window.location.assign(url)
+      },
+      onError: () => tab?.close(),
+    })
+  }
+  return (
+    <Button size="sm" icon={ArrowTopRightOnSquareIcon} disabled={login.isPending} onClick={open}>
+      {t('Open in VirtFusion')}
+    </Button>
+  )
+}
+
 function PowerButtons({ server, live }: { server: VpsServer; live: LiveStatus | null }) {
   const power = usePower(server.id)
+  const can = useCan()
   const [stopping, setStopping] = useState(false)
   if (server.status !== 'active' || !live) return null
   const running = live.state === 'running'
@@ -253,20 +238,28 @@ function PowerButtons({ server, live }: { server: VpsServer; live: LiveStatus | 
     <div className="flex flex-wrap gap-2">
       {running ? (
         <>
-          <Button size="sm" icon={ArrowPathIcon} disabled={power.isPending} onClick={() => power.mutate('reboot')}>
-            {t('Herstarten')}
-          </Button>
-          <Button size="sm" icon={PowerIcon} disabled={power.isPending} onClick={() => power.mutate('shutdown')}>
-            {t('Afsluiten')}
-          </Button>
-          <Button size="sm" icon={StopIcon} disabled={power.isPending} onClick={() => setStopping(true)}>
-            {t('Uitzetten')}
-          </Button>
+          {can('servers.start') && can('servers.stop') && (
+            <Button size="sm" icon={ArrowPathIcon} disabled={power.isPending} onClick={() => power.mutate('reboot')}>
+              {t('Herstarten')}
+            </Button>
+          )}
+          {can('servers.stop') && (
+            <>
+              <Button size="sm" icon={PowerIcon} disabled={power.isPending} onClick={() => power.mutate('shutdown')}>
+                {t('Afsluiten')}
+              </Button>
+              <Button size="sm" icon={StopIcon} disabled={power.isPending} onClick={() => setStopping(true)}>
+                {t('Uitzetten')}
+              </Button>
+            </>
+          )}
         </>
       ) : (
-        <Button size="sm" variant="primary" icon={PlayIcon} disabled={power.isPending} onClick={() => power.mutate('start')}>
-          {t('Starten')}
-        </Button>
+        can('servers.start') && (
+          <Button size="sm" variant="primary" icon={PlayIcon} disabled={power.isPending} onClick={() => power.mutate('start')}>
+            {t('Starten')}
+          </Button>
+        )
       )}
       <ConfirmDialog
         open={stopping}
@@ -287,6 +280,8 @@ export function VpsServerPage() {
   const { id = '' } = useParams()
   const { data: server, isPending, error } = useVpsServer(id)
   const [tab, setTab] = useState<Tab>('overview')
+  const can = useCan()
+  const { data: access } = useVpsAccess()
 
   if (isPending) return null
   if (error || !server) {
@@ -304,13 +299,24 @@ export function VpsServerPage() {
   }
 
   const ready = server.status === 'active'
+  const linked = {
+    volumes: server.features?.volumes === true && can('volumes.view'),
+    floating: server.features?.floating_ips === true && can('floating_ips.view'),
+    networks: server.features?.networks === true && can('networks.view'),
+  }
   return (
     <>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-xl font-medium text-zinc-800 dark:text-white">{server.name}</h1>
-            <Badge color={serviceStatusColors[server.status]}>{serviceStatusLabels[server.status]}</Badge>
+            {server.details.rebuilding ? (
+              <Badge color="blue">{t('Wordt herbouwd')}</Badge>
+            ) : server.details.rescue ? (
+              <Badge color="amber">{t('Rescue-modus')}</Badge>
+            ) : (
+              <Badge color={serviceStatusColors[server.status]}>{serviceStatusLabels[server.status]}</Badge>
+            )}
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-zinc-500 dark:text-white/70">
             {server.details.ipv4 && (
@@ -327,7 +333,10 @@ export function VpsServerPage() {
             )}
           </div>
         </div>
-        <PowerButtons server={server} live={server.live} />
+        <div className="flex flex-wrap gap-2">
+          {server.features?.panel && access?.is_owner !== false && <PanelButton id={server.id} />}
+          <PowerButtons server={server} live={server.live} />
+        </div>
       </div>
 
       {!ready ? (
@@ -343,18 +352,40 @@ export function VpsServerPage() {
         />
       ) : (
         <>
+          {server.last_error && !server.details.rebuilding && (
+            <div className="mb-6 flex gap-3 rounded-xl border border-red-200 bg-red-50 px-6 py-4 text-sm text-red-800 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
+              <ExclamationTriangleIcon className="size-5 shrink-0" aria-hidden />
+              <p>{server.last_error}</p>
+            </div>
+          )}
           <Tabs
             tabs={[
-              { id: 'overview', label: 'Overzicht' },
-              { id: 'snapshots', label: 'Snapshots' },
-              { id: 'firewall', label: 'Firewall' },
+              { id: 'overview' as const, label: 'Overzicht' },
+              ...(server.features?.graphs ? [{ id: 'graphs' as const, label: 'Grafieken' }] : []),
+              ...(linked.networks ? [{ id: 'networks' as const, label: 'Netwerken' }] : []),
+              ...(server.features?.firewall === false || !can('firewalls.view') ? [] : [{ id: 'firewall' as const, label: 'Firewalls' }]),
+              ...(server.features?.panel ? [] : [{ id: 'rdns' as const, label: 'Reverse DNS' }]),
+              ...(linked.floating ? [{ id: 'floating' as const, label: 'Floating IPs' }] : []),
+              ...(linked.volumes ? [{ id: 'volumes' as const, label: 'Volumes' }] : []),
+              ...(server.features?.snapshots === false || !can('snapshots.view') ? [] : [{ id: 'snapshots' as const, label: 'Snapshots' }]),
+              ...(server.features?.rebuild && can('servers.rebuild') ? [{ id: 'rebuild' as const, label: 'Herbouwen' }] : []),
+              ...(server.features?.rescue && can('servers.rescue') ? [{ id: 'rescue' as const, label: 'Rescue' }] : []),
+              ...(server.features?.volumes === false || !can('isos.view') ? [] : [{ id: 'iso' as const, label: 'ISO' }]),
             ]}
             active={tab}
             onChange={setTab}
           />
-          {tab === 'overview' && <Overview server={server} live={server.live} />}
-          {tab === 'snapshots' && <Snapshots server={server} />}
+          {tab === 'overview' && <Overview server={server} live={server.live} features={server.features} linked={linked} onOpen={setTab} />}
+          {tab === 'graphs' && <ServerGraphs serverId={server.id} />}
+          {tab === 'networks' && <ServerNetworks serverId={server.id} />}
           {tab === 'firewall' && <Firewall server={server} />}
+          {tab === 'rdns' && <ServerRdns serverId={server.id} />}
+          {tab === 'floating' && <ServerFloatingIps serverId={server.id} />}
+          {tab === 'volumes' && <ServerVolumes serverId={server.id} />}
+          {tab === 'snapshots' && <Snapshots server={server} />}
+          {tab === 'rebuild' && <ServerRebuild serverId={server.id} rebuilding={server.details.rebuilding === true} />}
+          {tab === 'rescue' && <ServerRescue serverId={server.id} ipv4={server.details.ipv4} active={server.details.rescue === true} />}
+          {tab === 'iso' && <ServerIso serverId={server.id} />}
         </>
       )}
     </>

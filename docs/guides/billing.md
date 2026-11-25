@@ -12,10 +12,36 @@ Ga naar **Beheer → Instellingen**.
 
 | Instelling | Standaard | Betekenis |
 | --- | --- | --- |
+| Land van je bedrijf | Nederland | Bepaalt wie een binnenlandse klant is |
 | Btw-tarief | 21% | Prijzen zijn inclusief btw; de factuur rekent het btw-deel terug |
+| OSS-regeling | uit | Particulieren in andere EU-landen betalen het tarief van hun eigen land |
 | Betaaltermijn | 14 dagen | Hoe lang een klant heeft om te betalen |
 | Factuur maken | 14 dagen | Zoveel dagen voor de vervaldatum komt de verlengfactuur |
 | Opschorten na | 7 dagen | Zoveel dagen na de vervaldatum gaan diensten uit als er nog een open factuur is |
+
+## Btw voor klanten in het buitenland
+
+Je prijzen zijn inclusief het btw-tarief van je eigen land. Op elke factuur kijkt Stacklane naar het land van de klant, en of die een gecontroleerd btw-nummer heeft:
+
+| Klant | Btw op de factuur | Vermelding |
+| --- | --- | --- |
+| In je eigen land | Je eigen tarief | |
+| Particulier in een ander EU-land, OSS uit | Je eigen tarief | |
+| Particulier in een ander EU-land, OSS aan | Het tarief van het land van de klant | Btw tegen het tarief van dat land (OSS-regeling) |
+| Bedrijf in een ander EU-land met een gecontroleerd btw-nummer | 0% | Btw verlegd, met het btw-nummer van de klant |
+| Buiten de EU | 0% | Geen EU-btw in rekening gebracht |
+
+Stacklane rekent je prijs eerst terug naar het bedrag zonder btw en telt daar het tarief van de klant bij op. Een pakket van € 12,10 kost een Duitse particulier met OSS dus € 11,90, en een bedrijf met verlegde btw € 10,00.
+
+Zakelijke klanten vullen hun btw-nummer in bij hun profiel. Stacklane controleert het meteen bij VIES, de controledienst van de Europese Commissie. Is VIES even niet bereikbaar, dan probeert Stacklane het bij elke facturatierun opnieuw; tot die tijd krijgt de klant een gewone factuur.
+
+Zet OSS aan zodra je over de EU-drempel van € 10.000 per jaar aan particulieren in andere EU-landen gaat, of eerder als je dat wilt. Je meldt je daarvoor zelf aan voor de OSS-regeling bij de Belastingdienst.
+
+### Btw-overzicht
+
+Onder **Beheer → Btw-overzicht** zie je per kwartaal de omzet en btw per regeling, land en tarief, op factuurdatum. Geannuleerde facturen tellen niet mee. Met **CSV downloaden** krijg je het hele overzicht als bestand. **OSS-aangifte downloaden** geeft alleen de OSS-regels, per land van verbruik en tarief, met de maatstaf van heffing en de btw: precies wat je per land invult in de OSS-aangifte in Mijn Belastingdienst Zakelijk.
+
+De tarieven komen uit een vaste lijst met de standaardtarieven van alle EU-landen (stand 2026). Hosting valt overal onder het standaardtarief.
 
 ## Betaalmethoden
 

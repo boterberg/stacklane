@@ -8,8 +8,8 @@ use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::auth::CurrentUser;
 use crate::error::{AppError, AppResult};
+use crate::routes::vps_access::VpsActor;
 use crate::state::AppState;
 
 const KEY_TYPES: [&str; 6] = [
@@ -60,13 +60,14 @@ pub fn parse(public_key: &str) -> Option<(String, String)> {
     Some((normalized, fingerprint))
 }
 
-pub async fn index(
-    State(state): State<AppState>,
-    user: CurrentUser,
-) -> AppResult<Json<Vec<SshKey>>> {
+const MAX_KEYS: i64 = 50;
+const MAX_KEY_BYTES: usize = 16 * 1024;
+
+pub async fn index(State(state): State<AppState>, actor: VpsActor) -> AppResult<Json<Vec<SshKey>>> {
+    actor.require("ssh_keys.view")?;
     Ok(Json(
         sqlx::query_as("SELECT id, name, fingerprint, created_at FROM ssh_keys WHERE user_id = $1 ORDER BY created_at DESC")
-            .bind(user.id)
+            .bind(actor.owner)
             .fetch_all(&state.db)
             .await?,
     ))
@@ -74,9 +75,10 @@ pub async fn index(
 
 pub async fn create(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Json(input): Json<NewKey>,
 ) -> AppResult<(StatusCode, Json<SshKey>)> {
+    actor.require("ssh_keys.create")?;
     let name = input.name.trim();
     if name.is_empty() || name.chars().count() > 60 {
         return Err(AppError::field(
@@ -84,33 +86,53 @@ pub async fn create(
             "Geef de sleutel een naam van hoogstens 60 tekens.",
         ));
     }
+    if input.public_key.len() > MAX_KEY_BYTES {
+        return Err(AppError::field(
+            "public_key",
+            "Dit is geen geldige publieke SSH-sleutel.",
+        ));
+    }
     let (public_key, fingerprint) = parse(input.public_key.trim()).ok_or_else(|| {
         AppError::field("public_key", "Dit is geen geldige publieke SSH-sleutel.")
     })?;
+    let mut transaction = state.db.begin().await?;
+    crate::locks::transaction(&mut transaction, format!("ssh-keys {}", actor.owner)).await?;
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM ssh_keys WHERE user_id = $1")
+        .bind(actor.owner)
+        .fetch_one(&mut *transaction)
+        .await?;
+    if count >= MAX_KEYS {
+        return Err(AppError::field(
+            "public_key",
+            "Je hebt al 50 SSH-sleutels. Verwijder er eerst een.",
+        ));
+    }
     let key = sqlx::query_as(
         "INSERT INTO ssh_keys (id, user_id, name, public_key, fingerprint) VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (user_id, fingerprint) DO NOTHING
          RETURNING id, name, fingerprint, created_at",
     )
     .bind(Uuid::new_v4())
-    .bind(user.id)
+    .bind(actor.owner)
     .bind(name)
     .bind(public_key)
     .bind(fingerprint)
-    .fetch_optional(&state.db)
+    .fetch_optional(&mut *transaction)
     .await?
     .ok_or_else(|| AppError::field("public_key", "Deze sleutel heb je al toegevoegd."))?;
+    transaction.commit().await?;
     Ok((StatusCode::CREATED, Json(key)))
 }
 
 pub async fn destroy(
     State(state): State<AppState>,
-    user: CurrentUser,
+    actor: VpsActor,
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
+    actor.require("ssh_keys.delete")?;
     let deleted = sqlx::query("DELETE FROM ssh_keys WHERE id = $1 AND user_id = $2")
         .bind(id)
-        .bind(user.id)
+        .bind(actor.owner)
         .execute(&state.db)
         .await?
         .rows_affected();

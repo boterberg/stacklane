@@ -21,11 +21,9 @@ struct Due {
     code: String,
     expires_at: OffsetDateTime,
     billing_interval: String,
-    payment_mode: String,
-    mandate_id: Option<Uuid>,
 }
 
-pub async fn notify(
+pub(crate) async fn notify(
     state: &AppState,
     user_id: Uuid,
     nl: (String, String),
@@ -71,8 +69,8 @@ async fn create_invoice(
     due: &Due,
     billing: &Billing,
 ) -> AppResult<Option<(i64, i64)>> {
-    let items: Vec<(String, i32)> = sqlx::query_as(
-        "SELECT description, monthly_price_cents FROM subscription_items WHERE subscription_id = $1 ORDER BY description",
+    let items: Vec<(String, i32, Option<i32>)> = sqlx::query_as(
+        "SELECT description, monthly_price_cents, period_price_cents FROM subscription_items WHERE subscription_id = $1 ORDER BY description",
     )
     .bind(due.id)
     .fetch_all(&state.db)
@@ -85,12 +83,12 @@ async fn create_invoice(
     let end = renewal_end(due.expires_at, &due.billing_interval);
     let lines: Vec<Line> = items
         .into_iter()
-        .map(|(description, price)| Line {
+        .map(|(description, price, period_price)| Line {
             subscription_id: Some(due.id),
             description,
             period_start: Some(start),
             period_end: Some(end),
-            amount_cents: i64::from(price) * months,
+            amount_cents: period_price.map_or(i64::from(price) * months, i64::from),
         })
         .collect();
     let due_at = start.max(OffsetDateTime::now_utc().date());
@@ -183,7 +181,7 @@ async fn charge(state: &AppState, invoice_id: i64, total: i64, mandate_id: Uuid)
 
 async fn issue_renewals(state: &AppState, billing: &Billing) -> AppResult<usize> {
     let due: Vec<Due> = sqlx::query_as(
-        "SELECT s.id, s.user_id, s.code, s.expires_at, s.billing_interval, s.payment_mode, s.mandate_id
+        "SELECT s.id, s.user_id, s.code, s.expires_at, s.billing_interval
          FROM subscriptions s
          WHERE s.status IN ('active', 'suspended') AND s.cancelled_at IS NULL
            AND s.expires_at <= now() + make_interval(days => $1)
@@ -196,12 +194,24 @@ async fn issue_renewals(state: &AppState, billing: &Billing) -> AppResult<usize>
     .await?;
     let mut created = 0;
     for subscription in due {
+        let mut guard = state.db.begin().await?;
+        crate::locks::transaction(&mut guard, format!("subscription {}", subscription.id)).await?;
+        let current: Option<(String, Option<Uuid>)> = sqlx::query_as(
+            "SELECT payment_mode, mandate_id FROM subscriptions
+             WHERE id = $1 AND status IN ('active', 'suspended') AND cancelled_at IS NULL",
+        )
+        .bind(subscription.id)
+        .fetch_optional(&mut *guard)
+        .await?;
+        let Some((payment_mode, mandate_id)) = current else {
+            continue;
+        };
         let Some((invoice_id, total)) = create_invoice(state, &subscription, billing).await? else {
             continue;
         };
         created += 1;
         let link = format!("/billing/invoices/{invoice_id}");
-        match (subscription.payment_mode.as_str(), subscription.mandate_id) {
+        match (payment_mode.as_str(), mandate_id) {
             ("automatic", Some(mandate_id)) => charge(state, invoice_id, total, mandate_id).await?,
             _ => notify(
                 state,
@@ -212,6 +222,7 @@ async fn issue_renewals(state: &AppState, billing: &Billing) -> AppResult<usize>
             )
             .await?,
         }
+        guard.commit().await?;
     }
     Ok(created)
 }
@@ -307,6 +318,7 @@ async fn expire_orders(state: &AppState) -> AppResult<usize> {
          WHERE s.status = 'pending'
            AND (EXISTS (SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
                         WHERE l.subscription_id = s.id AND i.status = 'open')
+                OR s.cancelled_at IS NOT NULL
                 OR (s.started_at < now() - interval '1 day' AND s.import_ref IS NULL
                     AND NOT EXISTS (SELECT 1 FROM invoice_lines l WHERE l.subscription_id = s.id)))
            AND NOT EXISTS (SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
@@ -344,6 +356,36 @@ pub struct Run {
     pub suspended: usize,
     pub ended: usize,
     pub expired: usize,
+}
+
+async fn recheck_vat_numbers(state: &AppState) -> AppResult<()> {
+    let pending: Vec<(uuid::Uuid, String, String)> = sqlx::query_as(
+        "SELECT id, tax_id, country::text FROM users
+         WHERE is_business AND tax_id IS NOT NULL AND tax_id_verified_at IS NULL
+           AND (tax_id_checked_at IS NULL OR tax_id_checked_at < now() - interval '1 day')
+         ORDER BY tax_id_checked_at NULLS FIRST LIMIT 20",
+    )
+    .fetch_all(&state.db)
+    .await?;
+    for (user_id, tax_id, country) in pending {
+        sqlx::query("UPDATE users SET tax_id_checked_at = now() WHERE id = $1")
+            .bind(user_id)
+            .execute(&state.db)
+            .await?;
+        let Some((code, number)) = crate::vat::split_vat_number(&tax_id, &country) else {
+            continue;
+        };
+        if let Ok(true) = crate::vat::check_vies(&code, &number).await {
+            sqlx::query(
+                "UPDATE users SET tax_id_verified_at = now() WHERE id = $1 AND tax_id = $2",
+            )
+            .bind(user_id)
+            .bind(&tax_id)
+            .execute(&state.db)
+            .await?;
+        }
+    }
+    Ok(())
 }
 
 async fn reconcile_suspensions(state: &AppState) -> AppResult<()> {
@@ -431,6 +473,8 @@ async fn run_locked(state: &AppState) -> AppResult<Run> {
         expired: counted("expire", expire_orders(state).await),
     };
     counted("reconcile", reconcile_suspensions(state).await.map(|()| 0));
+    counted("isos", crate::routes::vps_isos::remove_unused(state).await);
+    counted("ptr", crate::routes::vps_rdns::retry_cleanups(state).await);
     counted(
         "ip filter",
         crate::services::filter_older_vms(state)
@@ -438,6 +482,7 @@ async fn run_locked(state: &AppState) -> AppResult<Run> {
             .map_err(crate::error::AppError::Internal),
     );
     counted("cleanup", remove_expired(state).await);
+    counted("vat", recheck_vat_numbers(state).await.map(|()| 0));
     Ok(run)
 }
 

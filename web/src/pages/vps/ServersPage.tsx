@@ -8,6 +8,7 @@ import { PageHeader } from '../../components/ui/Heading'
 import { ListToolbar, SearchField } from '../../components/ui/ListToolbar'
 import { RowCard, RowCardList } from '../../components/ui/ResourceList'
 import { t } from '../../lib/i18n'
+import { useVpsAccess } from '../../lib/vpsAccess'
 import { serviceStatusColors, serviceStatusLabels } from '../../lib/labels'
 import { specsLine, useVpsServers } from '../../lib/vps'
 
@@ -16,11 +17,12 @@ export function VpsServersPage() {
   const [query, setQuery] = useState('')
   const needle = query.trim().toLowerCase()
   const shown = (servers ?? []).filter((server) => !needle || server.name.toLowerCase().includes(needle) || server.details.ipv4?.includes(needle))
-  const order = (
+  const isOwner = useVpsAccess().data?.is_owner !== false
+  const order = isOwner ? (
     <ButtonLink to="/vps/servers/order" size="sm" icon={PlusIcon}>
       {t('Server bestellen')}
     </ButtonLink>
-  )
+  ) : null
 
   return (
     <>

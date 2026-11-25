@@ -19,6 +19,8 @@ pub struct Company {
 #[serde(default)]
 pub struct Billing {
     pub tax_rate_basis_points: i32,
+    pub home_country: String,
+    pub oss: bool,
     pub payment_term_days: i32,
     pub renewal_notice_days: i32,
     pub suspend_after_days: i32,
@@ -28,6 +30,8 @@ impl Default for Billing {
     fn default() -> Self {
         Self {
             tax_rate_basis_points: 2100,
+            home_country: "NL".to_owned(),
+            oss: false,
             payment_term_days: 14,
             renewal_notice_days: 14,
             suspend_after_days: 7,
