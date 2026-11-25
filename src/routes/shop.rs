@@ -521,7 +521,7 @@ async fn place_order(
                  SELECT 1 FROM services
                  WHERE lower(name) = $1
                    AND ((kind = 'webhosting' AND integration_id = $2 AND status IN ('provisioning', 'active', 'suspended'))
-                        OR (kind = 'domain' AND user_id <> $3 AND status IN ('active', 'suspended'))))",
+                        OR (kind = 'domain' AND user_id <> $3 AND status NOT IN ('terminated', 'failed'))))",
         )
         .bind(name)
         .bind(product.integration_id)
