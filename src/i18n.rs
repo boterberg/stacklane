@@ -69,6 +69,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Deze link is verlopen of al gebruikt. Vraag een nieuwe aan." => {
             "This link has expired or was already used. Request a new one."
         }
+        "Deze link hoort bij een ander account. Log in met dat account en open de link opnieuw." => {
+            "This link belongs to another account. Sign in with that account and open the link again."
+        }
         "Ongeldig pad." => "Invalid path.",
         "Deze server is opgeschort. Neem contact op met support." => {
             "This server is suspended. Please contact support."

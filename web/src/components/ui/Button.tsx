@@ -55,9 +55,9 @@ export function Button({ variant, size, icon, className, children, type = 'butto
   )
 }
 
-export function ButtonLink({ variant, size, icon, className, children, to }: Common & { to: string }) {
+export function ButtonLink({ variant, size, icon, className, children, to, state }: Common & { to: string; state?: unknown }) {
   return (
-    <Link to={to} className={classes({ variant, size, className })}>
+    <Link to={to} state={state} className={classes({ variant, size, className })}>
       <Content icon={icon}>{children}</Content>
     </Link>
   )

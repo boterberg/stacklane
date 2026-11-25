@@ -36,15 +36,24 @@ pub async fn refuse_if_just_mailed(state: &AppState, user_id: Uuid, email: &str)
     .fetch_one(&state.db)
     .await?;
     if recent {
-        return Err(AppError::field(
-            "email",
-            "Er is net al een bevestiging naar dit adres gestuurd. Probeer het over een paar minuten opnieuw.",
-        ));
+        return Err(just_mailed());
     }
     Ok(())
 }
 
-pub async fn send(state: &AppState, user_id: Uuid, email: &str) -> AppResult<()> {
+fn just_mailed() -> AppError {
+    AppError::field(
+        "email",
+        "Er is net al een bevestiging naar dit adres gestuurd. Probeer het over een paar minuten opnieuw.",
+    )
+}
+
+pub async fn send(
+    state: &AppState,
+    user_id: Uuid,
+    email: &str,
+    session: Option<&str>,
+) -> AppResult<()> {
     let (first_name, locale, current): (String, String, String) =
         sqlx::query_as("SELECT first_name, locale, email::text FROM users WHERE id = $1")
             .bind(user_id)
@@ -52,6 +61,28 @@ pub async fn send(state: &AppState, user_id: Uuid, email: &str) -> AppResult<()>
             .await?;
     let token = hex::encode(rand::random::<[u8; 32]>());
     let mut transaction = state.db.begin().await?;
+    if let Some(session) = session {
+        auth::lock_live_session(&mut transaction, user_id, session).await?;
+    }
+    sqlx::query(
+        "SELECT pg_advisory_xact_lock(hashtextextended('verification mail ' || lower($1), 0))",
+    )
+    .bind(email)
+    .execute(&mut *transaction)
+    .await?;
+    let crowded: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM email_verifications
+                        WHERE lower(email::text) = lower($2)
+                          AND (created_at > now() - interval '1 minute'
+                               OR (user_id <> $1 AND created_at > now() - interval '10 minutes')))",
+    )
+    .bind(user_id)
+    .bind(email)
+    .fetch_one(&mut *transaction)
+    .await?;
+    if crowded {
+        return Err(just_mailed());
+    }
     sqlx::query("DELETE FROM email_verifications WHERE user_id = $1")
         .bind(user_id)
         .execute(&mut *transaction)
@@ -140,8 +171,12 @@ pub async fn send(state: &AppState, user_id: Uuid, email: &str) -> AppResult<()>
 pub async fn verify(
     State(state): State<AppState>,
     ClientIp(ip): ClientIp,
+    user: CurrentUser,
     Json(input): Json<VerifyRequest>,
 ) -> AppResult<StatusCode> {
+    if user.via_api_token {
+        return Err(AppError::Forbidden);
+    }
     state.limits.check(&limits::VERIFY, &ip)?;
     let expired = || {
         AppError::field(
@@ -150,14 +185,21 @@ pub async fn verify(
         )
     };
     let mut transaction = state.db.begin().await?;
+    auth::lock_live_session(&mut transaction, user.id, &user.token_hash).await?;
     let found: Option<(Uuid, String)> = sqlx::query_as(
-        "DELETE FROM email_verifications WHERE token_hash = $1 AND expires_at > now()
-         RETURNING user_id, email::text",
+        "SELECT user_id, email::text FROM email_verifications
+         WHERE token_hash = $1 AND expires_at > now()",
     )
     .bind(auth::hash_token(input.token.trim()))
     .fetch_optional(&mut *transaction)
     .await?;
     let (user_id, email) = found.ok_or_else(expired)?;
+    if user_id != user.id {
+        return Err(AppError::field(
+            "token",
+            "Deze link hoort bij een ander account. Log in met dat account en open de link opnieuw.",
+        ));
+    }
     let taken: bool =
         sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM users WHERE email = $1 AND id <> $2)")
             .bind(&email)
@@ -230,7 +272,7 @@ pub async fn resend(State(state): State<AppState>, user: CurrentUser) -> AppResu
         return Ok(StatusCode::NO_CONTENT);
     }
     refuse_if_just_mailed(&state, user.id, &email).await?;
-    send(&state, user.id, &email).await?;
+    send(&state, user.id, &email, Some(&user.token_hash)).await?;
     Ok(StatusCode::ACCEPTED)
 }
 

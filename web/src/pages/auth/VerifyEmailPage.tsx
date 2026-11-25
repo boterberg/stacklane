@@ -12,7 +12,7 @@ export function VerifyEmailPage() {
   const [params] = useSearchParams()
   const token = params.get('token') ?? ''
   const queryClient = useQueryClient()
-  const { data: profile } = useMe()
+  const { data: profile, isPending: checking } = useMe()
   const started = useRef(false)
   const verify = useMutation({
     mutationFn: () => api<void>('/auth/verify-email', { method: 'POST', body: { token } }),
@@ -20,13 +20,13 @@ export function VerifyEmailPage() {
   })
 
   useEffect(() => {
-    if (!token || started.current) return
+    if (!token || !profile || started.current) return
     started.current = true
     verify.mutate()
-  }, [token, verify])
+  }, [token, profile, verify])
 
   const error = verify.error instanceof ApiError ? (verify.error.fieldErrors.token ?? verify.error.message) : null
-  const next = profile ? '/' : '/login'
+  const loggedOut = !checking && !profile && !!token
 
   return (
     <>
@@ -34,12 +34,19 @@ export function VerifyEmailPage() {
       <p className="mb-6 text-center text-sm text-zinc-500 dark:text-white/70">
         {!token
           ? t('Deze link is niet compleet.')
-          : verify.isSuccess
-            ? t('Bedankt. Je e-mailadres is bevestigd.')
-            : error ?? t('Even geduld…')}
+          : loggedOut
+            ? t('Log eerst in met het account waar dit e-mailadres bij hoort. Daarna bevestigen we het meteen.')
+            : verify.isSuccess
+              ? t('Bedankt. Je e-mailadres is bevestigd.')
+              : error ?? t('Even geduld…')}
       </p>
-      {(verify.isSuccess || verify.isError || !token) && (
-        <ButtonLink to={next} variant="primary" className="w-full">
+      {loggedOut && (
+        <ButtonLink to="/login" state={{ from: `/verify-email?token=${encodeURIComponent(token)}` }} variant="primary" className="w-full">
+          {t('Naar inloggen')}
+        </ButtonLink>
+      )}
+      {!loggedOut && (verify.isSuccess || verify.isError || !token) && (
+        <ButtonLink to={profile ? '/' : '/login'} variant="primary" className="w-full">
           {profile ? t('Naar het dashboard') : t('Naar inloggen')}
         </ButtonLink>
       )}

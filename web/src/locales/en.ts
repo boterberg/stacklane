@@ -226,6 +226,7 @@ export const en: Record<string, string> = {
   "Deze firewall laat nog al het verkeer door.": "This firewall still lets all traffic through.",
   "Deze gegevens staan op elke factuur.": "These details appear on every invoice.",
   "Deze link is niet compleet.": "This link is incomplete.",
+  "Log eerst in met het account waar dit e-mailadres bij hoort. Daarna bevestigen we het meteen.": "Sign in first with the account this email address belongs to. We confirm it right after.",
   "Deze pagina bestaat niet": "This page does not exist",
   "Deze server bestaat niet of hoort niet bij je account.": "This server does not exist or does not belong to your account.",
   "Deze server bestaat niet of is van iemand anders.": "This server does not exist or belongs to someone else.",
