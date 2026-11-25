@@ -141,7 +141,7 @@ async fn customer_ref(
     Ok(created)
 }
 
-fn description(locale: Locale, invoice_id: i64) -> String {
+pub(crate) fn description(locale: Locale, invoice_id: i64) -> String {
     match locale {
         Locale::Nl => format!("Factuur {invoice_id}"),
         Locale::En => format!("Invoice {invoice_id}"),

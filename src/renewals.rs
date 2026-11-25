@@ -129,13 +129,15 @@ async fn charge(state: &AppState, invoice_id: i64, total: i64, mandate_id: Uuid)
     let Some((provider, customer, mandate)) = mandate else {
         return Ok(());
     };
-    let currency: String = sqlx::query_scalar("SELECT currency FROM invoices WHERE id = $1")
-        .bind(invoice_id)
-        .fetch_one(&state.db)
-        .await?;
+    let (currency, locale): (String, String) = sqlx::query_as(
+        "SELECT i.currency, u.locale FROM invoices i JOIN users u ON u.id = i.user_id WHERE i.id = $1",
+    )
+    .bind(invoice_id)
+    .fetch_one(&state.db)
+    .await?;
     let providers = payments::providers(state).await?;
     let payment_id = Uuid::new_v4();
-    let description = format!("Stacklane {invoice_id}");
+    let description = payments::description(Locale::parse(&locale), invoice_id);
     sqlx::query(
         "INSERT INTO payments (id, invoice_id, provider, status, amount_cents, recurring) VALUES ($1, $2, $3, 'open', $4, TRUE)",
     )
