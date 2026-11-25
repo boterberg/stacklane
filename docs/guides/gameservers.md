@@ -30,6 +30,30 @@ Onder **Beheer → Diensten** kies je **Dienst aanmaken**, met de klant, het pro
 
 Vanuit hetzelfde overzicht schort je een server op, heractiveer je hem of hef je hem op. Mislukt het aanmaken, dan zie je de foutmelding van Pterodactyl en kun je het opnieuw proberen.
 
+## Server delen met anderen
+
+Een klant kan anderen toegang geven tot een server, bijvoorbeeld een medebeheerder van een Minecraft-community. Dat gaat via het tabblad **Gebruikers** op de serverpagina. Alleen de eigenaar ziet dat tabblad.
+
+1. De ander heeft een eigen account nodig met een bevestigd e-mailadres.
+2. De eigenaar vult dat e-mailadres in en vinkt de rechten aan.
+3. De ander krijgt een melding en accepteert onder **Account → Gedeelde toegang**. Pas daarna werkt de toegang.
+
+| Recht | Wat het geeft |
+| --- | --- |
+| Console | Live meekijken en commando's sturen. Daarmee kan iemand de server ook stoppen. |
+| Starten en stoppen | De knoppen om te starten, herstarten en stoppen |
+| Bestanden | Bestanden bekijken en wijzigen, ook configuratie met wachtwoorden |
+| Back-ups | Back-ups maken en downloaden; een back-up bevat alle bestanden |
+| Activiteit | Zien wie wat deed, zonder IP-adressen |
+
+Een gedeelde server staat bij de ander onder **Gameservers → Servers**, met wie hem deelt. Een server kan met hoogstens tien gebruikers gedeeld worden. Wordt de server opgeschort of opgeheven, dan stopt de toegang voor iedereen.
+
+De toegang loopt via Stacklane, niet via subusers in Pterodactyl. De ander heeft dus geen Pterodactyl-account nodig, en jij houdt alles in één panel.
+
+## Activiteit
+
+Het tabblad **Activiteit** toont wie de server startte of stopte, de console opende, een bestand wijzigde of een back-up maakte. De eigenaar ziet ook vanaf welk IP-adres.
+
 ## Bestaande servers overnemen
 
 Heb je al klanten in Pterodactyl, haal ze dan over met [`stacklane import pterodactyl`](/docs/guides/import).
