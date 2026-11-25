@@ -1584,3 +1584,22 @@ async fn an_invite_never_breaks_the_next_delivery(
         .unwrap();
     deliver_a_proxmox_vps(Client::new(db), true).await;
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn sessions_stay_small_and_few(db: PgPool) {
+    let client = Client::new(db);
+    let (user, _) = client.register("sessions@example.test").await;
+    for _ in 0..55 {
+        auth::create_session(&client.state, user, true, Some("x".repeat(300_000)))
+            .await
+            .unwrap();
+    }
+    let (count, longest): (i64, Option<i32>) =
+        sqlx::query_as("SELECT count(*), max(length(user_agent)) FROM sessions WHERE user_id = $1")
+            .bind(user)
+            .fetch_one(&client.state.db)
+            .await
+            .unwrap();
+    assert_eq!((count, longest), (50, Some(256)));
+}

@@ -25,6 +25,9 @@ pub fn hash_token(token: &str) -> String {
     hex::encode(Sha256::digest(token.as_bytes()))
 }
 
+const USER_AGENT_CHARS: usize = 256;
+const MAX_SESSIONS: i64 = 50;
+
 pub async fn create_session(
     state: &AppState,
     user_id: Uuid,
@@ -37,13 +40,27 @@ pub async fn create_session(
     } else {
         DEFAULT_LIFETIME
     };
+    let user_agent =
+        user_agent.map(|agent| agent.chars().take(USER_AGENT_CHARS).collect::<String>());
+    let mut transaction = state.db.begin().await?;
     sqlx::query("INSERT INTO sessions (token_hash, user_id, user_agent, expires_at) VALUES ($1, $2, $3, $4)")
         .bind(hash_token(&token))
         .bind(user_id)
         .bind(user_agent)
         .bind(OffsetDateTime::now_utc() + lifetime)
-        .execute(&state.db)
+        .execute(&mut *transaction)
         .await?;
+    sqlx::query(
+        "DELETE FROM sessions WHERE user_id = $1 AND token_hash IN (
+             SELECT token_hash FROM sessions WHERE user_id = $1
+             ORDER BY created_at DESC OFFSET $2
+         )",
+    )
+    .bind(user_id)
+    .bind(MAX_SESSIONS)
+    .execute(&mut *transaction)
+    .await?;
+    transaction.commit().await?;
     Ok((token, remember.then_some(lifetime)))
 }
 
