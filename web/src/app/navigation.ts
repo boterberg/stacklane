@@ -23,6 +23,7 @@ import {
   QuestionMarkCircleIcon,
   ReceiptPercentIcon,
   ServerStackIcon,
+  ShareIcon,
   ShieldCheckIcon,
   UsersIcon,
   WindowIcon,
@@ -133,6 +134,7 @@ export const vpsSection: NavSection = {
       label: 'Netwerk',
       children: [
         { label: 'Floating IPs', to: '/vps/floating-ips', icon: MapPinIcon, permission: 'floating_ips.view' },
+        { label: 'Netwerken', to: '/vps/networks', icon: ShareIcon, permission: 'networks.view' },
         { label: 'Firewalls', to: '/vps/firewalls', icon: ShieldCheckIcon, permission: 'firewalls.view' },
       ],
     },

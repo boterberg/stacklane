@@ -32,6 +32,9 @@ const emptyForm = {
   token_secret: '',
   node: 'pve',
   bridge: 'vmbr0',
+  private_bridge: '',
+  vlan_from: '2000',
+  vlan_to: '2999',
   storage: 'local',
   iso_storage: 'local',
   ip_from: '',
@@ -142,6 +145,9 @@ function payload(form: typeof emptyForm): IntegrationInput {
       settings: {
         node: form.node.trim(),
         bridge: form.bridge.trim(),
+        private_bridge: form.private_bridge.trim() || null,
+        vlan_from: Number(form.vlan_from) || 0,
+        vlan_to: Number(form.vlan_to) || 0,
         storage: form.storage.trim(),
         iso_storage: form.iso_storage.trim(),
         ip_from: form.ip_from.trim(),
@@ -391,6 +397,18 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
               <Field label={t('Prefix')}>{(id) => <Input id={id} inputMode="numeric" value={form.prefix} onChange={(event) => setForm({ ...form, prefix: event.target.value })} />}</Field>
             </div>
             <Field label={t('DNS-server')}>{(id) => <Input id={id} value={form.dns} onChange={(event) => setForm({ ...form, dns: event.target.value })} />}</Field>
+            <Field
+              label={t('Bridge voor privénetwerken')}
+              description={t('Een bridge waarop elk netwerk een eigen VLAN krijgt, zoals vmbr1. Leeg laten als klanten geen privénetwerken mogen maken.')}
+            >
+              {(id) => <Input id={id} placeholder="vmbr1" value={form.private_bridge} onChange={(event) => setForm({ ...form, private_bridge: event.target.value })} />}
+            </Field>
+            {form.private_bridge.trim() && (
+              <div className="grid gap-6 sm:grid-cols-2">
+                <Field label={t('Eerste VLAN')}>{(id) => <Input id={id} inputMode="numeric" value={form.vlan_from} onChange={(event) => setForm({ ...form, vlan_from: event.target.value })} />}</Field>
+                <Field label={t('Laatste VLAN')}>{(id) => <Input id={id} inputMode="numeric" value={form.vlan_to} onChange={(event) => setForm({ ...form, vlan_to: event.target.value })} />}</Field>
+              </div>
+            )}
             <Field label={t('Besturingssystemen')} description={t('Per regel het nummer van een cloud-init-template en de naam die klanten zien.')}>
               {(id) => (
                 <textarea
