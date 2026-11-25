@@ -88,14 +88,19 @@ pub async fn update(
         return Err(AppError::field("first_name", "Vul je voornaam in."));
     }
     let email = input.email.trim().to_lowercase();
-    if !looks_like_email(&email) {
+    let stored: (String, Option<String>) =
+        sqlx::query_as("SELECT email::text, invoice_email FROM users WHERE id = $1")
+            .bind(user.id)
+            .fetch_one(&state.db)
+            .await?;
+    if email != stored.0.to_lowercase() && !looks_like_email(&email) {
         return Err(AppError::field("email", "Vul een geldig e-mailadres in."));
     }
     let invoice_email = tidy(input.invoice_email).map(|value| value.to_lowercase());
-    if invoice_email
-        .as_deref()
-        .is_some_and(|value| !looks_like_email(value))
-    {
+    if invoice_email.as_deref().is_some_and(|value| {
+        Some(value) != stored.1.as_deref().map(str::to_lowercase).as_deref()
+            && !looks_like_email(value)
+    }) {
         return Err(AppError::field(
             "invoice_email",
             "Vul een geldig e-mailadres in.",

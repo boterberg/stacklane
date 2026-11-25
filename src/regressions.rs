@@ -979,3 +979,24 @@ async fn an_order_left_without_an_invoice_expires(db: PgPool) {
         .unwrap();
     assert_eq!(status, "expired");
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn an_older_address_does_not_block_saving_the_profile(db: PgPool) {
+    let client = Client::new(db);
+    let (user, cookie) = client.register("legacy@example.test").await;
+    sqlx::query("UPDATE users SET email = 'jörg@müller.example' WHERE id = $1")
+        .bind(user)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    let mut profile = client
+        .send(Method::GET, "/account", Some(&cookie), None)
+        .await
+        .body;
+    profile["first_name"] = json!("Jörg");
+    let saved = client
+        .send(Method::PUT, "/account", Some(&cookie), Some(profile))
+        .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
+}

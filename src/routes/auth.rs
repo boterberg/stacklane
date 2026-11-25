@@ -170,6 +170,12 @@ pub async fn login(
 ) -> AppResult<(CookieJar, Json<Profile>)> {
     let email = input.email.trim().to_lowercase();
     state.limits.check(&limits::LOGIN, &ip)?;
+    if email.len() > 254 {
+        return Err(AppError::field(
+            "email",
+            "Dit e-mailadres of wachtwoord klopt niet.",
+        ));
+    }
     state
         .limits
         .check(&limits::LOGIN_ACCOUNT, &format!("{ip}|{email}"))?;
@@ -234,7 +240,7 @@ pub async fn forgot_password(
 ) -> AppResult<StatusCode> {
     state.limits.check(&limits::RECOVERY, &ip)?;
     let email = input.email.trim().to_lowercase();
-    if !looks_like_email(&email) {
+    if email.len() > 254 || !email.contains('@') {
         return Err(AppError::field("email", "Vul een geldig e-mailadres in."));
     }
     let user: Option<(Uuid, String, String)> =
@@ -347,7 +353,12 @@ pub async fn reset_password(
     .bind(auth::hash(&input.password).await?)
     .execute(&mut *transaction)
     .await?;
-    for table in ["sessions", "api_tokens", "password_resets"] {
+    for table in [
+        "sessions",
+        "api_tokens",
+        "password_resets",
+        "email_verifications",
+    ] {
         sqlx::query(sqlx::AssertSqlSafe(format!(
             "DELETE FROM {table} WHERE user_id = $1"
         )))

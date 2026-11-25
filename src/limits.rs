@@ -75,7 +75,7 @@ impl Limits {
             .hits
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if hits.len() > 50_000 {
+        if hits.len() > 10_000 {
             hits.retain(|(name, _), (started, _)| now.duration_since(*started) < window_of(name));
         }
         let entry = hits.entry((rule.name, key.to_owned())).or_insert((now, 0));
@@ -109,6 +109,19 @@ fn window_of(name: &str) -> Duration {
 
 pub struct ClientIp(pub String);
 
+fn bucket(ip: IpAddr) -> String {
+    match ip {
+        IpAddr::V6(v6) if v6.to_ipv4_mapped().is_none() => {
+            let [a, b, c, d, ..] = v6.segments();
+            format!("{a:x}:{b:x}:{c:x}:{d:x}::/64")
+        }
+        IpAddr::V6(v6) => v6
+            .to_ipv4_mapped()
+            .map_or_else(|| v6.to_string(), |v4| v4.to_string()),
+        IpAddr::V4(v4) => v4.to_string(),
+    }
+}
+
 impl FromRequestParts<AppState> for ClientIp {
     type Rejection = AppError;
 
@@ -128,9 +141,7 @@ impl FromRequestParts<AppState> for ClientIp {
             (Some(peer), _) => Some(peer),
             (None, forwarded) => forwarded,
         };
-        Ok(Self(
-            ip.map_or_else(|| "unknown".to_owned(), |ip| ip.to_string()),
-        ))
+        Ok(Self(ip.map_or_else(|| "unknown".to_owned(), bucket)))
     }
 }
 
@@ -168,6 +179,10 @@ mod tests {
             "198.51.100.8"
         );
         assert_eq!(client_ip("127.0.0.1:4000", None).await, "127.0.0.1");
+        assert_eq!(
+            client_ip("[2001:db8:1:2:aaaa::1]:4000", None).await,
+            client_ip("[2001:db8:1:2:bbbb::9]:4000", None).await
+        );
     }
 
     #[test]
