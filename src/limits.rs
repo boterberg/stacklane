@@ -70,6 +70,16 @@ pub const UNKNOWN_PAYMENT: Rule = Rule {
     max: 60,
     window: Duration::from_secs(60 * 60),
 };
+pub const DOMAIN_CHANGE: Rule = Rule {
+    name: "domain-change",
+    max: 20,
+    window: Duration::from_secs(60 * 60),
+};
+pub const GAME_PANEL: Rule = Rule {
+    name: "game-panel",
+    max: 120,
+    window: Duration::from_secs(60),
+};
 pub const DOMAIN_SEARCH: Rule = Rule {
     name: "domain-search",
     max: 30,
@@ -117,6 +127,9 @@ fn window_of(name: &str) -> Duration {
         TICKET_REPLY,
         INVITE,
         RDNS,
+        UNKNOWN_PAYMENT,
+        DOMAIN_CHANGE,
+        GAME_PANEL,
         DOMAIN_SEARCH,
     ]
     .into_iter()

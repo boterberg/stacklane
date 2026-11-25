@@ -402,6 +402,9 @@ pub async fn set_nameservers(
     Path(id): Path<Uuid>,
     Json(input): Json<Nameservers>,
 ) -> AppResult<StatusCode> {
+    state
+        .limits
+        .check(&crate::limits::DOMAIN_CHANGE, &user.id.to_string())?;
     let names: Vec<String> = input
         .nameservers
         .iter()
@@ -464,6 +467,9 @@ pub async fn set_lock(
     Path(id): Path<Uuid>,
     Json(input): Json<Lock>,
 ) -> AppResult<StatusCode> {
+    state
+        .limits
+        .check(&crate::limits::DOMAIN_CHANGE, &user.id.to_string())?;
     let (client, external_id) = registrar(&state, &user, id).await?;
     client
         .set_locked(&external_id, input.locked)
