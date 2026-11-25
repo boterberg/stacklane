@@ -124,6 +124,7 @@ export default defineConfig({
             { text: 'Webhosting', link: '/docs/guides/webhosting' },
             { text: 'Facturatie', link: '/docs/guides/billing' },
             { text: 'Huisstijl', link: '/docs/guides/branding' },
+            { text: 'Team en rechten', link: '/docs/guides/team' },
             { text: 'Importeren', link: '/docs/guides/import' },
             { text: 'API', link: '/docs/guides/api' },
             { text: 'Veelgestelde vragen', link: '/docs/guides/faq' },
