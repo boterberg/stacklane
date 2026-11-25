@@ -1,4 +1,4 @@
-import { ArchiveBoxArrowDownIcon, ArchiveBoxIcon, CommandLineIcon, DocumentTextIcon, PowerIcon } from '@heroicons/react/24/outline'
+import { ArchiveBoxArrowDownIcon, ArchiveBoxIcon, CommandLineIcon, DocumentTextIcon, PowerIcon, PuzzlePieceIcon } from '@heroicons/react/24/outline'
 
 import { EmptyState } from '../../components/ui/EmptyState'
 import { formatDate, formatRelative } from '../../lib/format'
@@ -32,6 +32,10 @@ function describe(entry: ActivityEntry) {
       return { icon: ArchiveBoxIcon, text: t('Back-up gemaakt: {name}', { name: entry.detail ?? '' }) }
     case 'backup.download':
       return { icon: ArchiveBoxArrowDownIcon, text: t('Back-up gedownload') }
+    case 'addon.install':
+      return { icon: PuzzlePieceIcon, text: t('Geïnstalleerd: {name}', { name: entry.detail ?? '' }) }
+    case 'addon.remove':
+      return { icon: PuzzlePieceIcon, text: t('Verwijderd: {name}', { name: entry.detail ?? '' }) }
     default:
       return { icon: DocumentTextIcon, text: entry.action }
   }

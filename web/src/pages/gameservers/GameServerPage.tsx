@@ -7,16 +7,17 @@ import { Button, ButtonLink } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Tabs } from '../../components/ui/Tabs'
 import { formatBytes, formatDuration, formatMegabytes } from '../../lib/format'
-import { useGameServer, usePower, type GameServerDetail, type GamePermission } from '../../lib/gameservers'
+import { isMinecraft, useGameServer, usePower, type GameServerDetail, type GamePermission } from '../../lib/gameservers'
 import { powerStateColors, powerStateLabels, serviceStatusColors, serviceStatusLabels } from '../../lib/labels'
 import { ServerActivity } from './ServerActivity'
+import { ServerAddons } from './ServerAddons'
 import { ServerBackups } from './ServerBackups'
 import { ServerConsole } from './ServerConsole'
 import { ServerFiles } from './ServerFiles'
 import { ServerUsers } from './ServerUsers'
 import { t } from '../../lib/i18n'
 
-type Tab = 'console' | 'files' | 'backups' | 'activity' | 'users'
+type Tab = 'console' | 'files' | 'addons' | 'backups' | 'activity' | 'users'
 
 function Address({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)
@@ -101,6 +102,7 @@ export function GameServerPage() {
   const tabs = [
     can('console') && { id: 'console' as const, label: 'Console' },
     can('files') && { id: 'files' as const, label: 'Bestanden' },
+    can('files') && isMinecraft(server.details.egg) && { id: 'addons' as const, label: 'Plugins en mods' },
     can('backups') && { id: 'backups' as const, label: 'Back-ups' },
     can('activity') && { id: 'activity' as const, label: 'Activiteit' },
     server.access.owner && { id: 'users' as const, label: 'Gebruikers' },
@@ -157,6 +159,7 @@ export function GameServerPage() {
           {current && <Tabs tabs={tabs} active={current} onChange={setTab} />}
           {current === 'console' && <ServerConsole serverId={server.id} />}
           {current === 'files' && <ServerFiles serverId={server.id} />}
+          {current === 'addons' && <ServerAddons serverId={server.id} />}
           {current === 'backups' && <ServerBackups serverId={server.id} />}
           {current === 'activity' && <ServerActivity serverId={server.id} />}
           {current === 'users' && <ServerUsers serverId={server.id} />}

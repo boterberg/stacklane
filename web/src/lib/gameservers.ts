@@ -224,3 +224,78 @@ export function gamePermissionHint(permission: GamePermission) {
       return t('Zien wie wat deed op de server, zonder IP-adressen.')
   }
 }
+
+export type AddonContext = { loader: string | null; version: string | null; loaders: string[] }
+
+export type AddonHit = {
+  project_id: string
+  slug: string
+  title: string
+  description: string
+  downloads: number
+  icon_url: string | null
+  author: string
+}
+
+export type InstalledAddons = { folder: string; files: { name: string; size: number; modified_at: string }[] }
+
+export function useAddonContext(id: string) {
+  return useQuery({ queryKey: ['gameserver', id, 'addons', 'context'], queryFn: () => api<AddonContext>(`/gameservers/${id}/addons/context`), staleTime: 60_000 })
+}
+
+export function useInstalledAddons(id: string, loader: string) {
+  return useQuery({
+    queryKey: ['gameserver', id, 'addons', 'installed', loader],
+    queryFn: () => api<InstalledAddons>(`/gameservers/${id}/addons?${new URLSearchParams({ loader })}`),
+    enabled: !!loader,
+  })
+}
+
+export function useAddonSearch(id: string, loader: string, query: string, version: string) {
+  return useQuery({
+    queryKey: ['gameserver', id, 'addons', 'search', loader, query, version],
+    queryFn: () => api<AddonHit[]>(`/gameservers/${id}/addons/search?${new URLSearchParams({ loader, query, ...(version ? { version } : {}) })}`),
+    enabled: !!loader,
+    staleTime: 60_000,
+  })
+}
+
+export function useAddonChanges(id: string) {
+  const queryClient = useQueryClient()
+  const onSuccess = () => queryClient.invalidateQueries({ queryKey: ['gameserver', id, 'addons', 'installed'] })
+  return {
+    install: useMutation({
+      mutationFn: (input: { project: string; loader: string; version: string }) =>
+        api<{ title: string; file: string; folder: string }>(`/gameservers/${id}/addons`, { method: 'POST', body: { ...input, version: input.version || null } }),
+      onSuccess: () => setTimeout(onSuccess, 1500),
+    }),
+    remove: useMutation({
+      mutationFn: (input: { loader: string; file: string }) => api<void>(`/gameservers/${id}/addons?${new URLSearchParams(input)}`, { method: 'DELETE' }),
+      onSuccess,
+    }),
+  }
+}
+
+const loaderNames: Record<string, string> = {
+  paper: 'Paper',
+  purpur: 'Purpur',
+  folia: 'Folia',
+  spigot: 'Spigot',
+  bukkit: 'Bukkit',
+  fabric: 'Fabric',
+  quilt: 'Quilt',
+  forge: 'Forge',
+  neoforge: 'NeoForge',
+}
+
+export function loaderName(loader: string) {
+  return loaderNames[loader] ?? loader
+}
+
+export function usesPlugins(loader: string) {
+  return ['paper', 'purpur', 'folia', 'spigot', 'bukkit'].includes(loader)
+}
+
+export function isMinecraft(egg: string | undefined) {
+  return !!egg && /minecraft|paper|purpur|folia|spigot|bukkit|fabric|quilt|forge/i.test(egg)
+}
