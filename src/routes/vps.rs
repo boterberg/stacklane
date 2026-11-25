@@ -373,7 +373,8 @@ pub async fn root_password(
         return Err(AppError::Forbidden);
     }
     let sealed: Option<String> = sqlx::query_scalar(
-        "SELECT details->>'root_password' FROM services WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
+        "SELECT CASE WHEN status = 'active' THEN details->>'root_password' END
+         FROM services WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
     )
     .bind(id)
     .bind(user.id)

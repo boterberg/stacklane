@@ -584,11 +584,12 @@ pub async fn start_rebuild(
                             || CASE WHEN $3::text IS NULL THEN '{}'::jsonb
                                     ELSE jsonb_build_object('root_password', $3::text) END,
                             updated_at = now()
-                     WHERE id = $1",
+                     WHERE id = $1 AND status = 'active' AND external_id = $4",
                 )
                 .bind(service_id)
                 .bind(&image_name)
                 .bind(concealed)
+                .bind(&external_id)
                 .execute(&state.db)
                 .await
             }
