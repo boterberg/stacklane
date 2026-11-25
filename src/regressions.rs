@@ -1887,3 +1887,94 @@ async fn one_customer_cannot_flood_the_hypervisor_with_server_reads(db: PgPool) 
     }
     assert_eq!(last, StatusCode::TOO_MANY_REQUESTS);
 }
+
+fn refusing_registrar(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+    match (method, path) {
+        ("POST", "/v1/auth/login") => (200, json!({ "code": 0, "data": { "token": "t" } })),
+        ("PUT", _) => (500, json!({ "code": 1, "desc": "down" })),
+        _ => (200, json!({ "code": 0, "data": {} })),
+    }
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_whois_change_the_registrar_refuses_is_not_kept(db: PgPool) {
+    let client = Client::new(db);
+    let (_, cookie) = client.register("whois-sync@example.test").await;
+    let profile = json!({
+        "first_name": "Ada", "last_name": "Jansen", "company": null,
+        "email": "ada@example.test", "phone": "+31 612345678", "street": "Dorpsstraat",
+        "house_number": "1", "zipcode": "1234AB", "city": "Utrecht", "country": "NL",
+    });
+    let created = client
+        .send(
+            Method::POST,
+            "/whois-profiles",
+            Some(&cookie),
+            Some(profile.clone()),
+        )
+        .await;
+    assert!(created.status.is_success(), "{}", created.body);
+    let id = created.body["id"].as_str().unwrap().to_owned();
+    let (base, calls) = crate::testing::fake_api(refusing_registrar).await;
+    let sealed = crate::integrations::seal_credentials(
+        &client.state,
+        &json!({ "username": "u", "password": "p" }),
+    )
+    .unwrap();
+    let integration = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO integrations (id, kind, name, base_url, credentials, settings)
+         VALUES ($1, 'openprovider', 'Registrar', $2, $3, '{}')",
+    )
+    .bind(integration)
+    .bind(&base)
+    .bind(sealed)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO whois_profile_handles (whois_profile_id, integration_id, handle) VALUES ($1::uuid, $2, 'AJ000001-NL')",
+    )
+    .bind(&id)
+    .bind(integration)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    let path = format!("/whois-profiles/{id}");
+
+    let mut moved = profile.clone();
+    moved["email"] = json!("other@example.test");
+    let refused = client
+        .send(Method::PUT, &path, Some(&cookie), Some(moved))
+        .await;
+    assert!(!refused.status.is_success(), "{}", refused.body);
+    assert!(
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|call| call.starts_with("PUT /v1/customers/AJ000001-NL"))
+    );
+    let email: String = sqlx::query_scalar("SELECT email FROM whois_profiles WHERE id = $1::uuid")
+        .bind(&id)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(email, "ada@example.test");
+
+    let mut renamed = profile;
+    renamed["company"] = json!("Jansen BV");
+    let saved = client
+        .send(Method::PUT, &path, Some(&cookie), Some(renamed))
+        .await;
+    assert!(saved.status.is_success(), "{}", saved.body);
+    let handles: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM whois_profile_handles WHERE whois_profile_id = $1::uuid",
+    )
+    .bind(&id)
+    .fetch_one(&client.state.db)
+    .await
+    .unwrap();
+    assert_eq!(handles, 0);
+}

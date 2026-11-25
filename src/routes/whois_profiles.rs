@@ -189,16 +189,36 @@ pub async fn update(
     Path(id): Path<Uuid>,
     Json(input): Json<ProfileInput>,
 ) -> AppResult<Json<WhoisProfile>> {
+    state
+        .limits
+        .check(&crate::limits::DOMAIN_CHANGE, &user.id.to_string())?;
     let current = load(&state, user.id, id).await?;
     let input = clean(input)?;
-    if current.domains > 0
-        && (input.first_name != current.first_name || input.last_name != current.last_name)
-    {
+    let holder_changed = input.first_name != current.first_name
+        || input.last_name != current.last_name
+        || input.company != current.company;
+    if current.domains > 0 && holder_changed {
         return Err(AppError::field(
             "first_name",
-            "De naam van de houder wijzig je met een verhuizing naar een nieuw profiel.",
+            "De naam of het bedrijf van de houder wijzig je met een verhuizing naar een nieuw profiel.",
         ));
     }
+    let next = WhoisProfile {
+        id,
+        first_name: input.first_name,
+        last_name: input.last_name,
+        company: input.company,
+        email: input.email,
+        phone: input.phone,
+        street: input.street,
+        house_number: input.house_number,
+        zipcode: input.zipcode,
+        city: input.city,
+        country: input.country,
+        domains: current.domains,
+        created_at: current.created_at,
+    };
+    let mut transaction = state.db.begin().await?;
     sqlx::query(
         "UPDATE whois_profiles SET first_name = $3, last_name = $4, company = $5, email = $6, phone = $7, street = $8,
             house_number = $9, zipcode = $10, city = $11, country = $12, updated_at = now()
@@ -206,37 +226,43 @@ pub async fn update(
     )
     .bind(id)
     .bind(user.id)
-    .bind(&input.first_name)
-    .bind(&input.last_name)
-    .bind(&input.company)
-    .bind(&input.email)
-    .bind(&input.phone)
-    .bind(&input.street)
-    .bind(&input.house_number)
-    .bind(&input.zipcode)
-    .bind(&input.city)
-    .bind(&input.country)
-    .execute(&state.db)
+    .bind(&next.first_name)
+    .bind(&next.last_name)
+    .bind(&next.company)
+    .bind(&next.email)
+    .bind(&next.phone)
+    .bind(&next.street)
+    .bind(&next.house_number)
+    .bind(&next.zipcode)
+    .bind(&next.city)
+    .bind(&next.country)
+    .execute(&mut *transaction)
     .await?;
-    let profile = load(&state, user.id, id).await?;
-
-    let handles: Vec<(Uuid, String)> = sqlx::query_as(
-        "SELECT integration_id, handle FROM whois_profile_handles WHERE whois_profile_id = $1",
-    )
-    .bind(id)
-    .fetch_all(&state.db)
-    .await?;
-    for (integration_id, handle) in handles {
-        if let integrations::Driver::Openprovider(client) =
-            integrations::driver(&state, integration_id).await?
-        {
-            client
-                .update_handle(&handle, &profile.contact())
-                .await
-                .map_err(|error| AppError::upstream("profile", error))?;
+    if holder_changed {
+        sqlx::query("DELETE FROM whois_profile_handles WHERE whois_profile_id = $1")
+            .bind(id)
+            .execute(&mut *transaction)
+            .await?;
+    } else {
+        let handles: Vec<(Uuid, String)> = sqlx::query_as(
+            "SELECT integration_id, handle FROM whois_profile_handles WHERE whois_profile_id = $1",
+        )
+        .bind(id)
+        .fetch_all(&mut *transaction)
+        .await?;
+        for (integration_id, handle) in handles {
+            if let integrations::Driver::Openprovider(client) =
+                integrations::driver(&state, integration_id).await?
+            {
+                client
+                    .update_handle(&handle, &next.contact())
+                    .await
+                    .map_err(|error| AppError::upstream("profile", error))?;
+            }
         }
     }
-    Ok(Json(profile))
+    transaction.commit().await?;
+    Ok(Json(load(&state, user.id, id).await?))
 }
 
 pub async fn destroy(

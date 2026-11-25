@@ -233,8 +233,8 @@ fn english(message: &str) -> Option<&'static str> {
         "Vul een telefoonnummer in met landcode, zoals +31 612345678." => {
             "Enter a phone number with country code, such as +31 612345678."
         }
-        "De naam van de houder wijzig je met een verhuizing naar een nieuw profiel." => {
-            "To change the holder's name, move the domain to a new profile."
+        "De naam of het bedrijf van de houder wijzig je met een verhuizing naar een nieuw profiel." => {
+            "To change the holder's name or company, move the domain to a new profile."
         }
         "Dit profiel hoort nog bij een domein." => "This profile still belongs to a domain.",
         "Vul de gebruikersnaam en het wachtwoord van Openprovider in." => {
