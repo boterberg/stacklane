@@ -266,14 +266,19 @@ pub async fn create_integration(
     } else if input.kind == "proxmox" {
         match serde_json::from_value::<proxmox::Settings>(input.settings) {
             Ok(settings)
-                if settings.ip_from <= settings.ip_to && !settings.node.trim().is_empty() =>
+                if settings.ip_from <= settings.ip_to
+                    && !settings.node.trim().is_empty()
+                    && (1..=4094).contains(&settings.vlan_from)
+                    && settings.vlan_from <= settings.vlan_to
+                    && settings.vlan_to <= 4094 =>
             {
                 serde_json::to_value(settings).map_err(anyhow::Error::from)?
             }
             _ => {
                 errors.insert(
                     "settings",
-                    "Vul de node, de gateway en een geldige reeks IP-adressen in.".to_owned(),
+                    "Vul de node, de gateway, een geldige reeks IP-adressen en een VLAN-reeks tussen 1 en 4094 in."
+                        .to_owned(),
                 );
                 Value::Null
             }

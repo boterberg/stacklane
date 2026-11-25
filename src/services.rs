@@ -1149,6 +1149,10 @@ pub async fn change_state_because(
     }
     if kind == "vps" && action == "terminate" {
         release_volumes(state, service_id, integration_id, external_id.as_deref()).await?;
+        sqlx::query("DELETE FROM vps_network_servers WHERE service_id = $1")
+            .bind(service_id)
+            .execute(&state.db)
+            .await?;
     }
     Ok(())
 }

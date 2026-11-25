@@ -189,8 +189,8 @@ fn english(message: &str) -> Option<&'static str> {
         "Vul het token-ID (gebruiker@realm!naam) en het geheim in." => {
             "Enter the token ID (user@realm!name) and the secret."
         }
-        "Vul de node, de gateway en een geldige reeks IP-adressen in." => {
-            "Enter the node, the gateway and a valid range of IP addresses."
+        "Vul de node, de gateway, een geldige reeks IP-adressen en een VLAN-reeks tussen 1 en 4094 in." => {
+            "Enter the node, the gateway, a valid range of IP addresses and a VLAN range between 1 and 4094."
         }
         "In de demo kun je niets bestellen." => "You cannot order anything in the demo.",
         "Kies een pakket." => "Choose a plan.",
@@ -414,6 +414,34 @@ fn english(message: &str) -> Option<&'static str> {
         "Kies een koppeling met Proxmox VE, of OpenStack met een extern netwerk voor floating IPs." => {
             "Choose a Proxmox VE connection, or OpenStack with an external network for floating IPs."
         }
+        "Gebruik hoogstens 60 letters, cijfers, spaties, punten, streepjes of liggende streepjes." => {
+            "Use at most 60 letters, digits, spaces, dots, hyphens or underscores."
+        }
+        "Op dit platform kun je geen netwerken maken." => {
+            "You cannot create networks on this platform."
+        }
+        "Kies een privé IP-bereik, zoals 10.1.0.0/24, met een netmasker van /16 tot /28." => {
+            "Choose a private IP range, such as 10.1.0.0/24, with a netmask from /16 to /28."
+        }
+        "Je hebt al 10 netwerken. Verwijder er eerst een." => {
+            "You already have 10 networks. Delete one first."
+        }
+        "Je hebt al een netwerk met deze naam." => "You already have a network with this name.",
+        "Dit IP-bereik overlapt met een van je andere netwerken." => {
+            "This IP range overlaps with one of your other networks."
+        }
+        "Op dit platform is geen ruimte meer voor nieuwe netwerken." => {
+            "There is no room for new networks on this platform."
+        }
+        "Koppel eerst alle servers los van dit netwerk." => {
+            "Detach all servers from this network first."
+        }
+        "Deze server staat op een ander platform dan het netwerk." => {
+            "This server is on a different platform than the network."
+        }
+        "Deze server zit al in drie netwerken." => "This server is already in three networks.",
+        "Het IP-bereik van dit netwerk klopt niet." => "The IP range of this network is not valid.",
+        "Dit netwerk heeft geen vrije adressen meer." => "This network has no free addresses left.",
         _ => return None,
     })
 }

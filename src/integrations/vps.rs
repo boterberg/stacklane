@@ -44,6 +44,7 @@ pub struct Features {
     pub firewall: bool,
     pub volumes: bool,
     pub floating_ips: bool,
+    pub networks: bool,
     pub panel: bool,
 }
 
@@ -67,6 +68,11 @@ impl Machine {
             floating_ips: match self {
                 Self::Proxmox(..) => true,
                 Self::OpenStack(client, _) => client.has_floating_ips(),
+                Self::VirtFusion(..) => false,
+            },
+            networks: match self {
+                Self::Proxmox(client, _) => client.private_bridge().is_some(),
+                Self::OpenStack(..) => true,
                 Self::VirtFusion(..) => false,
             },
             panel: virtfusion,

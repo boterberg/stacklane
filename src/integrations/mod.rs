@@ -2,6 +2,7 @@ pub mod cpanel;
 pub mod directadmin;
 pub mod floating_ips;
 pub mod isos;
+pub mod networks;
 pub mod openprovider;
 pub mod openstack;
 pub mod plesk;

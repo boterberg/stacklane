@@ -26,6 +26,7 @@ pub mod vps_access;
 pub mod vps_firewalls;
 mod vps_floating_ips;
 pub mod vps_isos;
+mod vps_networks;
 mod vps_volumes;
 mod webhosting;
 pub mod whois_profiles;
@@ -92,6 +93,21 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/vps/floating-ips/{id}/detach",
             post(vps_floating_ips::detach),
+        )
+        .route(
+            "/vps/networks",
+            get(vps_networks::index).post(vps_networks::create),
+        )
+        .route(
+            "/vps/networks/{id}",
+            get(vps_networks::show)
+                .put(vps_networks::update)
+                .delete(vps_networks::destroy),
+        )
+        .route("/vps/networks/{id}/servers", post(vps_networks::attach))
+        .route(
+            "/vps/networks/{id}/servers/{server}",
+            delete(vps_networks::detach),
         )
         .route("/vps/volumes", get(vps_volumes::index))
         .route("/vps/volumes/options", get(vps_volumes::options))
