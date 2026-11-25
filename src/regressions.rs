@@ -3746,6 +3746,7 @@ async fn proxmox_nodes_of_one_cluster_share_one_vlan_pool(db: PgPool) {
     let client = Client::new(db);
     let (base, _) = fake_api(quiet_node).await;
     let mut vlans = Vec::new();
+    let mut last = None;
     for (index, email) in ["vlan-een@example.test", "vlan-twee@example.test"]
         .into_iter()
         .enumerate()
@@ -3769,7 +3770,7 @@ async fn proxmox_nodes_of_one_cluster_share_one_vlan_pool(db: PgPool) {
         .await
         .unwrap();
         let (user, cookie) = client.register(email).await;
-        service(
+        let server = service(
             &client.state,
             NewService {
                 user,
@@ -3799,6 +3800,17 @@ async fn proxmox_nodes_of_one_cluster_share_one_vlan_pool(db: PgPool) {
             .await
             .unwrap();
         vlans.push(vlan);
+        last = Some((user, server));
     }
     assert_ne!(vlans[0], vlans[1]);
+    let (user, server) = last.unwrap();
+    crate::services::change_state_because(&client.state, server, "terminate", "admin")
+        .await
+        .unwrap();
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM vps_networks WHERE user_id = $1")
+        .bind(user)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
 }

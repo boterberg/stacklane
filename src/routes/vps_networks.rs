@@ -1010,3 +1010,48 @@ mod flows {
         assert_eq!(gone.status, StatusCode::NO_CONTENT);
     }
 }
+
+pub async fn release_unused(
+    state: &AppState,
+    owner: Uuid,
+    integration_id: Uuid,
+) -> anyhow::Result<()> {
+    let servers_left: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM services WHERE user_id = $1 AND integration_id = $2
+                        AND kind = 'vps' AND status <> 'terminated')",
+    )
+    .bind(owner)
+    .bind(integration_id)
+    .fetch_one(&state.db)
+    .await?;
+    if servers_left {
+        return Ok(());
+    }
+    let networks: Vec<(Uuid, Option<i32>, Option<String>)> = sqlx::query_as(
+        "SELECT id, vlan, external_id FROM vps_networks n
+         WHERE user_id = $1 AND integration_id = $2
+           AND NOT EXISTS (SELECT 1 FROM vps_network_servers m WHERE m.network_id = n.id)",
+    )
+    .bind(owner)
+    .bind(integration_id)
+    .fetch_all(&state.db)
+    .await?;
+    if networks.is_empty() {
+        return Ok(());
+    }
+    let platform =
+        networks::Networks::from_driver(integrations::driver(state, integration_id).await?)
+            .ok_or_else(|| anyhow::anyhow!("deze koppeling heeft geen netwerken"))?;
+    for (id, vlan, external_id) in networks {
+        let reference = networks::NetworkRef {
+            vlan: vlan.and_then(|vlan| u16::try_from(vlan).ok()),
+            external_id,
+        };
+        platform.delete(&reference).await?;
+        sqlx::query("DELETE FROM vps_networks WHERE id = $1")
+            .bind(id)
+            .execute(&state.db)
+            .await?;
+    }
+    Ok(())
+}

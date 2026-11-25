@@ -35,7 +35,7 @@ pub mod vps_access;
 pub mod vps_firewalls;
 mod vps_floating_ips;
 pub mod vps_isos;
-mod vps_networks;
+pub mod vps_networks;
 pub(crate) mod vps_rdns;
 mod vps_volumes;
 mod webhosting;

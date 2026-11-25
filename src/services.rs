@@ -1430,6 +1430,20 @@ pub async fn change_state_because(
             .await?;
     }
     guard.commit().await?;
+    if kind == "vps"
+        && action == "terminate"
+        && let Some(integration_id) = integration_id
+    {
+        let owner: Uuid = sqlx::query_scalar("SELECT user_id FROM services WHERE id = $1")
+            .bind(service_id)
+            .fetch_one(&state.db)
+            .await?;
+        if let Err(error) =
+            crate::routes::vps_networks::release_unused(state, owner, integration_id).await
+        {
+            tracing::warn!(%service_id, error = %format!("{error:#}"), "releasing private networks failed");
+        }
+    }
     Ok(())
 }
 
