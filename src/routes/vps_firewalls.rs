@@ -126,6 +126,24 @@ async fn sync_server(
         anyhow::bail!("dit platform kan alleen verkeer toestaan, niet blokkeren");
     }
     let existing = machine.firewall_rules().await?;
+    if !machine.can_block() {
+        let kept = existing
+            .iter()
+            .filter(|rule| {
+                !rule
+                    .comment
+                    .as_deref()
+                    .is_some_and(|comment| comment.starts_with(marker))
+            })
+            .count();
+        let added: usize = rules
+            .iter()
+            .map(|rule| split_ports(rule, false).len())
+            .sum();
+        if kept + added > SERVER_RULES {
+            anyhow::bail!("deze server zou meer dan {SERVER_RULES} firewallregels krijgen");
+        }
+    }
     for id in managed_ids(&existing, marker) {
         machine.delete_firewall_rule(&id).await?;
     }
@@ -404,6 +422,7 @@ async fn store(
 }
 
 const SERVER_ENTRIES: i64 = 100;
+const SERVER_RULES: usize = 100;
 const ENTRIES: &str = "coalesce(array_length(string_to_array(r.dport, ','), 1), 1)";
 
 async fn entries(state: &AppState, filter: &str, id: Uuid) -> anyhow::Result<i64> {
