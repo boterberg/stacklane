@@ -431,6 +431,12 @@ async fn run_locked(state: &AppState) -> AppResult<Run> {
         expired: counted("expire", expire_orders(state).await),
     };
     counted("reconcile", reconcile_suspensions(state).await.map(|()| 0));
+    counted(
+        "ip filter",
+        crate::services::filter_older_vms(state)
+            .await
+            .map_err(crate::error::AppError::Internal),
+    );
     counted("cleanup", remove_expired(state).await);
     Ok(run)
 }

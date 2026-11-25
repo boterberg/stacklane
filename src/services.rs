@@ -49,6 +49,44 @@ pub async fn recover_interrupted(state: &AppState) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub async fn filter_older_vms(state: &AppState) -> anyhow::Result<usize> {
+    let servers: Vec<(Uuid, Uuid, String, String)> = sqlx::query_as(
+        "SELECT s.id, s.integration_id, s.external_id, s.details->>'ipv4'
+         FROM services s JOIN integrations i ON i.id = s.integration_id
+         WHERE s.kind = 'vps' AND i.kind = 'proxmox' AND s.status IN ('active', 'suspended')
+           AND s.external_id IS NOT NULL AND s.details ? 'ipv4' AND NOT s.details ? 'ip_filter'",
+    )
+    .fetch_all(&state.db)
+    .await?;
+    let mut done = 0;
+    for (service_id, integration_id, vmid, ipv4) in servers {
+        let result = async {
+            let integrations::Driver::Proxmox(client) = integrations::driver(state, integration_id)
+                .await
+                .map_err(|error| anyhow::anyhow!("{error}"))?
+            else {
+                return Ok(());
+            };
+            client.bind_address(vmid.parse()?, ipv4.parse()?).await?;
+            sqlx::query(
+                "UPDATE services SET details = details || '{\"ip_filter\": true}'::jsonb WHERE id = $1",
+            )
+            .bind(service_id)
+            .execute(&state.db)
+            .await?;
+            anyhow::Ok(())
+        }
+        .await;
+        match result {
+            Ok(()) => done += 1,
+            Err(error) => {
+                tracing::warn!(%service_id, error = %format!("{error:#}"), "turning on the ip filter failed");
+            }
+        }
+    }
+    Ok(done)
+}
+
 async fn claim(state: &AppState, service_id: Uuid) -> anyhow::Result<bool> {
     Ok(sqlx::query_scalar::<_, Uuid>(
         "UPDATE services SET status = 'provisioning', last_error = NULL, updated_at = now()
@@ -263,6 +301,7 @@ async fn provision_vps(
         "node": settings.node,
         "vmid": vmid,
         "ipv4": ipv4.to_string(),
+        "ip_filter": true,
         "hostname": hostname,
         "image": image.name,
         "cores": config.cores,
