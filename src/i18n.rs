@@ -533,6 +533,11 @@ fn english(message: &str) -> Option<&'static str> {
         "Gebruik een kleur als #4f46e5." => "Use a colour like #4f46e5.",
         "Kies een PNG-, JPG- of WebP-afbeelding." => "Choose a PNG, JPG or WebP image.",
         "Kies een bestand van hoogstens 512 kB." => "Choose a file of at most 512 kB.",
+        "Geef het artikel een titel van minstens 3 tekens." => {
+            "Give the article a title of at least 3 characters."
+        }
+        "Schrijf de tekst van het artikel." => "Write the text of the article.",
+        "Dit artikel is te lang." => "This article is too long.",
         _ => return None,
     })
 }

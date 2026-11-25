@@ -376,7 +376,7 @@ pub async fn reset(pool: &PgPool) -> anyhow::Result<()> {
     sqlx::query(
         "TRUNCATE sessions, notifications, ticket_messages, tickets, invoice_lines, invoices,
                   subscription_items, subscriptions, services, products, users, integrations,
-                  domain_extensions, ptr_cleanups, mail_log, brand_assets RESTART IDENTITY CASCADE",
+                  domain_extensions, ptr_cleanups, mail_log, brand_assets, kb_articles RESTART IDENTITY CASCADE",
     )
     .execute(&mut *seed.transaction)
     .await?;
@@ -1027,6 +1027,46 @@ async fn extras(
         seed.attach(server, proxmox, &vmid.to_string()).await?;
         seed.invoice(other, subscription, "paid", 21, "VPS: Cloud M", 1250)
             .await?;
+    }
+
+    for (slug, title, category, body) in [
+        (
+            "verbinden-met-je-vps-via-ssh",
+            "Verbinden met je VPS via SSH",
+            "VPS",
+            "<p>Je logt in op je server met SSH. Op macOS en Linux open je een terminal, op Windows gebruik je PowerShell.</p><pre>ssh root@203.0.113.10</pre><p>Heb je een SSH-sleutel toegevoegd onder <strong>VPS → SSH-sleutels</strong>, dan heb je geen wachtwoord nodig.</p>",
+        ),
+        (
+            "nameservers-van-je-domein-wijzigen",
+            "Nameservers van je domein wijzigen",
+            "Domeinnamen",
+            "<p>Open je domein onder <strong>Domeinnamen</strong> en kies <strong>Nameservers</strong>. Vul minstens twee nameservers in en sla op.</p><p>Het kan tot 24 uur duren voordat de wijziging overal zichtbaar is.</p>",
+        ),
+        (
+            "een-factuur-betalen",
+            "Een factuur betalen",
+            "Facturering",
+            "<p>Open de factuur onder <strong>Facturering → Facturen</strong> en klik op <strong>Betalen</strong>. Je kunt betalen met iDEAL, Bancontact, een creditcard of een overboeking.</p><ul><li>Automatisch betalen zet je aan bij het abonnement.</li><li>Een betaalde factuur download je als pdf.</li></ul>",
+        ),
+        (
+            "back-up-van-je-gameserver-terugzetten",
+            "Een back-up van je gameserver terugzetten",
+            "Gameservers",
+            "<p>Ga naar je gameserver en open <strong>Back-ups</strong>. Kies de back-up en klik op <strong>Terugzetten</strong>. De server stopt even en start daarna met de oude wereld.</p>",
+        ),
+    ] {
+        sqlx::query(
+            "INSERT INTO kb_articles (id, slug, title, category, body_html, published, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, TRUE, $6, $6)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(slug)
+        .bind(title)
+        .bind(category)
+        .bind(body)
+        .bind(seed.ago(24 * 20))
+        .execute(&mut *seed.transaction)
+        .await?;
     }
 
     for (recipient, subject, kind, status, error, hours) in [

@@ -2510,3 +2510,88 @@ async fn the_public_catalog_shows_only_sellable_products_and_no_internals(db: Pg
     );
     assert_eq!(body["currency"], "EUR");
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn knowledge_base_articles_are_cleaned_and_drafts_stay_hidden(db: PgPool) {
+    use crate::testing::make_admin;
+    let client = Client::new(db);
+    let (_, cookie) = client.register("kb-klant@example.test").await;
+    let (admin, admin_cookie) = client.register("kb-staff@example.test").await;
+    make_admin(&client.state, admin).await;
+    let article = json!({
+        "title": "DNS instellen",
+        "category": "Domeinen",
+        "body_html": "<p>Zet je nameservers goed.</p><script>alert(1)</script><img src=x onerror=alert(1)>",
+        "published": false,
+    });
+    assert_eq!(
+        client
+            .send(
+                Method::POST,
+                "/admin/kb",
+                Some(&cookie),
+                Some(article.clone())
+            )
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+    let created = client
+        .send(
+            Method::POST,
+            "/admin/kb",
+            Some(&admin_cookie),
+            Some(article.clone()),
+        )
+        .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    assert_eq!(created.body["slug"], "dns-instellen");
+    let body = created.body["body_html"].as_str().unwrap();
+    assert!(
+        !body.contains("script") && !body.contains("onerror"),
+        "{body}"
+    );
+    let id = created.body["id"].as_str().unwrap().to_owned();
+    let hidden = client.send(Method::GET, "/kb", Some(&cookie), None).await;
+    assert_eq!(hidden.body.as_array().unwrap().len(), 0);
+    assert_eq!(
+        client
+            .send(Method::GET, "/kb/dns-instellen", Some(&cookie), None)
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+    let mut published = article.clone();
+    published["published"] = json!(true);
+    let updated = client
+        .send(
+            Method::PUT,
+            &format!("/admin/kb/{id}"),
+            Some(&admin_cookie),
+            Some(published),
+        )
+        .await;
+    assert_eq!(updated.status, StatusCode::OK, "{}", updated.body);
+    let found = client
+        .send(Method::GET, "/kb?search=nameservers", Some(&cookie), None)
+        .await;
+    assert_eq!(found.body[0]["excerpt"], "Zet je nameservers goed.");
+    let missing = client
+        .send(Method::GET, "/kb?search=%25", Some(&cookie), None)
+        .await;
+    assert_eq!(missing.body.as_array().unwrap().len(), 0);
+    let shown = client
+        .send(Method::GET, "/kb/dns-instellen", Some(&cookie), None)
+        .await;
+    assert_eq!(shown.status, StatusCode::OK);
+    let second = client
+        .send(
+            Method::POST,
+            "/admin/kb",
+            Some(&admin_cookie),
+            Some(article),
+        )
+        .await;
+    assert_eq!(second.body["slug"], "dns-instellen-2");
+}

@@ -17,6 +17,7 @@ mod domains;
 mod email_verification;
 mod gameservers;
 mod health;
+mod kb;
 pub mod me;
 mod notifications;
 mod payments;
@@ -256,6 +257,13 @@ pub fn router(state: AppState) -> Router {
         .route("/meta", get(demo::meta))
         .route("/branding/{kind}", get(branding::asset))
         .route("/public/catalog", get(catalog::index))
+        .route("/kb", get(kb::index))
+        .route("/kb/{slug}", get(kb::show))
+        .route("/admin/kb", get(kb::admin_index).post(kb::create))
+        .route(
+            "/admin/kb/{id}",
+            get(kb::admin_show).put(kb::update).delete(kb::remove),
+        )
         .route("/admin/branding", put(branding::update))
         .route(
             "/admin/branding/{kind}",
