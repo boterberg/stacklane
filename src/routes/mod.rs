@@ -612,6 +612,11 @@ mod tests {
         ));
         assert!(!demo_allows(&Method::PUT, "/api/admin/payment-settings"));
         assert!(!demo_allows(&Method::PUT, "/api/admin/settings"));
+        assert!(!demo_allows(&Method::PUT, "/api/admin/branding"));
+        assert!(!demo_allows(&Method::PUT, "/api/admin/branding/logo"));
+        assert!(!demo_allows(&Method::POST, "/api/admin/kb"));
+        assert!(!demo_allows(&Method::DELETE, "/api/admin/kb/1"));
+        assert!(demo_allows(&Method::GET, "/api/admin/kb"));
         assert!(!demo_allows(&Method::POST, "/api/admin/domain-extensions"));
         assert!(!demo_allows(&Method::POST, "/api/admin/system/update"));
         assert!(demo_allows(&Method::GET, "/api/admin/settings"));
