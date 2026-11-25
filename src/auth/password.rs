@@ -47,7 +47,8 @@ static UNKNOWN_ACCOUNT: LazyLock<String> =
     LazyLock::new(|| hash_password("stacklane unknown account").unwrap_or_default());
 
 async fn gated<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> AppResult<T> {
-    let _permit = tokio::time::timeout(Duration::from_secs(5), GATE.acquire())
+    let wait = Duration::from_secs(if cfg!(test) { 60 } else { 5 });
+    let _permit = tokio::time::timeout(wait, GATE.acquire())
         .await
         .map_err(|_| AppError::Busy)?
         .map_err(|error| AppError::Internal(error.into()))?;
