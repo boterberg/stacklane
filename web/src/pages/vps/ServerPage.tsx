@@ -37,9 +37,10 @@ import { LinkedCard, ServerFloatingIps, ServerNetworks, ServerVolumes } from './
 import { ServerGraphs } from './ServerGraphs'
 import { ServerIso } from './ServerIso'
 import { ServerRebuild } from './ServerRebuild'
+import { ServerRescue } from './ServerRescue'
 import { useCan, useVpsAccess } from '../../lib/vpsAccess'
 
-type Tab = 'overview' | 'graphs' | 'networks' | 'firewall' | 'floating' | 'volumes' | 'snapshots' | 'rebuild' | 'iso'
+type Tab = 'overview' | 'graphs' | 'networks' | 'firewall' | 'floating' | 'volumes' | 'snapshots' | 'rebuild' | 'rescue' | 'iso'
 
 function errorText(error: Error | null) {
   return error instanceof ApiError ? (Object.values(error.fieldErrors)[0] ?? error.message) : error?.message
@@ -310,6 +311,8 @@ export function VpsServerPage() {
             <h1 className="text-xl font-medium text-zinc-800 dark:text-white">{server.name}</h1>
             {server.details.rebuilding ? (
               <Badge color="blue">{t('Wordt herbouwd')}</Badge>
+            ) : server.details.rescue ? (
+              <Badge color="amber">{t('Rescue-modus')}</Badge>
             ) : (
               <Badge color={serviceStatusColors[server.status]}>{serviceStatusLabels[server.status]}</Badge>
             )}
@@ -364,6 +367,7 @@ export function VpsServerPage() {
               ...(linked.volumes ? [{ id: 'volumes' as const, label: 'Volumes' }] : []),
               ...(server.features?.snapshots === false || !can('snapshots.view') ? [] : [{ id: 'snapshots' as const, label: 'Snapshots' }]),
               ...(server.features?.rebuild && can('servers.rebuild') ? [{ id: 'rebuild' as const, label: 'Herbouwen' }] : []),
+              ...(server.features?.rescue && can('servers.rescue') ? [{ id: 'rescue' as const, label: 'Rescue' }] : []),
               ...(server.features?.volumes === false || !can('isos.view') ? [] : [{ id: 'iso' as const, label: 'ISO' }]),
             ]}
             active={tab}
@@ -377,6 +381,7 @@ export function VpsServerPage() {
           {tab === 'volumes' && <ServerVolumes serverId={server.id} />}
           {tab === 'snapshots' && <Snapshots server={server} />}
           {tab === 'rebuild' && <ServerRebuild serverId={server.id} rebuilding={server.details.rebuilding === true} />}
+          {tab === 'rescue' && <ServerRescue serverId={server.id} ipv4={server.details.ipv4} active={server.details.rescue === true} />}
           {tab === 'iso' && <ServerIso serverId={server.id} />}
         </>
       )}
