@@ -234,6 +234,9 @@ pub async fn verify(
         .execute(&mut *transaction)
         .await?;
     transaction.commit().await?;
+    if !previous.eq_ignore_ascii_case(&email) {
+        crate::services::sync_panel_email(&state, user_id, &email).await;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

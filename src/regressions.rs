@@ -3856,3 +3856,67 @@ async fn unknown_mollie_ids_do_not_spend_the_matching_budget(db: PgPool) {
             .is_ok()
     );
 }
+
+fn panel_with_one_user(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+    match (method, path.split('?').next().unwrap_or_default()) {
+        ("GET", path) if path.starts_with("/api/application/users/external/") => (
+            200,
+            json!({ "attributes": { "id": 41, "email": "panel-old@example.test", "username": "paneluser", "first_name": "Pa", "last_name": "Nel" } }),
+        ),
+        _ => (200, json!({})),
+    }
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_new_address_reaches_the_game_panel_too(db: PgPool) {
+    use crate::testing::{NewService, fake_api, service};
+    let client = Client::new(db);
+    let (user, cookie) = client.register("panel-old@example.test").await;
+    let (base, calls) = fake_api(panel_with_one_user).await;
+    let sealed = crate::integrations::seal_credentials(
+        &client.state,
+        &json!({ "application_key": "ptla_x", "client_key": "ptlc_x" }),
+    )
+    .unwrap();
+    let integration = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO integrations (id, kind, name, base_url, credentials) VALUES ($1, 'pterodactyl', 'Panel', $2, $3)",
+    )
+    .bind(integration)
+    .bind(&base)
+    .bind(sealed)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    service(
+        &client.state,
+        NewService {
+            user,
+            subscription: None,
+            kind: "gameserver",
+            status: "active",
+            integration: Some(integration),
+            external_id: Some("7"),
+            details: json!({}),
+        },
+    )
+    .await;
+    let token = verification_token(&client, user, "panel-new@example.test").await;
+    let verified = client
+        .send(
+            Method::POST,
+            "/auth/verify-email",
+            Some(&cookie),
+            Some(json!({ "token": token })),
+        )
+        .await;
+    assert_eq!(verified.status, StatusCode::NO_CONTENT);
+    let calls = calls.lock().unwrap();
+    let patch = calls
+        .iter()
+        .find(|call| call.starts_with("PATCH /api/application/users/41"))
+        .expect("panel user updated");
+    assert!(patch.contains("panel-new@example.test"), "{patch}");
+    assert!(patch.contains("paneluser"), "{patch}");
+}

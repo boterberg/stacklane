@@ -263,6 +263,59 @@ impl Pterodactyl {
         Ok(Catalog { locations, nests })
     }
 
+    async fn linked_user(&self, stacklane_id: &str) -> anyhow::Result<Option<Value>> {
+        match self
+            .application(
+                Method::GET,
+                &format!("/users/external/stacklane-{stacklane_id}"),
+                &[],
+                None,
+            )
+            .await
+        {
+            Ok(found) => Ok(Some(found["attributes"].clone())),
+            Err(error) if format!("{error:#}").contains(" 404 ") => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
+    pub async fn change_email(&self, stacklane_id: &str, email: &str) -> anyhow::Result<()> {
+        let Some(user) = self.linked_user(stacklane_id).await? else {
+            return Ok(());
+        };
+        let id = user["id"]
+            .as_i64()
+            .context("Pterodactyl gaf geen gebruiker terug")?;
+        if user["email"].as_str() == Some(email) {
+            return Ok(());
+        }
+        self.application(
+            Method::PATCH,
+            &format!("/users/{id}"),
+            &[],
+            Some(json!({
+                "email": email,
+                "username": user["username"],
+                "first_name": user["first_name"],
+                "last_name": user["last_name"],
+            })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn forget_user(&self, stacklane_id: &str) -> anyhow::Result<()> {
+        let Some(user) = self.linked_user(stacklane_id).await? else {
+            return Ok(());
+        };
+        let id = user["id"]
+            .as_i64()
+            .context("Pterodactyl gaf geen gebruiker terug")?;
+        self.application(Method::DELETE, &format!("/users/{id}"), &[], None)
+            .await?;
+        Ok(())
+    }
+
     async fn user_id(&self, owner: &Owner<'_>) -> anyhow::Result<i64> {
         let external = format!("stacklane-{}", owner.stacklane_id);
         if let Ok(found) = self

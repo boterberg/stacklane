@@ -1549,3 +1549,47 @@ mod tests {
         assert!(!created_for("", service));
     }
 }
+
+async fn panel_integrations(state: &AppState, user_id: Uuid) -> sqlx::Result<Vec<Uuid>> {
+    sqlx::query_scalar(
+        "SELECT DISTINCT s.integration_id FROM services s JOIN integrations i ON i.id = s.integration_id
+         WHERE s.user_id = $1 AND i.kind IN ('pterodactyl', 'virtfusion')",
+    )
+    .bind(user_id)
+    .fetch_all(&state.db)
+    .await
+}
+
+pub async fn sync_panel_email(state: &AppState, user_id: Uuid, email: &str) {
+    let reference = user_id.to_string();
+    for integration_id in panel_integrations(state, user_id).await.unwrap_or_default() {
+        let result = match integrations::driver(state, integration_id).await {
+            Ok(integrations::Driver::Pterodactyl(client)) => {
+                client.change_email(&reference, email).await
+            }
+            Ok(integrations::Driver::VirtFusion(client)) => {
+                client.change_email(&reference, email).await
+            }
+            Ok(_) => Ok(()),
+            Err(error) => Err(anyhow::anyhow!("{error}")),
+        };
+        if let Err(error) = result {
+            tracing::warn!(%user_id, %integration_id, error = %format!("{error:#}"), "updating the email in a panel failed");
+        }
+    }
+}
+
+pub async fn forget_panel_users(state: &AppState, user_id: Uuid) {
+    let reference = user_id.to_string();
+    for integration_id in panel_integrations(state, user_id).await.unwrap_or_default() {
+        let result = match integrations::driver(state, integration_id).await {
+            Ok(integrations::Driver::Pterodactyl(client)) => client.forget_user(&reference).await,
+            Ok(integrations::Driver::VirtFusion(client)) => client.forget_user(&reference).await,
+            Ok(_) => Ok(()),
+            Err(error) => Err(anyhow::anyhow!("{error}")),
+        };
+        if let Err(error) = result {
+            tracing::warn!(%user_id, %integration_id, error = %format!("{error:#}"), "removing a panel user failed");
+        }
+    }
+}

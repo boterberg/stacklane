@@ -197,6 +197,40 @@ impl VirtFusion {
         Ok(json!({ "packages": packages }))
     }
 
+    pub async fn change_email(&self, reference: &str, email: &str) -> anyhow::Result<()> {
+        let (status, body) = self
+            .send(
+                Method::PUT,
+                &format!("/users/{reference}/byExtRelation?relStr=true"),
+                Some(json!({ "email": email })),
+            )
+            .await?;
+        if status.is_success() || status == StatusCode::NOT_FOUND {
+            return Ok(());
+        }
+        bail!(
+            "VirtFusion antwoordde {status}: {}",
+            error_message(&body).unwrap_or_else(|| "onbekende fout".to_owned())
+        )
+    }
+
+    pub async fn forget_user(&self, reference: &str) -> anyhow::Result<()> {
+        let (status, body) = self
+            .send(
+                Method::DELETE,
+                &format!("/users/{reference}/byExtRelation?relStr=true"),
+                None,
+            )
+            .await?;
+        if status.is_success() || status == StatusCode::NOT_FOUND {
+            return Ok(());
+        }
+        bail!(
+            "VirtFusion antwoordde {status}: {}",
+            error_message(&body).unwrap_or_else(|| "onbekende fout".to_owned())
+        )
+    }
+
     async fn user(&self, owner: &Owner<'_>) -> anyhow::Result<u64> {
         let (status, body) = self
             .send(
