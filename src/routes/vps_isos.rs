@@ -152,10 +152,7 @@ pub async fn create(
         .await
         .map_err(|error| AppError::field("url", error.to_string()))?;
     let mut transaction = state.db.begin().await?;
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1::text))")
-        .bind(format!("isos {}", actor.owner))
-        .execute(&mut *transaction)
-        .await?;
+    crate::locks::transaction(&mut transaction, format!("isos {}", actor.owner)).await?;
     let used: i64 = sqlx::query_scalar("SELECT count(*) FROM vps_isos WHERE user_id = $1")
         .bind(actor.owner)
         .fetch_one(&mut *transaction)

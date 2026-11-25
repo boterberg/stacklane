@@ -1491,11 +1491,8 @@ fn provisioning_node(method: &str, path: &str, _: &str) -> (u16, serde_json::Val
     }
 }
 
-#[sqlx::test]
-#[ignore = "needs DATABASE_URL"]
-async fn a_proxmox_vps_is_delivered(db: PgPool) {
+async fn deliver_a_proxmox_vps(client: Client, invite_first: bool) {
     use crate::testing::{NewService, fake_api, proxmox_integration, service};
-    let client = Client::new(db);
     let (base, calls) = fake_api(provisioning_node).await;
     let integration = proxmox_integration(&client.state, &base).await;
     sqlx::query(
@@ -1516,7 +1513,19 @@ async fn a_proxmox_vps_is_delivered(db: PgPool) {
     .execute(&client.state.db)
     .await
     .unwrap();
-    let (user, _) = client.register("delivered@example.test").await;
+    let (user, cookie) = client.register("delivered@example.test").await;
+    if invite_first {
+        client.register("helper@example.test").await;
+        let invited = client
+            .send(
+                Method::POST,
+                "/vps/members",
+                Some(&cookie),
+                Some(json!({ "email": "helper@example.test", "permissions": ["servers.view"] })),
+            )
+            .await;
+        assert_eq!(invited.status, StatusCode::CREATED, "{}", invited.body);
+    }
     let vps = service(
         &client.state,
         NewService {
@@ -1554,4 +1563,24 @@ async fn a_proxmox_vps_is_delivered(db: PgPool) {
     assert!(calls.lock().unwrap().iter().any(|call| {
         call.starts_with("POST /api2/json/nodes/pve/qemu/9000/clone") && call.contains("newid=720")
     }));
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_proxmox_vps_is_delivered(db: PgPool) {
+    deliver_a_proxmox_vps(Client::new(db), false).await;
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn an_invite_never_breaks_the_next_delivery(
+    _: sqlx::postgres::PgPoolOptions,
+    options: sqlx::postgres::PgConnectOptions,
+) {
+    let db = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .unwrap();
+    deliver_a_proxmox_vps(Client::new(db), true).await;
 }

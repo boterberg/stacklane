@@ -259,9 +259,7 @@ async fn provision_floating_ip(
     let (external_id, address) = match driver {
         integrations::Driver::Proxmox(client) => {
             let mut transaction = state.db.begin().await?;
-            sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1::text))")
-                .bind(integration_id)
-                .execute(&mut *transaction)
+            crate::locks::transaction(&mut transaction, format!("integration {integration_id}"))
                 .await?;
             let current: Option<String> =
                 sqlx::query_scalar("SELECT details->>'ipv4' FROM services WHERE id = $1")
@@ -407,10 +405,7 @@ async fn provision_vps(
         .clone();
 
     let mut transaction = state.db.begin().await?;
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1::text))")
-        .bind(integration_id)
-        .execute(&mut *transaction)
-        .await?;
+    crate::locks::transaction(&mut transaction, format!("integration {integration_id}")).await?;
     let recorded: Vec<String> = sqlx::query_scalar(
         "SELECT ids.id FROM services, LATERAL (VALUES (external_id), (details->>'vmid'), (details->>'rebuild_scratch')) AS ids(id)
          WHERE integration_id = $1 AND services.id <> $2 AND kind = 'vps'
@@ -632,9 +627,7 @@ async fn rebuild(
             let vmid: u32 = external_id.parse()?;
             let template: u32 = image.parse()?;
             let mut transaction = state.db.begin().await?;
-            sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1::text))")
-                .bind(integration_id)
-                .execute(&mut *transaction)
+            crate::locks::transaction(&mut transaction, format!("integration {integration_id}"))
                 .await?;
             let recorded: Vec<String> = sqlx::query_scalar(
                 "SELECT ids.id FROM services, LATERAL (VALUES (external_id), (details->>'vmid'), (details->>'rebuild_scratch')) AS ids(id)

@@ -264,10 +264,11 @@ pub async fn create(
         let mut transaction = state.db.begin().await?;
         let vlan = match platform.vlans() {
             Some(range) => {
-                sqlx::query("SELECT pg_advisory_xact_lock(hashtext('vlans ' || $1::text))")
-                    .bind(input.integration_id)
-                    .execute(&mut *transaction)
-                    .await?;
+                crate::locks::transaction(
+                    &mut transaction,
+                    format!("vlans {}", input.integration_id),
+                )
+                .await?;
                 let used: Vec<i32> = sqlx::query_scalar(
                     "SELECT vlan FROM vps_networks WHERE integration_id = $1 AND vlan IS NOT NULL",
                 )

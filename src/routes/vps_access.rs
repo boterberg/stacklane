@@ -311,10 +311,7 @@ pub async fn create(
         ));
     }
     let mut transaction = state.db.begin().await?;
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1::text))")
-        .bind(format!("members {}", actor.owner))
-        .execute(&mut *transaction)
-        .await?;
+    crate::locks::transaction(&mut transaction, format!("members {}", actor.owner)).await?;
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM vps_members WHERE owner_id = $1")
         .bind(actor.owner)
         .fetch_one(&mut *transaction)
