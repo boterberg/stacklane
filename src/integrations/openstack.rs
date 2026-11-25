@@ -993,6 +993,15 @@ impl OpenStack {
     }
 
     pub async fn unmount_iso(&self, id: &str) -> anyhow::Result<()> {
+        self.unrescue(id).await
+    }
+
+    pub async fn rescue(&self, id: &str, password: &str) -> anyhow::Result<()> {
+        self.rescue_action(id, json!({ "rescue": { "adminPass": password } }))
+            .await
+    }
+
+    pub async fn unrescue(&self, id: &str) -> anyhow::Result<()> {
         self.rescue_action(id, json!({ "unrescue": null })).await
     }
 
@@ -1389,6 +1398,8 @@ mod tests {
         client.attach_floating_ip("fip", "srv").await.unwrap();
         client.detach_floating_ip("fip").await.unwrap();
         client.delete_floating_ip("fip").await.unwrap();
+        client.rescue("srv", "tijdelijk").await.unwrap();
+        client.unrescue("srv").await.unwrap();
 
         let calls = calls.lock().unwrap().clone();
         let parsed = |index: usize| -> Value {
@@ -1409,6 +1420,9 @@ mod tests {
         assert_eq!(parsed(2)["floatingip"]["port_id"], "public");
         assert_eq!(parsed(3)["floatingip"]["port_id"], Value::Null);
         assert_eq!(calls[4], "DELETE /v2.0/floatingips/fip");
+        assert!(calls[5].starts_with("POST /servers/srv/action "));
+        assert_eq!(parsed(5)["rescue"]["adminPass"], "tijdelijk");
+        assert!(parsed(6).as_object().unwrap().contains_key("unrescue"));
     }
 
     #[tokio::test]
