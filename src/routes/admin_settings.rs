@@ -4,19 +4,21 @@ use serde::{Deserialize, Serialize};
 
 use crate::auth::CurrentAdmin;
 use crate::error::{AppError, AppResult};
-use crate::settings::{self, Billing, Company};
+use crate::settings::{self, Billing, Company, Support};
 use crate::state::AppState;
 
 #[derive(Serialize)]
 pub struct Settings {
     company: Company,
     billing: Billing,
+    support: Support,
 }
 
 #[derive(Deserialize)]
 pub struct SettingsUpdate {
     company: Option<Company>,
     billing: Option<Billing>,
+    support: Option<Support>,
 }
 
 fn trimmed(value: Option<String>) -> Option<String> {
@@ -29,6 +31,7 @@ async fn load(state: &AppState) -> AppResult<Settings> {
     Ok(Settings {
         company: settings::get(&state.db, "company").await?,
         billing: settings::get(&state.db, "billing").await?,
+        support: settings::get(&state.db, "support").await?,
     })
 }
 
@@ -91,6 +94,15 @@ pub async fn update(
             ));
         }
         settings::set(&state.db, "billing", &billing).await?;
+    }
+    if let Some(support) = input.support {
+        if !(0..=365).contains(&support.auto_close_days) {
+            return Err(AppError::field(
+                "auto_close_days",
+                "Gebruik een aantal dagen tussen 0 en 365.",
+            ));
+        }
+        settings::set(&state.db, "support", &support).await?;
     }
     Ok(Json(load(&state).await?))
 }

@@ -40,6 +40,35 @@ pub fn visible_text(html: &str) -> String {
         .to_owned()
 }
 
+pub fn plain_text(html: &str) -> String {
+    let spaced = html
+        .replace("<br>", "\n")
+        .replace("</p>", "</p>\n\n")
+        .replace("<li>", "<li>- ")
+        .replace("</li>", "</li>\n")
+        .replace("</ul>", "</ul>\n")
+        .replace("</ol>", "</ol>\n")
+        .replace("</blockquote>", "</blockquote>\n\n")
+        .replace("</pre>", "</pre>\n\n");
+    let text = ammonia::Builder::empty()
+        .clean(&spaced)
+        .to_string()
+        .replace("&nbsp;", " ")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&amp;", "&");
+    let mut lines: Vec<&str> = Vec::new();
+    for line in text.lines().map(str::trim_end) {
+        if line.is_empty() && lines.last().is_none_or(|last| last.is_empty()) {
+            continue;
+        }
+        lines.push(line);
+    }
+    lines.join("\n").trim().to_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -67,5 +96,15 @@ mod tests {
     fn empty_paragraphs_have_no_visible_text() {
         assert_eq!(visible_text("<p></p><p> </p><br>"), "");
         assert_eq!(visible_text("<p>Hallo</p>"), "Hallo");
+    }
+
+    #[test]
+    fn plain_text_keeps_paragraphs_and_lists() {
+        assert_eq!(
+            plain_text(
+                "<p>Hoi &amp; welkom</p><p></p><ul><li>een</li><li>twee</li></ul><p>a<br>b &lt;c&gt;</p>"
+            ),
+            "Hoi & welkom\n\n- een\n- twee\n\na\nb <c>"
+        );
     }
 }

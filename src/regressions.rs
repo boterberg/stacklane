@@ -2085,3 +2085,112 @@ async fn the_demo_seeds_every_part_of_the_panel(db: PgPool) {
         assert!(count >= at_least, "{table}: {count}");
     }
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn staff_replies_reach_the_customer_and_quiet_tickets_close(db: PgPool) {
+    use crate::testing::{make_admin, verify};
+    let client = Client::new(db);
+    let (user, cookie) = client.register("ticket-mail@example.test").await;
+    let (admin, admin_cookie) = client.register("ticket-staff@example.test").await;
+    make_admin(&client.state, admin).await;
+    verify(&client, &[user, admin]).await;
+    let departments = client
+        .send(Method::GET, "/support/departments", Some(&cookie), None)
+        .await;
+    let department = departments.body[0]["id"].as_str().unwrap().to_owned();
+    let created = client
+        .send(
+            Method::POST,
+            "/support/tickets",
+            Some(&cookie),
+            Some(json!({ "department_id": department, "subject": "Mail werkt niet", "body_html": "<p>Help</p>" })),
+        )
+        .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    let number = created.body["ticket"]["number"]
+        .as_i64()
+        .or_else(|| created.body["number"].as_i64())
+        .unwrap();
+    let reply = client
+        .send(
+            Method::POST,
+            &format!("/admin/tickets/{number}/replies"),
+            Some(&admin_cookie),
+            Some(json!({ "body_html": "<p>Kijk in je spammap &amp; probeer opnieuw.</p>" })),
+        )
+        .await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
+    let link: String = sqlx::query_scalar(
+        "SELECT link FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(user)
+    .fetch_one(&client.state.db)
+    .await
+    .unwrap();
+    assert_eq!(link, format!("/support/tickets/{number}"));
+    let logged = client
+        .send(
+            Method::GET,
+            "/admin/mail-log?search=ticket-mail@",
+            Some(&admin_cookie),
+            None,
+        )
+        .await;
+    assert_eq!(logged.status, StatusCode::OK);
+    assert!(
+        logged.body["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["kind"] == "ticket_reply"),
+        "{}",
+        logged.body
+    );
+    assert_eq!(
+        client
+            .send(Method::GET, "/admin/mail-log", Some(&cookie), None)
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+
+    assert_eq!(
+        crate::routes::support::close_stale(&client.state)
+            .await
+            .unwrap(),
+        0
+    );
+    let saved = client
+        .send(
+            Method::PUT,
+            "/admin/settings",
+            Some(&admin_cookie),
+            Some(json!({ "support": { "auto_close_days": 3 } })),
+        )
+        .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
+    assert_eq!(
+        crate::routes::support::close_stale(&client.state)
+            .await
+            .unwrap(),
+        0
+    );
+    sqlx::query("UPDATE tickets SET last_reply_at = now() - interval '4 days' WHERE number = $1")
+        .bind(number)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(
+        crate::routes::support::close_stale(&client.state)
+            .await
+            .unwrap(),
+        1
+    );
+    let status: String = sqlx::query_scalar("SELECT status FROM tickets WHERE number = $1")
+        .bind(number)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(status, "closed");
+}

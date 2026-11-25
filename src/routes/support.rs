@@ -391,15 +391,71 @@ pub async fn staff_reply(
     Json(input): Json<CreateReply>,
 ) -> AppResult<Json<TicketDetail>> {
     let ticket = load_summary(&state, Scope::Staff, number).await?;
-    add_message(
+    let body = clean_body(&input.body_html)?;
+    let text = crate::html::plain_text(&body);
+    add_message(&state, ticket.id, admin.id, true, body).await?;
+    let customer: Uuid = sqlx::query_scalar("SELECT user_id FROM tickets WHERE id = $1")
+        .bind(ticket.id)
+        .fetch_one(&state.db)
+        .await?;
+    let subject = &ticket.subject;
+    if let Err(error) = crate::renewals::notify_with_mail(
         &state,
-        ticket.id,
-        admin.id,
-        true,
-        clean_body(&input.body_html)?,
+        customer,
+        "ticket_reply",
+        (
+            format!("Antwoord op je ticket #{number}"),
+            format!("Support heeft gereageerd op \"{subject}\"."),
+            text.clone(),
+        ),
+        (
+            format!("Reply to your ticket #{number}"),
+            format!("Support replied to \"{subject}\"."),
+            text,
+        ),
+        &format!("/support/tickets/{number}"),
     )
-    .await?;
+    .await
+    {
+        tracing::warn!(?error, "telling the customer about a ticket reply failed");
+    }
     Ok(Json(load_detail(&state, Scope::Staff, number).await?))
+}
+
+pub async fn close_stale(state: &AppState) -> AppResult<usize> {
+    let support: crate::settings::Support = crate::settings::get(&state.db, "support").await?;
+    if support.auto_close_days <= 0 {
+        return Ok(0);
+    }
+    let days = support.auto_close_days;
+    let closed: Vec<(Uuid, i64, String)> = sqlx::query_as(
+        "UPDATE tickets SET status = 'closed'
+         WHERE status = 'answered' AND last_reply_at < now() - make_interval(days => $1)
+         RETURNING user_id, number, subject",
+    )
+    .bind(days)
+    .fetch_all(&state.db)
+    .await?;
+    for (customer, number, subject) in &closed {
+        if let Err(error) = crate::renewals::notify(
+            state,
+            *customer,
+            (
+                format!("Ticket #{number} gesloten"),
+                format!("We hebben \"{subject}\" gesloten omdat we {days} dagen niets van je hoorden. Reageer gerust, dan gaat het weer open."),
+            ),
+            (
+                format!("Ticket #{number} closed"),
+                format!("We closed \"{subject}\" because we did not hear from you for {days} days. Just reply to open it again."),
+            ),
+            &format!("/support/tickets/{number}"),
+        )
+        .await
+        {
+            tracing::warn!(?error, "telling the customer about a closed ticket failed");
+        }
+    }
+    Ok(closed.len())
 }
 
 pub async fn staff_update_status(

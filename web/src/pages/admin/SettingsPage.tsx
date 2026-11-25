@@ -5,7 +5,7 @@ import { Card } from '../../components/ui/Card'
 import { Checkbox, Field, Input, Select } from '../../components/ui/Field'
 import { PageHeader } from '../../components/ui/Heading'
 import { ApiError } from '../../lib/api'
-import { usePaymentSettings, useSavePaymentSettings, useSaveSettings, useSettings, type BillingSettings, type Company, type PaymentSettings } from '../../lib/admin'
+import { usePaymentSettings, useSavePaymentSettings, useSaveSettings, useSettings, type BillingSettings, type Company, type PaymentSettings, type SupportSettings } from '../../lib/admin'
 import { countries } from '../../lib/countries'
 import { t } from '../../lib/i18n'
 
@@ -196,6 +196,29 @@ function PaymentsForm({ initial }: { initial: PaymentSettings }) {
   )
 }
 
+function SupportForm({ initial }: { initial: SupportSettings }) {
+  const [days, setDays] = useState(String(initial.auto_close_days))
+  const save = useSaveSettings()
+  const errors = save.error instanceof ApiError ? save.error.fieldErrors : {}
+  return (
+    <FormCard
+      title={t('Support')}
+      description={t('Klanten krijgen een melding en een e-mail als support op hun ticket reageert.')}
+      onSubmit={() => save.mutate({ support: { auto_close_days: Math.round(Number(days)) || 0 } })}
+      pending={save.isPending}
+      saved={save.isSuccess}
+    >
+      <Field
+        label={t('Tickets sluiten na (dagen zonder reactie)')}
+        description={t('Een beantwoord ticket gaat dicht als de klant zo lang niets laat horen. Met 0 blijven tickets open.')}
+        error={errors.auto_close_days}
+      >
+        {(id) => <Input id={id} inputMode="numeric" invalid={!!errors.auto_close_days} value={days} onChange={(event) => setDays(event.target.value)} />}
+      </Field>
+    </FormCard>
+  )
+}
+
 export function SettingsPage() {
   const { data: settings } = useSettings()
   const { data: payments } = usePaymentSettings()
@@ -205,6 +228,7 @@ export function SettingsPage() {
       <div className="max-w-3xl space-y-6">
         {settings && <CompanyForm initial={settings.company} />}
         {settings && <BillingForm initial={settings.billing} />}
+        {settings && <SupportForm initial={settings.support} />}
         {payments && <PaymentsForm initial={payments} />}
       </div>
     </>

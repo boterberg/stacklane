@@ -39,6 +39,12 @@ impl Default for Billing {
     }
 }
 
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Support {
+    pub auto_close_days: i32,
+}
+
 pub async fn get<T: DeserializeOwned + Default>(db: &PgPool, key: &str) -> sqlx::Result<T> {
     let value: Option<serde_json::Value> =
         sqlx::query_scalar("SELECT value FROM settings WHERE key = $1")
