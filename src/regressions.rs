@@ -1477,3 +1477,81 @@ async fn older_proxmox_vms_get_the_ip_filter(db: PgPool) {
         0
     );
 }
+
+fn provisioning_node(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+    match (method, path) {
+        ("GET", "/api2/json/cluster/nextid") => (200, json!({ "data": "720" })),
+        ("GET", path) if path.ends_with("/ipset/ipfilter-net0") => {
+            (200, json!({ "data": [{ "cidr": "192.0.2.10" }] }))
+        }
+        ("GET", path) if path.ends_with("/status/current") => {
+            (200, json!({ "data": { "status": "running" } }))
+        }
+        _ => (200, json!({ "data": null })),
+    }
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_proxmox_vps_is_delivered(db: PgPool) {
+    use crate::testing::{NewService, fake_api, proxmox_integration, service};
+    let client = Client::new(db);
+    let (base, calls) = fake_api(provisioning_node).await;
+    let integration = proxmox_integration(&client.state, &base).await;
+    sqlx::query(
+        "UPDATE integrations SET settings = settings || '{\"images\": [{\"template\": 9000, \"name\": \"Debian 13\"}]}'
+         WHERE id = $1",
+    )
+    .bind(integration)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    let product = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO products (id, kind, slug, name, monthly_price_cents, integration_id, specs, provisioning)
+         VALUES ($1, 'vps', $1::text, 'VPS', 500, $2, '{}', '{\"cores\": 1, \"memory_mb\": 1024, \"disk_gb\": 20}')",
+    )
+    .bind(product)
+    .bind(integration)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    let (user, _) = client.register("delivered@example.test").await;
+    let vps = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "pending",
+            integration: Some(integration),
+            external_id: None,
+            details: json!({}),
+        },
+    )
+    .await;
+    sqlx::query("UPDATE services SET product_id = $2 WHERE id = $1")
+        .bind(vps)
+        .bind(product)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+
+    crate::services::provision_in_background(client.state.clone(), vps);
+    let mut row: (String, Option<String>, Option<String>) = Default::default();
+    for _ in 0..50 {
+        row = sqlx::query_as("SELECT status, external_id, last_error FROM services WHERE id = $1")
+            .bind(vps)
+            .fetch_one(&client.state.db)
+            .await
+            .unwrap();
+        if row.0 != "pending" && row.0 != "provisioning" {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert_eq!(row, ("active".to_owned(), Some("720".to_owned()), None));
+    assert!(calls.lock().unwrap().iter().any(|call| {
+        call.starts_with("POST /api2/json/nodes/pve/qemu/9000/clone") && call.contains("newid=720")
+    }));
+}
