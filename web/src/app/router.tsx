@@ -46,6 +46,8 @@ import { AdminInvoicePage } from '../pages/admin/InvoicePage'
 import { AdminInvoicesPage } from '../pages/admin/InvoicesPage'
 import { CustomerPage } from '../pages/admin/CustomerPage'
 import { CustomersPage } from '../pages/admin/CustomersPage'
+import { KbArticlePage } from '../pages/admin/KbArticlePage'
+import { KbPage } from '../pages/admin/KbPage'
 import { MailLogPage } from '../pages/admin/MailLogPage'
 import { StatsPage } from '../pages/admin/StatsPage'
 import { VatReportPage } from '../pages/admin/VatReportPage'
@@ -53,6 +55,8 @@ import { SettingsPage } from '../pages/admin/SettingsPage'
 import { ProductsPage } from '../pages/admin/ProductsPage'
 import { ServicesPage } from '../pages/admin/ServicesPage'
 import { SystemPage } from '../pages/admin/SystemPage'
+import { ArticlePage } from '../pages/help/ArticlePage'
+import { HelpPage } from '../pages/help/HelpPage'
 
 const sections: Array<[string, string]> = [['/gameservers/backups', 'Back-ups']]
 
@@ -75,6 +79,8 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <DashboardPage /> },
       { path: '/support/tickets', element: <TicketsPage /> },
+      { path: '/help', element: <HelpPage /> },
+      { path: '/help/:slug', element: <ArticlePage /> },
       { path: '/billing/subscriptions', element: <SubscriptionsPage /> },
       { path: '/billing/subscriptions/:code', element: <SubscriptionDetailPage /> },
       { path: '/billing/invoices', element: <InvoicesPage /> },
@@ -120,6 +126,8 @@ export const router = createBrowserRouter([
       { path: '/admin/settings', element: <SettingsPage /> },
       { path: '/admin/vat', element: <VatReportPage /> },
       { path: '/admin/mail-log', element: <MailLogPage /> },
+      { path: '/admin/kb', element: <KbPage /> },
+      { path: '/admin/kb/:id', element: <KbArticlePage /> },
       { path: '/admin/stats', element: <StatsPage /> },
       { path: '/admin/customers', element: <CustomersPage /> },
       { path: '/admin/customers/:id', element: <CustomerPage /> },

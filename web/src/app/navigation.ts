@@ -84,7 +84,7 @@ export const navigation: NavEntry[] = [
     icon: LifebuoyIcon,
     children: [
       { label: 'Tickets', to: '/support/tickets', icon: QuestionMarkCircleIcon },
-      { label: 'Helpcentrum', to: links.helpCenter, icon: BookOpenIcon, external: true },
+      { label: 'Helpcentrum', to: links.helpCenter, icon: BookOpenIcon, external: links.helpCenter.startsWith('http') },
     ],
   },
   {
@@ -110,6 +110,7 @@ export const adminNavigation: NavGroup = {
     { label: 'Producten', to: '/admin/products', icon: CubeIcon },
     { label: 'Domeinextensies', to: '/admin/domain-extensions', icon: GlobeAltIcon },
     { label: 'Koppelingen', to: '/admin/integrations', icon: LinkIcon },
+    { label: 'Kennisbank', to: '/admin/kb', icon: BookOpenIcon },
     { label: 'Maillog', to: '/admin/mail-log', icon: EnvelopeIcon },
     { label: 'Instellingen', to: '/admin/settings', icon: AdjustmentsHorizontalIcon },
     { label: 'Systeem', to: '/admin/system', icon: Cog6ToothIcon },

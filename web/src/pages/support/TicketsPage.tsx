@@ -1,6 +1,6 @@
 import { CalendarIcon, ChatBubbleLeftRightIcon, HashtagIcon, InboxIcon, PlusIcon, UserIcon } from '@heroicons/react/24/outline'
 import { useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -21,7 +21,8 @@ function StatusBadge({ status }: { status: TicketStatus }) {
 
 export function TicketsPage({ scope = 'customer' }: { scope?: TicketScope }) {
   const staff = scope === 'staff'
-  const [creating, setCreating] = useState(false)
+  const [searchParams] = useSearchParams()
+  const [creating, setCreating] = useState(searchParams.get('new') === '1')
   const [query, setQuery] = useState('')
   const [statuses, setStatuses] = useState<TicketStatus[]>(defaultTicketStatuses)
   const [page, setPage] = useState(1)
