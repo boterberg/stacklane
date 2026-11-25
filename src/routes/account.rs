@@ -398,6 +398,7 @@ pub async fn destroy(
         "whois_profiles",
         "ssh_keys",
         "vps_firewalls",
+        "gameserver_members",
     ] {
         sqlx::query(sqlx::AssertSqlSafe(format!(
             "DELETE FROM {table} WHERE user_id = $1"
@@ -407,6 +408,7 @@ pub async fn destroy(
         .await?;
     }
     transaction.commit().await?;
+    crate::services::forget_panel_users(&state, user.id).await;
     tracing::info!(user = %user.id, "account deleted");
     Ok((
         jar.add(auth::clear_session_cookie()),
