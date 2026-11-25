@@ -30,7 +30,8 @@ type Common = {
 
 function classes({ variant = 'outline', size = 'base', className }: Common) {
   return cn(
-    'inline-flex shrink-0 items-center justify-center font-medium whitespace-nowrap transition-colors disabled:opacity-75 disabled:cursor-default',
+    'inline-flex shrink-0 items-center justify-center font-medium whitespace-nowrap transition-[color,background-color,border-color,translate,scale] duration-150 ease-out motion-safe:active:scale-[0.97] disabled:opacity-75 disabled:cursor-default disabled:active:scale-100',
+    variant !== 'ghost' && 'motion-safe:hover:-translate-y-px disabled:hover:translate-y-0',
     variants[variant],
     sizes[size],
     className,
