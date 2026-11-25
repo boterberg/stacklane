@@ -28,6 +28,13 @@ Stacklane is jong. Probeer het eerst naast je huidige panel: [importeer](/docs/g
 | Domeinen registreren en verhuizen via Openprovider | 1.2.0.0 |
 | Webhosting op cPanel & WHM | 1.2.0.0 |
 | Btw per land met OSS, verlegging en een kwartaaloverzicht | 1.2.0.0 |
+| Mail naar de klant bij een antwoord op een ticket, tickets automatisch sluiten | 1.3.0.0 |
+| Helpcentrum met een kennisbank die je zelf schrijft | 1.3.0.0 |
+| Klantenoverzicht, statistieken en een maillog voor beheerders | 1.3.0.0 |
+| Eigen huisstijl: naam, logo, favicon en accentkleur | 1.3.0.0 |
+| Facturen in een valuta naar keuze | 1.3.0.0 |
+| Publieke catalogus van je pakketten voor je eigen website | 1.3.0.0 |
+| Activiteitenlog per gameserver | 1.3.0.0 |
 | Nederlands en Engels, licht en donker | 1.0.0.0 |
 | Het commando `stacklane` met setup, update, status en import | 1.0.0.0 |
 
