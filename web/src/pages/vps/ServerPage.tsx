@@ -1,4 +1,4 @@
-import { ArrowPathIcon, ArrowTopRightOnSquareIcon, CameraIcon, EyeIcon, GlobeAltIcon, PlayIcon, PowerIcon, ServerIcon, StopIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, ArrowTopRightOnSquareIcon, CameraIcon, ExclamationTriangleIcon, EyeIcon, GlobeAltIcon, PlayIcon, PowerIcon, ServerIcon, StopIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { useState } from 'react'
 import { useParams } from 'react-router'
 
@@ -35,9 +35,10 @@ import { isManaged } from '../../lib/firewall'
 import { RuleForm, RuleList } from './FirewallRules'
 import { LinkedCard, ServerFloatingIps, ServerNetworks, ServerVolumes } from './ServerAttached'
 import { ServerIso } from './ServerIso'
+import { ServerRebuild } from './ServerRebuild'
 import { useCan, useVpsAccess } from '../../lib/vpsAccess'
 
-type Tab = 'overview' | 'networks' | 'firewall' | 'floating' | 'volumes' | 'snapshots' | 'iso'
+type Tab = 'overview' | 'networks' | 'firewall' | 'floating' | 'volumes' | 'snapshots' | 'rebuild' | 'iso'
 
 function errorText(error: Error | null) {
   return error instanceof ApiError ? (Object.values(error.fieldErrors)[0] ?? error.message) : error?.message
@@ -306,7 +307,11 @@ export function VpsServerPage() {
         <div>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-xl font-medium text-zinc-800 dark:text-white">{server.name}</h1>
-            <Badge color={serviceStatusColors[server.status]}>{serviceStatusLabels[server.status]}</Badge>
+            {server.details.rebuilding ? (
+              <Badge color="blue">{t('Wordt herbouwd')}</Badge>
+            ) : (
+              <Badge color={serviceStatusColors[server.status]}>{serviceStatusLabels[server.status]}</Badge>
+            )}
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-zinc-500 dark:text-white/70">
             {server.details.ipv4 && (
@@ -342,6 +347,12 @@ export function VpsServerPage() {
         />
       ) : (
         <>
+          {server.last_error && !server.details.rebuilding && (
+            <div className="mb-6 flex gap-3 rounded-xl border border-red-200 bg-red-50 px-6 py-4 text-sm text-red-800 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
+              <ExclamationTriangleIcon className="size-5 shrink-0" aria-hidden />
+              <p>{server.last_error}</p>
+            </div>
+          )}
           <Tabs
             tabs={[
               { id: 'overview' as const, label: 'Overzicht' },
@@ -350,6 +361,7 @@ export function VpsServerPage() {
               ...(linked.floating ? [{ id: 'floating' as const, label: 'Floating IPs' }] : []),
               ...(linked.volumes ? [{ id: 'volumes' as const, label: 'Volumes' }] : []),
               ...(server.features?.snapshots === false || !can('snapshots.view') ? [] : [{ id: 'snapshots' as const, label: 'Snapshots' }]),
+              ...(server.features?.rebuild && can('servers.rebuild') ? [{ id: 'rebuild' as const, label: 'Herbouwen' }] : []),
               ...(server.features?.volumes === false || !can('isos.view') ? [] : [{ id: 'iso' as const, label: 'ISO' }]),
             ]}
             active={tab}
@@ -361,6 +373,7 @@ export function VpsServerPage() {
           {tab === 'floating' && <ServerFloatingIps serverId={server.id} />}
           {tab === 'volumes' && <ServerVolumes serverId={server.id} />}
           {tab === 'snapshots' && <Snapshots server={server} />}
+          {tab === 'rebuild' && <ServerRebuild serverId={server.id} rebuilding={server.details.rebuilding === true} />}
           {tab === 'iso' && <ServerIso serverId={server.id} />}
         </>
       )}
