@@ -394,6 +394,9 @@ pub async fn show(
     user: CurrentUser,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<DomainDetail>> {
+    state
+        .limits
+        .check(&crate::limits::REGISTRAR_READ, &user.id.to_string())?;
     let domain: OwnedDomain =
         sqlx::query_as(sqlx::AssertSqlSafe(format!("{SELECT} AND s.id = $2")))
             .bind(user.id)

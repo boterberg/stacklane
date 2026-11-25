@@ -75,6 +75,11 @@ pub const DOMAIN_CHANGE: Rule = Rule {
     max: 20,
     window: Duration::from_secs(60 * 60),
 };
+pub const REGISTRAR_READ: Rule = Rule {
+    name: "registrar-read",
+    max: 60,
+    window: Duration::from_secs(60),
+};
 pub const GAME_PANEL: Rule = Rule {
     name: "game-panel",
     max: 120,
@@ -130,6 +135,7 @@ fn window_of(name: &str) -> Duration {
         UNKNOWN_PAYMENT,
         DOMAIN_CHANGE,
         GAME_PANEL,
+        REGISTRAR_READ,
         DOMAIN_SEARCH,
     ]
     .into_iter()
