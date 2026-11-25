@@ -116,6 +116,7 @@ async fn sync_server(
     marker: &str,
     rules: &[FirewallRule],
 ) -> anyhow::Result<()> {
+    let _guard = crate::locks::service(&state.db, service_id).await?;
     let machine = machine_of(state, user_id, service_id)
         .await
         .map_err(|error| anyhow::anyhow!("{error}"))?;
