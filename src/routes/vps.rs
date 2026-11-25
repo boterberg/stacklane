@@ -176,6 +176,85 @@ pub async fn power(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Serialize)]
+pub struct RescuePassword {
+    password: String,
+}
+
+pub async fn enter_rescue(
+    State(state): State<AppState>,
+    actor: VpsActor,
+    Path(id): Path<Uuid>,
+) -> AppResult<(StatusCode, Json<RescuePassword>)> {
+    actor.require("servers.rescue")?;
+    crate::locks::exclusive(format!("server {id}"), async {
+        let machine = machine(&state, actor.owner, id).await?;
+        if !machine.features().rescue {
+            return Err(AppError::field(
+                "server",
+                "Dit platform heeft geen rescue-modus.",
+            ));
+        }
+        let (rescued, iso): (bool, bool) = sqlx::query_as(
+            "SELECT details ? 'rescue', EXISTS (SELECT 1 FROM vps_isos WHERE mounted_on = $1)
+             FROM services WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_one(&state.db)
+        .await?;
+        if rescued {
+            return Err(AppError::field(
+                "server",
+                "Deze server staat al in rescue-modus.",
+            ));
+        }
+        if iso {
+            return Err(AppError::field(
+                "server",
+                "Koppel eerst de ISO los voordat je rescue-modus inschakelt.",
+            ));
+        }
+        let password = crate::services::root_password();
+        machine.rescue(&password).await.map_err(failed)?;
+        sqlx::query(
+            "UPDATE services SET details = details || '{\"rescue\": true}'::jsonb, updated_at = now() WHERE id = $1",
+        )
+        .bind(id)
+        .execute(&state.db)
+        .await?;
+        Ok((StatusCode::ACCEPTED, Json(RescuePassword { password })))
+    })
+    .await
+}
+
+pub async fn leave_rescue(
+    State(state): State<AppState>,
+    actor: VpsActor,
+    Path(id): Path<Uuid>,
+) -> AppResult<StatusCode> {
+    actor.require("servers.rescue")?;
+    crate::locks::exclusive(format!("server {id}"), async {
+        let machine = machine(&state, actor.owner, id).await?;
+        let rescued: bool =
+            sqlx::query_scalar("SELECT details ? 'rescue' FROM services WHERE id = $1")
+                .bind(id)
+                .fetch_one(&state.db)
+                .await?;
+        if !rescued {
+            return Ok(StatusCode::NO_CONTENT);
+        }
+        machine.unrescue().await.map_err(failed)?;
+        sqlx::query(
+            "UPDATE services SET details = details - 'rescue', updated_at = now() WHERE id = $1",
+        )
+        .bind(id)
+        .execute(&state.db)
+        .await?;
+        Ok(StatusCode::NO_CONTENT)
+    })
+    .await
+}
+
 #[derive(Deserialize)]
 pub struct GraphQuery {
     #[serde(default = "default_timeframe")]

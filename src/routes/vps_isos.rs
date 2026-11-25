@@ -335,6 +335,13 @@ pub async fn mount(
             "Koppel eerst de huidige ISO los.",
         ));
     }
+    let rescued: bool = sqlx::query_scalar("SELECT details ? 'rescue' FROM services WHERE id = $1")
+        .bind(id)
+        .fetch_one(&state.db)
+        .await?;
+    if rescued {
+        return Err(AppError::field("iso_id", "Zet eerst de rescue-modus uit."));
+    }
     let iso: Option<(String, String)> = sqlx::query_as(
         "UPDATE vps_isos SET mounted_on = $4, last_used_at = now()
          WHERE id = $1 AND user_id = $2 AND integration_id = $3 AND status = 'ready' AND mounted_on IS NULL

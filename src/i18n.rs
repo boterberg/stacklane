@@ -455,6 +455,12 @@ fn english(message: &str) -> Option<&'static str> {
         "Deze server wordt herbouwd. Wacht tot dat klaar is." => {
             "This server is being rebuilt. Wait until it is done."
         }
+        "Dit platform heeft geen rescue-modus." => "This platform has no rescue mode.",
+        "Deze server staat al in rescue-modus." => "This server is already in rescue mode.",
+        "Koppel eerst de ISO los voordat je rescue-modus inschakelt." => {
+            "Detach the ISO before you turn on rescue mode."
+        }
+        "Zet eerst de rescue-modus uit." => "Turn off rescue mode first.",
         _ => return None,
     })
 }

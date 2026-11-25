@@ -375,7 +375,7 @@ fn created_for(description: &str, service_id: Uuid) -> bool {
         == Some(service_id.to_string().as_str())
 }
 
-fn root_password() -> String {
+pub fn root_password() -> String {
     const ALPHABET: &[u8] = b"abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     rand::random::<[u8; 20]>()
         .iter()

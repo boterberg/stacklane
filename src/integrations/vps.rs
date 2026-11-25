@@ -59,6 +59,7 @@ pub struct Features {
     pub networks: bool,
     pub rebuild: bool,
     pub graphs: bool,
+    pub rescue: bool,
     pub panel: bool,
 }
 
@@ -91,6 +92,7 @@ impl Machine {
             },
             rebuild: !virtfusion,
             graphs: matches!(self, Self::Proxmox(..)),
+            rescue: matches!(self, Self::OpenStack(..)),
             panel: virtfusion,
         }
     }
@@ -111,6 +113,20 @@ impl Machine {
         match self {
             Self::Proxmox(client, vmid) => client.metrics(*vmid, timeframe).await,
             _ => anyhow::bail!("dit platform geeft geen grafieken door"),
+        }
+    }
+
+    pub async fn rescue(&self, password: &str) -> anyhow::Result<()> {
+        match self {
+            Self::OpenStack(client, id) => client.rescue(id, password).await,
+            _ => anyhow::bail!("dit platform heeft geen rescue-modus"),
+        }
+    }
+
+    pub async fn unrescue(&self) -> anyhow::Result<()> {
+        match self {
+            Self::OpenStack(client, id) => client.unrescue(id).await,
+            _ => anyhow::bail!("dit platform heeft geen rescue-modus"),
         }
     }
 
