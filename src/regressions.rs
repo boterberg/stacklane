@@ -3587,7 +3587,7 @@ fn quiet_node(_: &str, _: &str, _: &str) -> (u16, serde_json::Value) {
 
 #[sqlx::test]
 #[ignore = "needs DATABASE_URL"]
-async fn a_power_action_waits_for_a_suspension_in_progress(db: PgPool) {
+async fn a_power_action_cannot_slip_past_a_suspension(db: PgPool) {
     use crate::testing::{NewService, fake_api, proxmox_integration, service};
     let client = Client::new(db);
     let (user, cookie) = client.register("vps-suspend-race@example.test").await;
@@ -3919,4 +3919,61 @@ async fn a_new_address_reaches_the_game_panel_too(db: PgPool) {
         .expect("panel user updated");
     assert!(patch.contains("panel-new@example.test"), "{patch}");
     assert!(patch.contains("paneluser"), "{patch}");
+}
+
+fn node_without_the_vm(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+    match (method, path) {
+        ("GET", "/api2/json/nodes/pve/qemu/734/config") => (500, json!({ "data": null })),
+        ("GET", "/api2/json/nodes/pve/qemu") => (200, json!({ "data": [{ "vmid": 100 }] })),
+        _ => (200, json!({ "data": null })),
+    }
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn terminating_a_vps_whose_vm_was_never_made_still_ends_it(db: PgPool) {
+    use crate::testing::{NewService, fake_api, proxmox_integration, service};
+    let client = Client::new(db);
+    let (user, _) = client.register("vm-never-made@example.test").await;
+    let (base, calls) = fake_api(node_without_the_vm).await;
+    let integration = proxmox_integration(&client.state, &base).await;
+    let server = service(
+        &client.state,
+        NewService {
+            user,
+            subscription: None,
+            kind: "vps",
+            status: "failed",
+            integration: Some(integration),
+            external_id: None,
+            details: json!({ "vmid": 734 }),
+        },
+    )
+    .await;
+    crate::services::change_state_because(&client.state, server, "terminate", "admin")
+        .await
+        .unwrap();
+    let status: String = sqlx::query_scalar("SELECT status FROM services WHERE id = $1")
+        .bind(server)
+        .fetch_one(&client.state.db)
+        .await
+        .unwrap();
+    assert_eq!(status, "terminated");
+    assert!(
+        !calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|call| call.starts_with("DELETE"))
+    );
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_pending_change_elsewhere_does_not_block_signing_up(db: PgPool) {
+    let client = Client::new(db);
+    let (other, _) = client.register("claims-it@example.test").await;
+    verification_token(&client, other, "wanted@example.test").await;
+    let (_, cookie) = client.register("wanted@example.test").await;
+    assert!(!cookie.is_empty());
 }

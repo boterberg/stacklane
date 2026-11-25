@@ -1445,8 +1445,12 @@ pub async fn change_state_because(
             .bind(service_id)
             .fetch_one(&state.db)
             .await?;
-        if let Err(error) =
-            crate::routes::vps_networks::release_unused(state, owner, integration_id).await
+        if let Err(error) = crate::locks::exclusive(format!("networks {owner}"), async {
+            crate::routes::vps_networks::release_unused(state, owner, integration_id)
+                .await
+                .map_err(AppError::Internal)
+        })
+        .await
         {
             tracing::warn!(%service_id, error = %format!("{error:#}"), "releasing private networks failed");
         }
