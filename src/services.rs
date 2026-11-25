@@ -100,7 +100,8 @@ async fn claim(state: &AppState, service_id: Uuid) -> anyhow::Result<bool> {
 
 async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()> {
     let context: ProvisionContext = sqlx::query_as(
-        "SELECT s.name, s.kind, s.integration_id, p.provisioning, s.details, u.email::text AS email, u.first_name, u.last_name, u.id AS user_id
+        "SELECT s.name, s.kind, s.integration_id, p.provisioning, s.details, u.email::text AS email,
+                u.email_verified_at IS NOT NULL AS email_verified, u.first_name, u.last_name, u.id AS user_id
          FROM services s
          JOIN users u ON u.id = s.user_id
          JOIN products p ON p.id = s.product_id
