@@ -97,6 +97,18 @@ arping -U -c 3 -I eth0 192.0.2.15
 
 Het tweede commando laat de router weten dat het adres nu bij deze server zit; zonder dat kan het na een verplaatsing even duren voordat verkeer aankomt.
 
+### Netwerken
+
+Met een privénetwerk praten servers van één klant onderling, buiten het publieke netwerk om. De klant maakt onder **VPS → Netwerken** een netwerk met een naam en een privé IP-bereik (bijvoorbeeld `10.1.0.0/24`, met een netmasker van /16 tot /28) en koppelt daar servers op hetzelfde platform aan. Elke server krijgt een extra netwerkkaart met een adres uit dat bereik. Netwerken zijn gratis. Een klant heeft hoogstens tien netwerken, een server zit in hoogstens drie, en de bereiken van één klant mogen elkaar niet overlappen.
+
+| Platform | Hoe het werkt |
+| --- | --- |
+| Proxmox VE | Stel bij de koppeling een **bridge voor privénetwerken** in, bijvoorbeeld `vmbr1`, en een reeks VLAN's (standaard 2000 tot en met 2999). Elk netwerk krijgt een eigen VLAN uit die reeks; een server krijgt een extra kaart (`net1` en verder) op die bridge met die VLAN-tag. Stacklane kiest het adres en zet het in cloud-init, dus het staat er na de volgende herstart vanzelf op; de klant kan het ook meteen zelf instellen. Laat de bridge alle nodes verbinden als je er meer dan één hebt. Zonder bridge kunnen klanten op deze koppeling geen netwerken maken. |
+| OpenStack | Een eigen netwerk en subnet in Neutron, zonder gateway en zonder security groups, zodat de servers elkaar vrij bereiken. Koppelen voegt via Nova een netwerkkaart toe; het adres komt via DHCP. |
+| VirtFusion | Geen netwerken. |
+
+Een netwerk verwijderen kan pas als er geen servers meer aan hangen. Wordt een server opgeheven, dan verdwijnt hij vanzelf uit zijn netwerken.
+
 ### ISO's
 
 Een klant kan onder **VPS → ISO's** twee eigen ISO's importeren via een publieke https-link, met BIOS of UEFI. Stacklane haalt de ISO op de achtergrond binnen. Daarna kiest de klant op de serverpagina onder **ISO** welke ISO hij koppelt; de server herstart en start vanaf de ISO. Na het loskoppelen start hij weer van de eigen schijf.
