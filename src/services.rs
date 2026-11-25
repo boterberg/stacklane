@@ -245,7 +245,7 @@ async fn provision_vps(
         .execute(&mut *transaction)
         .await?;
     let recorded: Vec<String> = sqlx::query_scalar(
-        "SELECT id FROM services, LATERAL (VALUES (external_id), (details->>'vmid')) AS ids(id)
+        "SELECT ids.id FROM services, LATERAL (VALUES (external_id), (details->>'vmid')) AS ids(id)
          WHERE integration_id = $1 AND services.id <> $2 AND kind = 'vps'
            AND status <> 'terminated' AND ids.id IS NOT NULL",
     )
