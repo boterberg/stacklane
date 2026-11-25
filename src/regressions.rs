@@ -1871,3 +1871,19 @@ async fn terminating_an_unfinished_vps_removes_its_vm(db: PgPool) {
             .any(|call| call.starts_with("DELETE /api2/json/nodes/pve/qemu/733"))
     );
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn one_customer_cannot_flood_the_hypervisor_with_server_reads(db: PgPool) {
+    let client = Client::new(db);
+    let (_, cookie) = client.register("vps-flood@example.test").await;
+    let path = format!("/vps/servers/{}/snapshots", uuid::Uuid::new_v4());
+    let mut last = StatusCode::OK;
+    for _ in 0..=120 {
+        last = client
+            .send(Method::GET, &path, Some(&cookie), None)
+            .await
+            .status;
+    }
+    assert_eq!(last, StatusCode::TOO_MANY_REQUESTS);
+}

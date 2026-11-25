@@ -53,6 +53,12 @@ async fn load(state: &AppState, owner: Uuid, id: Uuid) -> AppResult<Server> {
         .ok_or(AppError::NotFound)
 }
 
+fn upstream_budget(state: &AppState, owner: Uuid) -> AppResult<()> {
+    state
+        .limits
+        .check(&crate::limits::VPS_UPSTREAM, &owner.to_string())
+}
+
 async fn machine(state: &AppState, owner: Uuid, id: Uuid) -> AppResult<vps::Machine> {
     machine_of(state, owner, id).await
 }
@@ -136,6 +142,7 @@ pub async fn show(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<ServerDetail>> {
     actor.require("servers.view")?;
+    upstream_budget(&state, actor.owner)?;
     let server = load(&state, actor.owner, id).await?;
     let (live, features) = match connect(&state, actor.owner, id, true).await {
         Ok(machine) => (machine.status().await.ok(), Some(machine.features())),
@@ -167,6 +174,7 @@ pub async fn power(
     }
     if input.action != "stop" && input.action != "shutdown" {
         actor.require("servers.start")?;
+        upstream_budget(&state, actor.owner)?;
     }
     if input.action != "start" {
         actor.require("servers.stop")?;
@@ -273,6 +281,7 @@ pub async fn graphs(
     axum::extract::Query(query): axum::extract::Query<GraphQuery>,
 ) -> AppResult<Json<Vec<vps::Metric>>> {
     actor.require("servers.view")?;
+    upstream_budget(&state, actor.owner)?;
     if !matches!(query.timeframe.as_str(), "hour" | "day" | "week" | "month") {
         return Err(AppError::field("timeframe", "Kies een periode."));
     }
@@ -416,6 +425,7 @@ pub async fn snapshots(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Vec<vps::Snapshot>>> {
     actor.require("snapshots.view")?;
+    upstream_budget(&state, actor.owner)?;
     let machine = machine(&state, actor.owner, id).await?;
     Ok(Json(machine.snapshots().await.map_err(failed)?))
 }
@@ -440,6 +450,7 @@ pub async fn all_snapshots(
     actor: VpsActor,
 ) -> AppResult<Json<SnapshotOverview>> {
     actor.require("snapshots.view")?;
+    upstream_budget(&state, actor.owner)?;
     let servers: Vec<(Uuid, String)> = sqlx::query_as(
         "SELECT id, name FROM services WHERE kind = 'vps' AND status = 'active' AND user_id = $1 ORDER BY name",
     )
@@ -597,6 +608,7 @@ pub async fn firewall(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Vec<vps::FirewallRule>>> {
     actor.require("firewalls.view")?;
+    upstream_budget(&state, actor.owner)?;
     let machine = machine(&state, actor.owner, id).await?;
     Ok(Json(machine.firewall_rules().await.map_err(failed)?))
 }

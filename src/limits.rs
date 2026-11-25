@@ -60,6 +60,11 @@ pub const INVITE: Rule = Rule {
     max: 20,
     window: Duration::from_secs(60 * 60),
 };
+pub const VPS_UPSTREAM: Rule = Rule {
+    name: "vps-upstream",
+    max: 120,
+    window: Duration::from_secs(60),
+};
 pub const RDNS: Rule = Rule {
     name: "rdns",
     max: 30,
@@ -136,6 +141,7 @@ fn window_of(name: &str) -> Duration {
         DOMAIN_CHANGE,
         GAME_PANEL,
         REGISTRAR_READ,
+        VPS_UPSTREAM,
         DOMAIN_SEARCH,
     ]
     .into_iter()
