@@ -9,6 +9,7 @@ pub const VERSION: &str = match option_env!("STACKLANE_VERSION") {
     None => env!("CARGO_PKG_VERSION"),
 };
 
+#[derive(Clone)]
 pub struct Config {
     pub database_url: String,
     pub bind_addr: String,
