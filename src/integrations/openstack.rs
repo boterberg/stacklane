@@ -665,8 +665,15 @@ impl OpenStack {
             .as_str()
             .context("OpenStack gaf geen volume-ID terug")?
             .to_owned();
-        self.wait_for_volume(&volume, "available").await?;
-        self.attach_volume(server, &volume).await?;
+        let attached = async {
+            self.wait_for_volume(&volume, "available").await?;
+            self.attach_volume(server, &volume).await
+        };
+        if let Err(error) = attached.await {
+            self.detach_volume(server, &volume).await.ok();
+            self.delete_volume(Some(server), &volume).await.ok();
+            return Err(error);
+        }
         Ok(volume)
     }
 
