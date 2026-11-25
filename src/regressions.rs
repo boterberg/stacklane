@@ -3738,3 +3738,67 @@ async fn terminating_a_failed_virtfusion_vps_removes_its_server(db: PgPool) {
         calls.lock().unwrap()
     );
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn proxmox_nodes_of_one_cluster_share_one_vlan_pool(db: PgPool) {
+    use crate::testing::{NewService, fake_api, proxmox_integration, service};
+    let client = Client::new(db);
+    let (base, _) = fake_api(quiet_node).await;
+    let mut vlans = Vec::new();
+    for (index, email) in ["vlan-een@example.test", "vlan-twee@example.test"]
+        .into_iter()
+        .enumerate()
+    {
+        let integration = proxmox_integration(&client.state, &base).await;
+        sqlx::query(
+            "UPDATE integrations SET settings = settings || '{\"private_bridge\": \"vmbr1\"}'::jsonb WHERE id = $1",
+        )
+        .bind(integration)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO products (id, kind, slug, name, monthly_price_cents, integration_id)
+             VALUES ($1, 'vps', $2, 'VPS', 500, $3)",
+        )
+        .bind(uuid::Uuid::new_v4())
+        .bind(format!("vps-vlan-{index}"))
+        .bind(integration)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+        let (user, cookie) = client.register(email).await;
+        service(
+            &client.state,
+            NewService {
+                user,
+                subscription: None,
+                kind: "vps",
+                status: "active",
+                integration: Some(integration),
+                external_id: Some("700"),
+                details: json!({}),
+            },
+        )
+        .await;
+        let created = client
+            .send(
+                Method::POST,
+                "/vps/networks",
+                Some(&cookie),
+                Some(
+                    json!({ "name": "lan", "cidr": "10.1.0.0/24", "integration_id": integration }),
+                ),
+            )
+            .await;
+        assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+        let vlan: i32 = sqlx::query_scalar("SELECT vlan FROM vps_networks WHERE user_id = $1")
+            .bind(user)
+            .fetch_one(&client.state.db)
+            .await
+            .unwrap();
+        vlans.push(vlan);
+    }
+    assert_ne!(vlans[0], vlans[1]);
+}

@@ -278,13 +278,10 @@ pub async fn create(
         let mut transaction = state.db.begin().await?;
         let vlan = match platform.vlans() {
             Some(range) => {
-                crate::locks::transaction(
-                    &mut transaction,
-                    format!("vlans {}", input.integration_id),
-                )
-                .await?;
+                crate::locks::transaction(&mut transaction, "vlans").await?;
                 let used: Vec<i32> = sqlx::query_scalar(
-                    "SELECT vlan FROM vps_networks WHERE integration_id = $1 AND vlan IS NOT NULL",
+                    "SELECT n.vlan FROM vps_networks n JOIN integrations i ON i.id = n.integration_id
+                     WHERE i.kind = (SELECT kind FROM integrations WHERE id = $1) AND n.vlan IS NOT NULL",
                 )
                 .bind(input.integration_id)
                 .fetch_all(&mut *transaction)
