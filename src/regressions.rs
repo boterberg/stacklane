@@ -1978,3 +1978,53 @@ async fn a_whois_change_the_registrar_refuses_is_not_kept(db: PgPool) {
     .unwrap();
     assert_eq!(handles, 0);
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn ssh_keys_stay_few_and_small(db: PgPool) {
+    use base64::Engine;
+    let client = Client::new(db);
+    let (_, cookie) = client.register("ssh-cap@example.test").await;
+    let key = |n: u32| {
+        let mut blob = Vec::new();
+        blob.extend_from_slice(&11u32.to_be_bytes());
+        blob.extend_from_slice(b"ssh-ed25519");
+        blob.extend_from_slice(&32u32.to_be_bytes());
+        blob.extend_from_slice(&n.to_be_bytes());
+        blob.extend_from_slice(&[7; 28]);
+        format!(
+            "ssh-ed25519 {}",
+            base64::engine::general_purpose::STANDARD.encode(blob)
+        )
+    };
+    let huge = format!("{} {}", key(0), "x".repeat(20 * 1024));
+    let refused = client
+        .send(
+            Method::POST,
+            "/ssh-keys",
+            Some(&cookie),
+            Some(json!({ "name": "huge", "public_key": huge })),
+        )
+        .await;
+    assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY);
+    for n in 1..=50 {
+        let added = client
+            .send(
+                Method::POST,
+                "/ssh-keys",
+                Some(&cookie),
+                Some(json!({ "name": format!("key {n}"), "public_key": key(n) })),
+            )
+            .await;
+        assert_eq!(added.status, StatusCode::CREATED, "{}", added.body);
+    }
+    let full = client
+        .send(
+            Method::POST,
+            "/ssh-keys",
+            Some(&cookie),
+            Some(json!({ "name": "one more", "public_key": key(51) })),
+        )
+        .await;
+    assert_eq!(full.status, StatusCode::UNPROCESSABLE_ENTITY);
+}

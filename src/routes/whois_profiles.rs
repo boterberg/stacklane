@@ -164,6 +164,8 @@ pub async fn index(
     ))
 }
 
+const MAX_PROFILES: i64 = 20;
+
 pub async fn create(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -171,6 +173,18 @@ pub async fn create(
 ) -> AppResult<(StatusCode, Json<WhoisProfile>)> {
     let input = clean(input)?;
     let id = Uuid::new_v4();
+    let mut transaction = state.db.begin().await?;
+    crate::locks::transaction(&mut transaction, format!("whois-profiles {}", user.id)).await?;
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM whois_profiles WHERE user_id = $1")
+        .bind(user.id)
+        .fetch_one(&mut *transaction)
+        .await?;
+    if count >= MAX_PROFILES {
+        return Err(AppError::field(
+            "first_name",
+            "Je hebt al 20 profielen. Verwijder er eerst een.",
+        ));
+    }
     sqlx::query(
         "INSERT INTO whois_profiles (id, user_id, first_name, last_name, company, email, phone, street, house_number, zipcode, city, country)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
@@ -187,8 +201,9 @@ pub async fn create(
     .bind(&input.zipcode)
     .bind(&input.city)
     .bind(&input.country)
-    .execute(&state.db)
+    .execute(&mut *transaction)
     .await?;
+    transaction.commit().await?;
     Ok((StatusCode::CREATED, Json(load(&state, user.id, id).await?)))
 }
 
