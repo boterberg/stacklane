@@ -282,7 +282,7 @@ pub async fn create_snapshot(
 ) -> AppResult<StatusCode> {
     actor.require("snapshots.create")?;
     let key = format!("snapshots {id}");
-    crate::locks::exclusive(&state, key, take_snapshot(&state, &actor, id, input)).await
+    crate::locks::exclusive(key, take_snapshot(&state, &actor, id, input)).await
 }
 
 async fn take_snapshot(

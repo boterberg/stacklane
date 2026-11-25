@@ -250,7 +250,7 @@ pub async fn place(
     Json(input): Json<NewOrder>,
 ) -> AppResult<(StatusCode, Json<OrderPlaced>)> {
     let key = format!("orders {}", user.id);
-    crate::locks::exclusive(&state, key, place_order(&state, user, input)).await
+    crate::locks::exclusive(key, place_order(&state, user, input)).await
 }
 
 async fn place_order(

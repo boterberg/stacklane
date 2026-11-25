@@ -385,6 +385,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Deze domeinnaam is al in gebruik bij een ander pakket." => {
             "This domain name is already used by another package."
         }
+        "Hier loopt al een actie. Probeer het over een paar seconden opnieuw." => {
+            "Something is already running here. Try again in a few seconds."
+        }
         _ => return None,
     })
 }
