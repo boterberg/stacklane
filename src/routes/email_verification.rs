@@ -63,25 +63,25 @@ pub async fn send(
     let mut transaction = state.db.begin().await?;
     if let Some(session) = session {
         auth::lock_live_session(&mut transaction, user_id, session).await?;
-    }
-    sqlx::query(
-        "SELECT pg_advisory_xact_lock(hashtextextended('verification mail ' || lower($1), 0))",
-    )
-    .bind(email)
-    .execute(&mut *transaction)
-    .await?;
-    let crowded: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM email_verifications
+        sqlx::query(
+            "SELECT pg_advisory_xact_lock(hashtextextended('verification mail ' || lower($1), 0))",
+        )
+        .bind(email)
+        .execute(&mut *transaction)
+        .await?;
+        let crowded: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM email_verifications
                         WHERE lower(email::text) = lower($2)
                           AND (created_at > now() - interval '1 minute'
                                OR (user_id <> $1 AND created_at > now() - interval '10 minutes')))",
-    )
-    .bind(user_id)
-    .bind(email)
-    .fetch_one(&mut *transaction)
-    .await?;
-    if crowded {
-        return Err(just_mailed());
+        )
+        .bind(user_id)
+        .bind(email)
+        .fetch_one(&mut *transaction)
+        .await?;
+        if crowded {
+            return Err(just_mailed());
+        }
     }
     sqlx::query("DELETE FROM email_verifications WHERE user_id = $1")
         .bind(user_id)
