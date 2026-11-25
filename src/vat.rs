@@ -55,7 +55,7 @@ pub fn split_vat_number(raw: &str, country: &str) -> Option<(String, String)> {
         _ => (prefix.to_owned(), cleaned),
     };
     let country_of_code = if code == "EL" { "GR" } else { code.as_str() };
-    (eu_rate(country_of_code).is_some() && (2..=12).contains(&number.len()))
+    (code == prefix && eu_rate(country_of_code).is_some() && (2..=12).contains(&number.len()))
         .then_some((code, number))
 }
 
@@ -210,6 +210,8 @@ mod tests {
             split("123456789", "BE"),
             Some(("BE".to_owned(), "123456789".to_owned()))
         );
+        assert_eq!(split("NL859048356B01", "DE"), None);
+        assert_eq!(split("DE123456789", "NL"), None);
         assert_eq!(
             split("EL123456789", "GR"),
             Some(("EL".to_owned(), "123456789".to_owned()))

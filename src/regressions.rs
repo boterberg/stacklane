@@ -3633,3 +3633,27 @@ async fn the_demo_never_sends_mail(db: PgPool) {
         .unwrap();
     assert_eq!(status, "skipped");
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn a_vat_number_must_match_the_billing_country(db: PgPool) {
+    let client = Client::new(db);
+    let (_, cookie) = client.register("vat-country@example.test").await;
+    let mut account = client
+        .send(Method::GET, "/account", Some(&cookie), None)
+        .await
+        .body;
+    account["is_business"] = json!(true);
+    account["company_name"] = json!("Grens BV");
+    account["country"] = json!("DE");
+    account["tax_id"] = json!("NL859048356B01");
+    let refused = client
+        .send(Method::PUT, "/account", Some(&cookie), Some(account))
+        .await;
+    assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        refused.body["errors"]["tax_id"].is_string(),
+        "{}",
+        refused.body
+    );
+}

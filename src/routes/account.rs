@@ -205,7 +205,7 @@ pub async fn update(
         None if tax_id.is_some() => {
             return Err(AppError::field(
                 "tax_id",
-                "Vul een btw-nummer uit de EU in, zoals NL123456789B01.",
+                "Vul een btw-nummer in uit het land van je adres, zoals NL123456789B01.",
             ));
         }
         None => false,

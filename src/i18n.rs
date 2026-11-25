@@ -330,8 +330,8 @@ fn english(message: &str) -> Option<&'static str> {
         "Vul een e-mailadres in." => "Enter an email address.",
         "Kies een ISO die klaar is." => "Choose an ISO that is ready.",
         "Kies het land van je bedrijf." => "Choose the country of your business.",
-        "Vul een btw-nummer uit de EU in, zoals NL123456789B01." => {
-            "Enter an EU VAT number, such as NL123456789B01."
+        "Vul een btw-nummer in uit het land van je adres, zoals NL123456789B01." => {
+            "Enter a VAT number from the country of your address, such as NL123456789B01."
         }
         "Dit btw-nummer is niet geldig volgens VIES." => "VIES says this VAT number is not valid.",
         "Vul je voornaam in." => "Enter your first name.",
