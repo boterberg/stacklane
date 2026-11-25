@@ -107,9 +107,11 @@ export function LoginPage() {
             <Input id={id} type="password" autoComplete="current-password" required value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
           )}
         </Field>
-        <div className="flex items-center justify-between gap-4">
-          <Checkbox label={t('Ingelogd blijven')} checked={form.remember} onChange={(event) => setForm({ ...form, remember: event.target.checked })} />
-          <TextLink to="/forgot-password">{t('Wachtwoord vergeten?')}</TextLink>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <Checkbox label={<span className="whitespace-nowrap">{t('Ingelogd blijven')}</span>} checked={form.remember} onChange={(event) => setForm({ ...form, remember: event.target.checked })} />
+          <span className="text-sm whitespace-nowrap">
+            <TextLink to="/forgot-password">{t('Wachtwoord vergeten?')}</TextLink>
+          </span>
         </div>
         <FormError error={login.error} />
         <Button type="submit" variant="primary" className="w-full" disabled={login.isPending}>
