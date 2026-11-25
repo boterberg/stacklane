@@ -503,6 +503,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Verwijder eerst je privénetwerken onder VPS, Netwerken." => {
             "Delete your private networks under VPS, Networks first."
         }
+        "Er is net al een bevestiging naar dit adres gestuurd. Probeer het over een paar minuten opnieuw." => {
+            "A confirmation was just sent to this address. Try again in a few minutes."
+        }
         _ => return None,
     })
 }

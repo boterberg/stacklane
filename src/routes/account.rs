@@ -141,6 +141,7 @@ pub async fn update(
             .await?;
     let changing = current_email != email;
     if changing {
+        super::email_verification::refuse_if_just_mailed(&state, user.id, &email).await?;
         if state.config.demo_mode {
             return Err(AppError::field(
                 "email",
