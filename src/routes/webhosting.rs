@@ -75,6 +75,9 @@ pub async fn panel_login(
     if user.via_api_token {
         return Err(AppError::Forbidden);
     }
+    state
+        .limits
+        .check(&crate::limits::PANEL_LOGIN, &user.id.to_string())?;
     let (integration_id, external_id, status): (Option<Uuid>, Option<String>, String) =
         sqlx::query_as(
             "SELECT integration_id, external_id, status FROM services WHERE id = $1 AND user_id = $2 AND kind = 'webhosting'",

@@ -470,6 +470,9 @@ pub async fn auth_code(
     if user.via_api_token {
         return Err(AppError::Forbidden);
     }
+    state
+        .limits
+        .check(&crate::limits::DOMAIN_CHANGE, &user.id.to_string())?;
     let (client, external_id) = registrar(&state, &user, id).await?;
     Ok(Json(AuthCode {
         auth_code: client.auth_code(&external_id).await.map_err(failed)?,
