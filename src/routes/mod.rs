@@ -16,6 +16,7 @@ mod catalog;
 mod dashboard;
 mod domains;
 mod email_verification;
+mod game_access;
 mod gameservers;
 mod health;
 mod kb;
@@ -74,6 +75,23 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/vps/members/{id}",
             put(vps_access::update).delete(vps_access::destroy),
+        )
+        .route("/account/shared-gameservers", get(game_access::shared))
+        .route(
+            "/account/shared-gameservers/{server}",
+            delete(game_access::leave),
+        )
+        .route(
+            "/account/shared-gameservers/{server}/accept",
+            post(game_access::accept),
+        )
+        .route(
+            "/gameservers/{id}/members",
+            get(game_access::index).post(game_access::create),
+        )
+        .route(
+            "/gameservers/{id}/members/{member}",
+            put(game_access::update).delete(game_access::destroy),
         )
         .route("/account/shared-access", get(vps_access::shared))
         .route("/account/shared-access/{owner}", delete(vps_access::leave))

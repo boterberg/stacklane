@@ -552,6 +552,10 @@ fn english(message: &str) -> Option<&'static str> {
         "Deze persoon zit al in je team." => "This person is already on your team.",
         "Je kunt je eigen rechten niet wijzigen." => "You cannot change your own permissions.",
         "Je kunt jezelf niet uit het team halen." => "You cannot remove yourself from the team.",
+        "Dit is je eigen account." => "This is your own account.",
+        "Je kunt hoogstens 10 gebruikers toegang geven." => {
+            "You can give at most 10 users access."
+        }
         _ => return None,
     })
 }

@@ -2928,3 +2928,192 @@ async fn staff_only_reach_the_parts_they_were_given(db: PgPool) {
         StatusCode::FORBIDDEN
     );
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn shared_gameservers_only_allow_what_the_owner_ticked(db: PgPool) {
+    use crate::testing::{NewService, fake_api, service};
+    let client = Client::new(db);
+    let (base, _) = fake_api(quiet_panel).await;
+    let sealed = crate::integrations::seal_credentials(
+        &client.state,
+        &json!({ "application_key": "ptla_x", "client_key": "ptlc_x" }),
+    )
+    .unwrap();
+    let integration = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO integrations (id, kind, name, base_url, credentials) VALUES ($1, 'pterodactyl', 'Panel', $2, $3)",
+    )
+    .bind(integration)
+    .bind(&base)
+    .bind(sealed)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    let (owner, owner_cookie) = client.register("deel-eigenaar@example.test").await;
+    let (friend, friend_cookie) = client.register("deel-vriend@example.test").await;
+    let (_, stranger_cookie) = client.register("deel-vreemde@example.test").await;
+    sqlx::query("UPDATE users SET email_verified_at = now()")
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    let server = service(
+        &client.state,
+        NewService {
+            user: owner,
+            subscription: None,
+            kind: "gameserver",
+            status: "active",
+            integration: Some(integration),
+            external_id: Some("7"),
+            details: json!({ "identifier": "abc123" }),
+        },
+    )
+    .await;
+    let invite = |cookie: String, permissions: serde_json::Value| {
+        let client = &client;
+        async move {
+            client
+                .send(
+                    Method::POST,
+                    &format!("/gameservers/{server}/members"),
+                    Some(&cookie),
+                    Some(
+                        json!({ "email": "deel-vriend@example.test", "permissions": permissions }),
+                    ),
+                )
+                .await
+        }
+    };
+    assert_eq!(
+        invite(stranger_cookie.clone(), json!(["console"]))
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        invite(owner_cookie.clone(), json!(["root"])).await.status,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert_eq!(
+        invite(owner_cookie.clone(), json!(["console"]))
+            .await
+            .status,
+        StatusCode::CREATED
+    );
+    let console = format!("/gameservers/{server}/websocket");
+    assert_eq!(
+        client
+            .send(Method::GET, &console, Some(&friend_cookie), None)
+            .await
+            .status,
+        StatusCode::NOT_FOUND,
+        "an invitation gives no access until it is accepted"
+    );
+    let accepted = client
+        .send(
+            Method::POST,
+            &format!("/account/shared-gameservers/{server}/accept"),
+            Some(&friend_cookie),
+            None,
+        )
+        .await;
+    assert_eq!(accepted.status, StatusCode::NO_CONTENT, "{}", accepted.body);
+    let list = client
+        .send(Method::GET, "/gameservers", Some(&friend_cookie), None)
+        .await;
+    assert_eq!(list.body.as_array().map(Vec::len), Some(1));
+    assert_eq!(list.body[0]["owned"], false);
+    let shown = client
+        .send(
+            Method::GET,
+            &format!("/gameservers/{server}"),
+            Some(&friend_cookie),
+            None,
+        )
+        .await;
+    assert_eq!(shown.body["access"]["owner"], false);
+    assert_eq!(shown.body["access"]["permissions"], json!(["console"]));
+    assert_eq!(
+        client
+            .send(Method::GET, &console, Some(&friend_cookie), None)
+            .await
+            .status,
+        StatusCode::OK
+    );
+    for (method, path, body) in [
+        (
+            Method::POST,
+            format!("/gameservers/{server}/power"),
+            Some(json!({ "signal": "stop" })),
+        ),
+        (Method::GET, format!("/gameservers/{server}/files"), None),
+        (Method::GET, format!("/gameservers/{server}/backups"), None),
+        (Method::GET, format!("/gameservers/{server}/activity"), None),
+        (Method::GET, format!("/gameservers/{server}/members"), None),
+    ] {
+        let response = client.send(method, &path, Some(&friend_cookie), body).await;
+        assert!(
+            matches!(
+                response.status,
+                StatusCode::FORBIDDEN | StatusCode::NOT_FOUND
+            ),
+            "{path}: {}",
+            response.status
+        );
+    }
+    let members = client
+        .send(
+            Method::GET,
+            &format!("/gameservers/{server}/members"),
+            Some(&owner_cookie),
+            None,
+        )
+        .await;
+    let member = members.body[0]["id"].as_str().unwrap().to_owned();
+    let widened = client
+        .send(
+            Method::PUT,
+            &format!("/gameservers/{server}/members/{member}"),
+            Some(&owner_cookie),
+            Some(json!({ "permissions": ["console", "activity"] })),
+        )
+        .await;
+    assert_eq!(widened.status, StatusCode::NO_CONTENT);
+    let log = client
+        .send(
+            Method::GET,
+            &format!("/gameservers/{server}/activity"),
+            Some(&friend_cookie),
+            None,
+        )
+        .await;
+    assert_eq!(log.status, StatusCode::OK);
+    assert!(log.body[0]["ip"].is_null(), "members do not see addresses");
+    let owner_log = client
+        .send(
+            Method::GET,
+            &format!("/gameservers/{server}/activity"),
+            Some(&owner_cookie),
+            None,
+        )
+        .await;
+    assert!(owner_log.body[0]["actor"].is_string());
+    let _ = friend;
+    let left = client
+        .send(
+            Method::DELETE,
+            &format!("/account/shared-gameservers/{server}"),
+            Some(&friend_cookie),
+            None,
+        )
+        .await;
+    assert_eq!(left.status, StatusCode::NO_CONTENT);
+    assert_eq!(
+        client
+            .send(Method::GET, &console, Some(&friend_cookie), None)
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+}

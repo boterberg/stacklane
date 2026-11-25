@@ -46,15 +46,16 @@ pub async fn record(
     }
 }
 
-pub async fn list(state: &AppState, service: Uuid) -> AppResult<Vec<Entry>> {
+pub async fn list(state: &AppState, service: Uuid, with_ip: bool) -> AppResult<Vec<Entry>> {
     Ok(sqlx::query_as(
-        "SELECT a.id, a.action, a.detail, a.ip, a.created_at,
+        "SELECT a.id, a.action, a.detail, CASE WHEN $2 THEN a.ip END AS ip, a.created_at,
                 COALESCE(NULLIF(trim(u.first_name || ' ' || u.last_name), ''), u.email::text) AS actor
          FROM service_activity a LEFT JOIN users u ON u.id = a.user_id
          WHERE a.service_id = $1
          ORDER BY a.created_at DESC LIMIT 200",
     )
     .bind(service)
+    .bind(with_ip)
     .fetch_all(&state.db)
     .await?)
 }
