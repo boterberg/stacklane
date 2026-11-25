@@ -3608,3 +3608,28 @@ async fn a_power_action_waits_for_a_suspension_in_progress(db: PgPool) {
             .any(|call| call.contains("/status/start"))
     );
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn the_demo_never_sends_mail(db: PgPool) {
+    let mut state = crate::testing::state(db);
+    let mut config = (*state.config).clone();
+    config.demo_mode = true;
+    state.config = std::sync::Arc::new(config);
+    state.mailer = std::sync::Arc::new(crate::mail::Mailer::Log);
+    crate::mail::deliver(
+        &state,
+        "ticket_reply",
+        crate::mail::Email {
+            to: "someone@example.test",
+            subject: "Hallo",
+            body: "Tekst".to_owned(),
+        },
+    )
+    .await;
+    let status: String = sqlx::query_scalar("SELECT status FROM mail_log")
+        .fetch_one(&state.db)
+        .await
+        .unwrap();
+    assert_eq!(status, "skipped");
+}

@@ -918,7 +918,7 @@ async fn extras(
     let profile = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO whois_profiles (id, user_id, first_name, last_name, company, email, phone, street, house_number, zipcode, city, country, created_at)
-         VALUES ($1, $2, 'Jan', 'Jansen', 'Jansen Bouw', 'jan@jansenbouw.nl', '+31.302345678', 'Stationsplein', '12', '3511ED', 'Utrecht', 'NL', $3)",
+         VALUES ($1, $2, 'Jan', 'Jansen', 'Jansen Bouw', 'jan@jansenbouw.example', '+31.302345678', 'Stationsplein', '12', '3511ED', 'Utrecht', 'NL', $3)",
     )
     .bind(profile)
     .bind(customer)
@@ -985,21 +985,21 @@ async fn extras(
 
     for (vmid, (email, first, last, company, ticket)) in (110..).zip([
         (
-            "info@fietsenmakerdewit.nl",
+            "info@fietsenmakerdewit.example",
             "Eva",
             "de Wit",
             Some("Fietsenmaker de Wit"),
             "Mail komt niet aan bij Gmail",
         ),
         (
-            "hallo@pixelstudio.nl",
+            "hallo@pixelstudio.example",
             "Noah",
             "Visser",
             Some("Pixelstudio"),
             "Kunnen we upgraden naar Cloud L?",
         ),
         (
-            "mila.peters@example.nl",
+            "mila.peters@example.com",
             "Mila",
             "Peters",
             None,
@@ -1101,7 +1101,7 @@ async fn extras(
             26,
         ),
         (
-            "info@fietsenmakerdewit.nl",
+            "info@fietsenmakerdewit.example",
             "Nieuwe factuur 100004",
             "billing",
             "sent",
@@ -1109,7 +1109,7 @@ async fn extras(
             30,
         ),
         (
-            "hallo@pixelstudio.nl",
+            "hallo@pixelstudio.example",
             "Bevestig je e-mailadres",
             "email_verification",
             "failed",
@@ -1117,7 +1117,7 @@ async fn extras(
             50,
         ),
         (
-            "mila.peters@example.nl",
+            "mila.peters@example.com",
             "Je wachtwoord opnieuw instellen",
             "password_reset",
             "sent",

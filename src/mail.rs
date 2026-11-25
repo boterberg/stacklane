@@ -85,7 +85,12 @@ impl Mailer {
 pub async fn deliver(state: &crate::state::AppState, kind: &str, email: Email<'_>) {
     let recipient = email.to.to_owned();
     let subject = email.subject.to_owned();
-    let (status, error) = match state.mailer.send(email).await {
+    let sent = if state.config.demo_mode {
+        Ok(false)
+    } else {
+        state.mailer.send(email).await
+    };
+    let (status, error) = match sent {
         Ok(true) => ("sent", None),
         Ok(false) => ("skipped", None),
         Err(error) => {
