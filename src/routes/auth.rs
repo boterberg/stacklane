@@ -312,17 +312,16 @@ pub async fn forgot_password(
                 ),
             )
         };
-        if let Err(error) = state
-            .mailer
-            .send(Email {
+        crate::mail::deliver(
+            &state,
+            "password_reset",
+            Email {
                 to: &email,
                 subject,
                 body,
-            })
-            .await
-        {
-            tracing::error!(?error, "sending password reset mail failed");
-        }
+            },
+        )
+        .await;
     }
     Ok(StatusCode::ACCEPTED)
 }

@@ -40,7 +40,7 @@ impl Mailer {
         })
     }
 
-    pub async fn send(&self, email: Email<'_>) -> anyhow::Result<()> {
+    pub async fn send(&self, email: Email<'_>) -> anyhow::Result<bool> {
         match self {
             Self::Smtp { transport, from } => {
                 let message = Message::builder()
@@ -50,7 +50,7 @@ impl Mailer {
                     .header(ContentType::TEXT_PLAIN)
                     .body(email.body)?;
                 transport.send(message).await?;
-                Ok(())
+                Ok(true)
             }
             Self::Log => {
                 if cfg!(debug_assertions) {
@@ -60,6 +60,7 @@ impl Mailer {
                         "mail\n{}",
                         email.body
                     );
+                    return Ok(true);
                 } else {
                     tracing::warn!(
                         to = email.to,
@@ -67,7 +68,7 @@ impl Mailer {
                         "MAIL_TRANSPORT=log only prints mail bodies in debug builds, mail not sent"
                     );
                 }
-                Ok(())
+                Ok(false)
             }
             Self::Disabled => {
                 tracing::warn!(
@@ -75,8 +76,36 @@ impl Mailer {
                     subject = email.subject,
                     "SMTP_URL is not set, mail not sent"
                 );
-                Ok(())
+                Ok(false)
             }
         }
+    }
+}
+
+pub async fn deliver(state: &crate::state::AppState, kind: &str, email: Email<'_>) {
+    let recipient = email.to.to_owned();
+    let subject = email.subject.to_owned();
+    let (status, error) = match state.mailer.send(email).await {
+        Ok(true) => ("sent", None),
+        Ok(false) => ("skipped", None),
+        Err(error) => {
+            tracing::warn!(kind, error = %format!("{error:#}"), "sending mail failed");
+            let message: String = format!("{error:#}").chars().take(500).collect();
+            ("failed", Some(message))
+        }
+    };
+    if let Err(error) = sqlx::query(
+        "INSERT INTO mail_log (id, recipient, subject, kind, status, error) VALUES ($1, $2, $3, $4, $5, $6)",
+    )
+    .bind(uuid::Uuid::new_v4())
+    .bind(&recipient)
+    .bind(&subject)
+    .bind(kind)
+    .bind(status)
+    .bind(error)
+    .execute(&state.db)
+    .await
+    {
+        tracing::warn!(?error, "writing the mail log failed");
     }
 }

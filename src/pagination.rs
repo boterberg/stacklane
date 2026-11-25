@@ -2,6 +2,15 @@ use serde::{Deserialize, Serialize};
 
 const ALLOWED_PAGE_SIZES: [i64; 4] = [5, 10, 25, 50];
 
+pub fn like_pattern(search: Option<&str>) -> Option<String> {
+    let search = search.map(str::trim).filter(|search| !search.is_empty())?;
+    let escaped = search
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    Some(format!("%{escaped}%"))
+}
+
 #[derive(Deserialize)]
 pub struct PageQuery {
     page: Option<String>,
@@ -68,7 +77,7 @@ impl<T> Paginated<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::PageQuery;
+    use super::{PageQuery, like_pattern};
 
     #[test]
     fn a_huge_page_number_stays_a_valid_offset() {
@@ -77,5 +86,14 @@ mod tests {
             per_page: Some("50".into()),
         };
         assert!(query.offset() > 0);
+    }
+
+    #[test]
+    fn search_wildcards_are_taken_literally() {
+        assert_eq!(
+            like_pattern(Some(" 50%_off ")).as_deref(),
+            Some("%50\\%\\_off%")
+        );
+        assert_eq!(like_pattern(Some("  ")), None);
     }
 }

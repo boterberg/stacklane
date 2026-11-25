@@ -1,6 +1,7 @@
 mod account;
 mod admin_billing;
 mod admin_domains;
+mod admin_mail;
 mod admin_provisioning;
 mod admin_settings;
 mod admin_vat;
@@ -18,7 +19,7 @@ mod payments;
 mod security;
 mod shop;
 pub(crate) mod ssh_keys;
-mod support;
+pub(crate) mod support;
 mod system;
 mod two_factor;
 mod vps;
@@ -305,6 +306,7 @@ pub fn router(state: AppState) -> Router {
         .route("/admin/customers", get(admin_provisioning::customers))
         .route("/admin/invoices", get(admin_billing::index))
         .route("/admin/reports/vat", get(admin_vat::report))
+        .route("/admin/mail-log", get(admin_mail::index))
         .route("/admin/invoices/{id}", get(admin_billing::show))
         .route("/admin/invoices/{id}/pdf", get(admin_billing::pdf))
         .route(

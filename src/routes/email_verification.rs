@@ -97,17 +97,16 @@ pub async fn send(state: &AppState, user_id: Uuid, email: &str) -> AppResult<()>
             ),
         ),
     };
-    if let Err(error) = state
-        .mailer
-        .send(Email {
+    crate::mail::deliver(
+        state,
+        "email_verification",
+        Email {
             to: email,
             subject,
             body,
-        })
-        .await
-    {
-        tracing::error!(?error, "sending a verification mail failed");
-    }
+        },
+    )
+    .await;
     if change {
         let (subject, body) = if english {
             (
@@ -124,17 +123,16 @@ pub async fn send(state: &AppState, user_id: Uuid, email: &str) -> AppResult<()>
                 ),
             )
         };
-        if let Err(error) = state
-            .mailer
-            .send(Email {
+        crate::mail::deliver(
+            state,
+            "email_change_notice",
+            Email {
                 to: &current,
                 subject,
                 body,
-            })
-            .await
-        {
-            tracing::error!(?error, "sending an email change notice failed");
-        }
+            },
+        )
+        .await;
     }
     Ok(())
 }

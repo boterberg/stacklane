@@ -371,7 +371,7 @@ pub async fn reset(pool: &PgPool) -> anyhow::Result<()> {
     sqlx::query(
         "TRUNCATE sessions, notifications, ticket_messages, tickets, invoice_lines, invoices,
                   subscription_items, subscriptions, services, products, users, integrations,
-                  domain_extensions, ptr_cleanups RESTART IDENTITY CASCADE",
+                  domain_extensions, ptr_cleanups, mail_log RESTART IDENTITY CASCADE",
     )
     .execute(&mut *seed.transaction)
     .await?;
@@ -1022,6 +1022,54 @@ async fn extras(
         seed.attach(server, proxmox, &vmid.to_string()).await?;
         seed.invoice(other, subscription, "paid", 21, "VPS: Cloud M", 1250)
             .await?;
+    }
+
+    for (recipient, subject, kind, status, error, hours) in [
+        (
+            CUSTOMER_EMAIL,
+            "Antwoord op je ticket #1",
+            "ticket_reply",
+            "sent",
+            None,
+            26,
+        ),
+        (
+            "info@fietsenmakerdewit.nl",
+            "Nieuwe factuur 100004",
+            "billing",
+            "sent",
+            None,
+            30,
+        ),
+        (
+            "hallo@pixelstudio.nl",
+            "Bevestig je e-mailadres",
+            "email_verification",
+            "failed",
+            Some("permanent error (550): mailbox unavailable"),
+            50,
+        ),
+        (
+            "mila.peters@example.nl",
+            "Je wachtwoord opnieuw instellen",
+            "password_reset",
+            "sent",
+            None,
+            72,
+        ),
+    ] {
+        sqlx::query(
+            "INSERT INTO mail_log (id, recipient, subject, kind, status, error, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(recipient)
+        .bind(subject)
+        .bind(kind)
+        .bind(status)
+        .bind(error)
+        .bind(seed.ago(hours))
+        .execute(&mut *seed.transaction)
+        .await?;
     }
 
     seed.notification(

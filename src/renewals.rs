@@ -30,12 +30,31 @@ pub(crate) async fn notify(
     en: (String, String),
     link: &str,
 ) -> AppResult<()> {
+    notify_with_mail(
+        state,
+        user_id,
+        "notification",
+        (nl.0, nl.1, String::new()),
+        (en.0, en.1, String::new()),
+        link,
+    )
+    .await
+}
+
+pub(crate) async fn notify_with_mail(
+    state: &AppState,
+    user_id: Uuid,
+    kind: &str,
+    nl: (String, String, String),
+    en: (String, String, String),
+    link: &str,
+) -> AppResult<()> {
     let (email, locale): (String, String) =
         sqlx::query_as("SELECT email::text, locale FROM users WHERE id = $1")
             .bind(user_id)
             .fetch_one(&state.db)
             .await?;
-    let (title, body) = match Locale::parse(&locale) {
+    let (title, body, extra) = match Locale::parse(&locale) {
         Locale::Nl => nl,
         Locale::En => en,
     };
@@ -49,18 +68,21 @@ pub(crate) async fn notify(
     .bind(link)
     .execute(&state.db)
     .await?;
-    let message = format!("{body}\n\n{}{link}\n", state.config.public_url);
-    if let Err(error) = state
-        .mailer
-        .send(Email {
+    let message = if extra.is_empty() {
+        format!("{body}\n\n{}{link}\n", state.config.public_url)
+    } else {
+        format!("{body}\n\n{extra}\n\n{}{link}\n", state.config.public_url)
+    };
+    crate::mail::deliver(
+        state,
+        kind,
+        Email {
             to: &email,
             subject: &title,
             body: message,
-        })
-        .await
-    {
-        tracing::warn!(?error, "sending a billing email failed");
-    }
+        },
+    )
+    .await;
     Ok(())
 }
 
@@ -453,6 +475,10 @@ fn counted(step: &str, result: AppResult<usize>) -> usize {
 
 async fn remove_expired(state: &AppState) -> AppResult<usize> {
     let mut removed = 0;
+    removed += sqlx::query("DELETE FROM mail_log WHERE created_at < now() - interval '90 days'")
+        .execute(&state.db)
+        .await?
+        .rows_affected() as usize;
     for table in ["sessions", "password_resets", "email_verifications"] {
         removed += sqlx::query(sqlx::AssertSqlSafe(format!(
             "DELETE FROM {table} WHERE expires_at < now() - interval '1 day'"
@@ -481,6 +507,7 @@ async fn run_locked(state: &AppState) -> AppResult<Run> {
             .await
             .map_err(crate::error::AppError::Internal),
     );
+    counted("tickets", crate::routes::support::close_stale(state).await);
     counted("cleanup", remove_expired(state).await);
     counted("vat", recheck_vat_numbers(state).await.map(|()| 0));
     Ok(run)

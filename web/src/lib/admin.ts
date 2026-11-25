@@ -210,14 +210,20 @@ export type PaymentSettingsUpdate = {
   bank_transfer_enabled: boolean
 }
 
+export type SupportSettings = {
+  auto_close_days: number
+}
+
+export type AdminSettings = { company: Company; billing: BillingSettings; support: SupportSettings }
+
 export function useSettings() {
-  return useQuery({ queryKey: ['admin', 'settings'], queryFn: () => api<{ company: Company; billing: BillingSettings }>('/admin/settings') })
+  return useQuery({ queryKey: ['admin', 'settings'], queryFn: () => api<AdminSettings>('/admin/settings') })
 }
 
 export function useSaveSettings() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: { company?: Company; billing?: BillingSettings }) => api<{ company: Company; billing: BillingSettings }>('/admin/settings', { method: 'PUT', body: input }),
+    mutationFn: (input: { company?: Company; billing?: BillingSettings; support?: SupportSettings }) => api<AdminSettings>('/admin/settings', { method: 'PUT', body: input }),
     onSuccess: (settings) => {
       queryClient.setQueryData(['admin', 'settings'], settings)
       queryClient.invalidateQueries({ queryKey: ['meta'] })
@@ -284,4 +290,24 @@ export type VatRow = {
 
 export function useVatReport(year: number, quarter: number) {
   return useQuery({ queryKey: ['admin', 'vat', year, quarter], queryFn: () => api<VatRow[]>(`/admin/reports/vat?year=${year}&quarter=${quarter}`) })
+}
+
+export type MailEntry = {
+  id: string
+  recipient: string
+  subject: string
+  kind: string
+  status: 'sent' | 'failed' | 'skipped'
+  error: string | null
+  created_at: string
+}
+
+export function useMailLog({ q, statuses, page, perPage }: { q: string; statuses: string[]; page: number; perPage: number }) {
+  const params = new URLSearchParams({ status: statuses.join(','), page: String(page), per_page: String(perPage) })
+  if (q.trim()) params.set('search', q.trim())
+  return useQuery({
+    queryKey: ['admin', 'mail-log', params.toString()],
+    queryFn: () => api<Paginated<MailEntry>>(`/admin/mail-log?${params}`),
+    placeholderData: keepPreviousData,
+  })
 }
