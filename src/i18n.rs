@@ -538,6 +538,9 @@ fn english(message: &str) -> Option<&'static str> {
         }
         "Schrijf de tekst van het artikel." => "Write the text of the article.",
         "Dit artikel is te lang." => "This article is too long.",
+        "Kies een van de opties." => "Choose one of the options.",
+        "Gebruik hoogstens 64 kB aan CSS." => "Use at most 64 kB of CSS.",
+        "Deze CSS bevat ongeldige tekens." => "This CSS contains invalid characters.",
         _ => return None,
     })
 }

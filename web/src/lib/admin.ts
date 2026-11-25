@@ -374,7 +374,15 @@ export type BrandAsset = 'logo' | 'logo_dark' | 'favicon'
 export function useSaveBranding() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: { name: string; accent: string }) => api<Branding>('/admin/branding', { method: 'PUT', body: input }),
+    mutationFn: (input: { name: string; accent: string; accent_dark: string; neutral: string; radius: string }) => api<Branding>('/admin/branding', { method: 'PUT', body: input }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meta'] }),
+  })
+}
+
+export function useSaveThemeCss() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (css: string) => api<Branding>('/admin/theme-css', { method: 'PUT', body: { css } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meta'] }),
   })
 }

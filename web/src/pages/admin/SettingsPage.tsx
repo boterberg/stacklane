@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -17,7 +17,10 @@ import {
   type SupportSettings,
   useBrandAsset,
   useSaveBranding,
+  useSaveThemeCss,
 } from '../../lib/admin'
+import { applyTheme, neutralSwatch, presets, type Neutral, type Radius } from '../../lib/brandTheme'
+import { cn } from '../../lib/cn'
 import { countries } from '../../lib/countries'
 import { intlLocale, t } from '../../lib/i18n'
 import { useMeta, type Branding } from '../../lib/meta'
@@ -302,38 +305,235 @@ function AssetRow({ kind, label, description, version, accept }: { kind: BrandAs
   )
 }
 
+function ColorField({ label, description, value, onChange, error, fallback }: { label: string; description: string; value: string; onChange: (value: string) => void; error?: string; fallback: string }) {
+  return (
+    <Field label={label} description={description} error={error}>
+      {(id) => (
+        <div className="flex gap-2">
+          <input
+            type="color"
+            aria-label={t('Kies een kleur')}
+            value={/^#[0-9a-f]{6}$/i.test(value) ? value : fallback}
+            onChange={(event) => onChange(event.target.value)}
+            className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-zinc-200 bg-white p-1 dark:border-white/10 dark:bg-white/5"
+          />
+          <Input id={id} placeholder={fallback} invalid={!!error} value={value} onChange={(event) => onChange(event.target.value)} />
+        </div>
+      )}
+    </Field>
+  )
+}
+
+function neutralLabel(neutral: Neutral) {
+  switch (neutral) {
+    case 'zinc':
+      return t('Grijs')
+    case 'slate':
+      return t('Leisteen')
+    case 'gray':
+      return t('Koel grijs')
+    case 'neutral':
+      return t('Neutraal')
+    case 'stone':
+      return t('Warm grijs')
+    case 'tinted':
+      return t('Getint met accent')
+  }
+}
+
+function radiusLabel(radius: Radius) {
+  switch (radius) {
+    case 'sharp':
+      return t('Strak')
+    case 'default':
+      return t('Standaard')
+    case 'round':
+      return t('Rond')
+  }
+}
+
+function presetLabel(name: string) {
+  switch (name) {
+    case 'Indigo':
+      return t('Indigo')
+    case 'Oceaan':
+      return t('Oceaan')
+    case 'Bos':
+      return t('Bos')
+    case 'Zonsondergang':
+      return t('Zonsondergang')
+    case 'Framboos':
+      return t('Framboos')
+    default:
+      return t('Lavendel')
+  }
+}
+
+const neutrals: Neutral[] = ['zinc', 'slate', 'gray', 'neutral', 'stone', 'tinted']
+const corners: Radius[] = ['sharp', 'default', 'round']
+
+function choiceClass(selected: boolean) {
+  return cn(
+    'flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors',
+    selected
+      ? 'accent-border border-zinc-800 bg-zinc-800/5 text-zinc-800 dark:border-white dark:bg-white/10 dark:text-white'
+      : 'border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 dark:border-white/10 dark:text-white/80 dark:hover:bg-white/5',
+  )
+}
+
+function validColor(value: string) {
+  return /^#[0-9a-f]{6}$/i.test(value.trim()) ? value.trim() : null
+}
+
 function BrandingForm({ initial }: { initial: Branding }) {
   const [name, setName] = useState(initial.name ?? '')
   const [accent, setAccent] = useState(initial.accent ?? '')
+  const [accentDark, setAccentDark] = useState(initial.accent_dark ?? '')
+  const [neutral, setNeutral] = useState<Neutral>((initial.neutral as Neutral | null) ?? 'zinc')
+  const [radius, setRadius] = useState<Radius>((initial.radius as Radius | null) ?? 'default')
   const save = useSaveBranding()
   const errors = save.error instanceof ApiError ? save.error.fieldErrors : {}
+  useEffect(() => {
+    applyTheme({ accent: validColor(accent), accent_dark: validColor(accentDark), neutral, radius, css: initial.css })
+  }, [accent, accentDark, neutral, radius, initial.css])
+
+  useEffect(() => () => applyTheme(initial), [initial])
+
+  function choosePreset(preset: (typeof presets)[number]) {
+    setAccent(preset.accent)
+    setAccentDark(preset.accent_dark)
+    setNeutral(preset.neutral)
+  }
+
+  function reset() {
+    setAccent('')
+    setAccentDark('')
+    setNeutral('zinc')
+    setRadius('default')
+  }
+
   return (
     <FormCard
-      title={t('Huisstijl')}
-      description={t('Zet je eigen naam, logo en kleur op het klantenpaneel.')}
-      onSubmit={() => save.mutate({ name, accent })}
+      title={t('Huisstijl en thema')}
+      description={t('Zet je eigen naam, kleuren en vormen op het paneel. Je ziet elke wijziging meteen, maar klanten pas na opslaan.')}
+      onSubmit={() => save.mutate({ name, accent, accent_dark: accentDark, neutral, radius })}
       pending={save.isPending}
       saved={save.isSuccess}
     >
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+      <div className="space-y-8">
         <Field label={t('Naam van het paneel')} description={t('Staat in de titel van het tabblad, en in de zijbalk als je geen logo hebt.')} error={errors.name}>
           {(id) => <Input id={id} placeholder="Stacklane" invalid={!!errors.name} value={name} onChange={(event) => setName(event.target.value)} />}
         </Field>
-        <Field label={t('Accentkleur')} description={t('Voor knoppen en het actieve menu-item. Laat leeg voor grijs.')} error={errors.accent}>
-          {(id) => (
-            <div className="flex gap-2">
-              <input
-                type="color"
-                aria-label={t('Kies een kleur')}
-                value={/^#[0-9a-f]{6}$/i.test(accent) ? accent : '#4f46e5'}
-                onChange={(event) => setAccent(event.target.value)}
-                className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-zinc-200 bg-white p-1 dark:border-white/10 dark:bg-white/5"
-              />
-              <Input id={id} placeholder="#4f46e5" invalid={!!errors.accent} value={accent} onChange={(event) => setAccent(event.target.value)} />
-            </div>
-          )}
-        </Field>
+
+        <div>
+          <p className="text-sm font-medium text-zinc-800 dark:text-white">{t('Kant-en-klare thema\'s')}</p>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-white/70">{t('Een goed begin. Je kunt daarna alles nog aanpassen.')}</p>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <button type="button" onClick={reset} className={choiceClass(!accent && neutral === 'zinc' && radius === 'default')}>
+              <span className="flex shrink-0 -space-x-1">
+                <span className="size-4 rounded-full bg-zinc-800 ring-2 ring-white dark:bg-white dark:ring-zinc-900" />
+                <span className="size-4 rounded-full bg-zinc-300 ring-2 ring-white dark:ring-zinc-900" />
+              </span>
+              {t('Standaard')}
+            </button>
+            {presets.map((preset) => (
+              <button key={preset.name} type="button" onClick={() => choosePreset(preset)} className={choiceClass(accent.toLowerCase() === preset.accent && neutral === preset.neutral)}>
+                <span className="flex shrink-0 -space-x-1">
+                  <span className="size-4 rounded-full ring-2 ring-white dark:ring-zinc-900" style={{ backgroundColor: preset.accent }} />
+                  <span className="size-4 rounded-full ring-2 ring-white dark:ring-zinc-900" style={{ backgroundColor: neutralSwatch(preset.neutral, preset.accent)[1] }} />
+                </span>
+                <span className="truncate">{presetLabel(preset.name)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <ColorField label={t('Accentkleur')} description={t('Voor knoppen, tabbladen, het actieve menu-item en grafieken. Laat leeg voor zwart-wit.')} value={accent} onChange={setAccent} error={errors.accent} fallback="#4f46e5" />
+          <ColorField label={t('Accentkleur in donkere modus')} description={t('Optioneel. Een lichtere tint leest beter op een donkere achtergrond.')} value={accentDark} onChange={setAccentDark} error={errors.accent_dark} fallback="#818cf8" />
+        </div>
+
+        <div>
+          <p className="text-sm font-medium text-zinc-800 dark:text-white">{t('Achtergrond en tekst')}</p>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-white/70">{t('De grijstinten van het hele paneel, in lichte en donkere modus.')}</p>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {neutrals.map((option) => (
+              <button key={option} type="button" aria-pressed={neutral === option} onClick={() => setNeutral(option)} className={choiceClass(neutral === option)}>
+                <span className="flex shrink-0 overflow-hidden rounded-md ring-1 ring-zinc-800/10 dark:ring-white/10">
+                  {neutralSwatch(option, validColor(accent)).map((swatch) => (
+                    <span key={swatch} className="h-6 w-3" style={{ backgroundColor: swatch }} />
+                  ))}
+                </span>
+                <span className="truncate">{neutralLabel(option)}</span>
+              </button>
+            ))}
+          </div>
+          {errors.neutral && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{errors.neutral}</p>}
+        </div>
+
+        <div>
+          <p className="text-sm font-medium text-zinc-800 dark:text-white">{t('Hoeken')}</p>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-white/70">{t('Hoe rond knoppen, velden en kaarten zijn.')}</p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {corners.map((option) => (
+              <button key={option} type="button" aria-pressed={radius === option} onClick={() => setRadius(option)} className={choiceClass(radius === option)}>
+                <span
+                  className="size-5 shrink-0 border-2 border-b-0 border-l-0 border-current opacity-60"
+                  style={{ borderTopRightRadius: option === 'sharp' ? 2 : option === 'round' ? 12 : 6 }}
+                />
+                {radiusLabel(option)}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
+    </FormCard>
+  )
+}
+
+function CssForm({ initial }: { initial: string | null }) {
+  const [css, setCss] = useState('')
+  const [loaded, setLoaded] = useState(!initial)
+  const save = useSaveThemeCss()
+  const errors = save.error instanceof ApiError ? save.error.fieldErrors : {}
+
+  useEffect(() => {
+    if (!initial) return
+    let active = true
+    fetch(`/api/branding/theme.css?v=${initial}`)
+      .then((response) => (response.ok ? response.text() : ''))
+      .then((text) => {
+        if (!active) return
+        setCss(text)
+        setLoaded(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [initial])
+
+  return (
+    <FormCard
+      title={t('Eigen CSS')}
+      description={t('Voor een volledig eigen thema. Deze CSS laadt na de standaardstijl, op elke pagina en ook op de inlogpagina.')}
+      onSubmit={() => save.mutate(css)}
+      pending={save.isPending || !loaded}
+      saved={save.isSuccess}
+    >
+      <Field label={t('CSS')} description={t('Hoogstens 64 kB. Laat leeg om de eigen CSS uit te zetten. Je kunt de kleurvariabelen gebruiken, zoals var(--accent).')} error={errors.css}>
+        {(id) => (
+          <textarea
+            id={id}
+            rows={10}
+            spellCheck={false}
+            value={css}
+            disabled={!loaded}
+            onChange={(event) => setCss(event.target.value)}
+            placeholder={'.accent-fill {\n  border-radius: 9999px;\n}'}
+            className="accent-focus block w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-xs text-zinc-700 shadow-xs placeholder:text-zinc-400 focus:outline-2 focus:-outline-offset-1 focus:outline-zinc-800/15 dark:border-white/10 dark:bg-white/10 dark:text-zinc-300 dark:focus:outline-white/20"
+          />
+        )}
+      </Field>
     </FormCard>
   )
 }
@@ -379,6 +579,7 @@ export function SettingsPage() {
         {settings && <CompanyForm initial={settings.company} />}
         {meta && <BrandingForm initial={meta.branding} />}
         {meta && <BrandAssets branding={meta.branding} />}
+        {meta && <CssForm initial={meta.branding.css} />}
         {settings && <BillingForm initial={settings.billing} />}
         {settings && <SupportForm initial={settings.support} />}
         {payments && <PaymentsForm initial={payments} />}
