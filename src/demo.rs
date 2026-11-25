@@ -406,7 +406,7 @@ pub async fn reset(pool: &PgPool) -> anyhow::Result<()> {
         .user(ADMIN_EMAIL, "Sam", "de Vries", "admin", None)
         .await?;
     let helper = seed
-        .user("lotte@demo.stacklane.io", "Lotte", "Bakker", "staff", None)
+        .user("lotte@demo.stacklane.io", "Lotte", "Smit", "staff", None)
         .await?;
     sqlx::query("UPDATE users SET staff_permissions = ARRAY['support', 'customers'] WHERE id = $1")
         .bind(helper)
@@ -897,6 +897,21 @@ async fn extras(
         "firewalls.view",
     ])
     .bind(seed.ago(24 * 14))
+    .execute(&mut *seed.transaction)
+    .await?;
+    sqlx::query(
+        "INSERT INTO gameserver_members (id, service_id, user_id, permissions, created_at, accepted_at)
+         VALUES ($1, $2, $3, $4, $5, $5)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM services WHERE kind = 'gameserver' AND name = 'Jansen SMP'")
+            .fetch_one(&mut *seed.transaction)
+            .await?,
+    )
+    .bind(colleague)
+    .bind(vec!["console", "power", "activity"])
+    .bind(seed.ago(24 * 6))
     .execute(&mut *seed.transaction)
     .await?;
 
