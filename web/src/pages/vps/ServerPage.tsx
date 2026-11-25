@@ -33,10 +33,11 @@ import {
 } from '../../lib/vps'
 import { isManaged } from '../../lib/firewall'
 import { RuleForm, RuleList } from './FirewallRules'
+import { LinkedCard, ServerFloatingIps, ServerNetworks, ServerVolumes } from './ServerAttached'
 import { ServerIso } from './ServerIso'
 import { useCan, useVpsAccess } from '../../lib/vpsAccess'
 
-type Tab = 'overview' | 'snapshots' | 'firewall' | 'iso'
+type Tab = 'overview' | 'networks' | 'firewall' | 'floating' | 'volumes' | 'snapshots' | 'iso'
 
 function errorText(error: Error | null) {
   return error instanceof ApiError ? (Object.values(error.fieldErrors)[0] ?? error.message) : error?.message
@@ -51,7 +52,19 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   )
 }
 
-function Overview({ server, live, features }: { server: VpsServer; live: LiveStatus | null; features: Features | null }) {
+function Overview({
+  server,
+  live,
+  features,
+  linked,
+  onOpen,
+}: {
+  server: VpsServer
+  live: LiveStatus | null
+  features: Features | null
+  linked: { volumes: boolean; floating: boolean; networks: boolean }
+  onOpen: (tab: Tab) => void
+}) {
   const password = useRootPassword(server.id)
   const isOwner = useVpsAccess().data?.is_owner !== false
   return (
@@ -94,6 +107,7 @@ function Overview({ server, live, features }: { server: VpsServer; live: LiveSta
           <p className="text-sm text-zinc-500 dark:text-white/70">{t('De server geeft nu geen gegevens door.')}</p>
         )}
       </Card>
+      <LinkedCard serverId={server.id} show={linked} onOpen={onOpen} />
     </div>
   )
 }
@@ -281,6 +295,11 @@ export function VpsServerPage() {
   }
 
   const ready = server.status === 'active'
+  const linked = {
+    volumes: server.features?.volumes === true && can('volumes.view'),
+    floating: server.features?.floating_ips === true && can('floating_ips.view'),
+    networks: server.features?.networks === true && can('networks.view'),
+  }
   return (
     <>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
@@ -326,16 +345,22 @@ export function VpsServerPage() {
           <Tabs
             tabs={[
               { id: 'overview' as const, label: 'Overzicht' },
+              ...(linked.networks ? [{ id: 'networks' as const, label: 'Netwerken' }] : []),
+              ...(server.features?.firewall === false || !can('firewalls.view') ? [] : [{ id: 'firewall' as const, label: 'Firewalls' }]),
+              ...(linked.floating ? [{ id: 'floating' as const, label: 'Floating IPs' }] : []),
+              ...(linked.volumes ? [{ id: 'volumes' as const, label: 'Volumes' }] : []),
               ...(server.features?.snapshots === false || !can('snapshots.view') ? [] : [{ id: 'snapshots' as const, label: 'Snapshots' }]),
-              ...(server.features?.firewall === false || !can('firewalls.view') ? [] : [{ id: 'firewall' as const, label: 'Firewall' }]),
               ...(server.features?.volumes === false || !can('isos.view') ? [] : [{ id: 'iso' as const, label: 'ISO' }]),
             ]}
             active={tab}
             onChange={setTab}
           />
-          {tab === 'overview' && <Overview server={server} live={server.live} features={server.features} />}
-          {tab === 'snapshots' && <Snapshots server={server} />}
+          {tab === 'overview' && <Overview server={server} live={server.live} features={server.features} linked={linked} onOpen={setTab} />}
+          {tab === 'networks' && <ServerNetworks serverId={server.id} />}
           {tab === 'firewall' && <Firewall server={server} />}
+          {tab === 'floating' && <ServerFloatingIps serverId={server.id} />}
+          {tab === 'volumes' && <ServerVolumes serverId={server.id} />}
+          {tab === 'snapshots' && <Snapshots server={server} />}
           {tab === 'iso' && <ServerIso serverId={server.id} />}
         </>
       )}

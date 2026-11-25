@@ -10,7 +10,7 @@ type TabsProps<T extends string> = {
 export function Tabs<T extends string>({ tabs, active, onChange }: TabsProps<T>) {
   return (
     <div className="-mx-6 mb-8 border-b border-zinc-200 px-6 sm:-mx-8 sm:px-8 dark:border-white/10">
-      <nav className="-mb-px flex gap-2" role="tablist">
+      <nav className="-mb-px flex gap-2 overflow-x-auto" role="tablist">
         {tabs.map((tab) => (
           <button
             key={tab.id}
