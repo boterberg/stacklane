@@ -382,6 +382,21 @@ pub async fn delete_integration(
             "Er draaien nog diensten op deze koppeling.",
         ));
     }
+    let holds_ptrs: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM integrations WHERE id = $1 AND kind = 'powerdns')
+            AND (EXISTS (SELECT 1 FROM ptr_cleanups)
+                 OR EXISTS (SELECT 1 FROM services WHERE kind IN ('vps', 'floating_ip')
+                            AND status <> 'terminated' AND details ? 'ipv4'))",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await?;
+    if holds_ptrs {
+        return Err(AppError::field(
+            "id",
+            "Deze DNS-server beheert nog reverse DNS van actieve adressen. Zeg die eerst op of wacht tot de opruiming klaar is.",
+        ));
+    }
     sqlx::query("DELETE FROM integrations WHERE id = $1")
         .bind(id)
         .execute(&state.db)

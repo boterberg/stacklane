@@ -512,6 +512,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Deze snapshot is van voor je laatste netwerkwijziging. Maak een nieuwe snapshot of koppel het netwerk eerst opnieuw." => {
             "This snapshot is older than your last network change. Make a new snapshot or attach the network again first."
         }
+        "Deze DNS-server beheert nog reverse DNS van actieve adressen. Zeg die eerst op of wacht tot de opruiming klaar is." => {
+            "This DNS server still manages reverse DNS for active addresses. Terminate those first or wait until the cleanup has finished."
+        }
         _ => return None,
     })
 }
