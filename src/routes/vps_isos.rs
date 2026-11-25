@@ -319,6 +319,7 @@ pub async fn mount(
     Path(id): Path<Uuid>,
     Json(input): Json<Mount>,
 ) -> AppResult<StatusCode> {
+    actor.browser_only()?;
     actor.require("isos.mount")?;
     let (integration_id, server) = server_context(&state, &actor, id).await?;
     let already: bool =

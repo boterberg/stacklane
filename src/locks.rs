@@ -46,6 +46,15 @@ pub async fn exclusive<T>(key: String, body: impl Future<Output = AppResult<T>>)
     body.await
 }
 
+pub async fn service(
+    db: &sqlx::PgPool,
+    id: uuid::Uuid,
+) -> sqlx::Result<sqlx::Transaction<'static, sqlx::Postgres>> {
+    let mut guard = db.begin().await?;
+    transaction(&mut guard, format!("service {id}")).await?;
+    Ok(guard)
+}
+
 #[cfg(test)]
 mod tests {
     use super::exclusive;
@@ -73,13 +82,4 @@ mod tests {
         let _ = tokio::time::timeout(std::time::Duration::from_millis(10), pending).await;
         assert!(exclusive("cancel".into(), async { Ok(()) }).await.is_ok());
     }
-}
-
-pub async fn service(
-    db: &sqlx::PgPool,
-    id: uuid::Uuid,
-) -> sqlx::Result<sqlx::Transaction<'static, sqlx::Postgres>> {
-    let mut guard = db.begin().await?;
-    transaction(&mut guard, format!("service {id}")).await?;
-    Ok(guard)
 }

@@ -1781,3 +1781,39 @@ async fn a_server_being_rebuilt_keeps_its_state_until_done(db: PgPool) {
         .unwrap();
     assert_eq!(status, "active");
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn an_api_token_never_opens_rescue_or_an_iso(db: PgPool) {
+    let client = Client::new(db);
+    let (_, cookie) = client.register("vps-token@example.test").await;
+    let created = client
+        .send(
+            Method::POST,
+            "/account/api-tokens",
+            Some(&cookie),
+            Some(json!({ "name": "script", "scopes": ["vps:write"], "expires_in_days": null })),
+        )
+        .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    let bearer = format!("Bearer {}", created.body["secret"].as_str().unwrap());
+    let server = uuid::Uuid::new_v4();
+    for (path, body) in [
+        (format!("/vps/servers/{server}/rescue"), json!({})),
+        (
+            format!("/vps/servers/{server}/iso"),
+            json!({ "iso_id": uuid::Uuid::new_v4() }),
+        ),
+    ] {
+        let reply = client
+            .send_with(
+                Method::POST,
+                &path,
+                None,
+                Some(body),
+                &[("authorization", &bearer)],
+            )
+            .await;
+        assert_eq!(reply.status, StatusCode::FORBIDDEN, "{path}");
+    }
+}

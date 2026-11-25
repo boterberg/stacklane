@@ -94,10 +94,15 @@ impl VpsActor {
         }
     }
 
-    fn manage_members(&self) -> AppResult<()> {
+    pub fn browser_only(&self) -> AppResult<()> {
         if self.via_api_token {
             return Err(AppError::Forbidden);
         }
+        Ok(())
+    }
+
+    fn manage_members(&self) -> AppResult<()> {
+        self.browser_only()?;
         self.require("access.users")
     }
 

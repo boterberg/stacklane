@@ -186,6 +186,7 @@ pub async fn enter_rescue(
     actor: VpsActor,
     Path(id): Path<Uuid>,
 ) -> AppResult<(StatusCode, Json<RescuePassword>)> {
+    actor.browser_only()?;
     actor.require("servers.rescue")?;
     crate::locks::exclusive(format!("server {id}"), async {
         let machine = machine(&state, actor.owner, id).await?;
