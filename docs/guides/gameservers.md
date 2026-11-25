@@ -50,6 +50,25 @@ Een gedeelde server staat bij de ander onder **Gameservers → Servers**, met wi
 
 De toegang loopt via Stacklane, niet via subusers in Pterodactyl. De ander heeft dus geen Pterodactyl-account nodig, en jij houdt alles in één panel.
 
+## Plugins en mods
+
+Op een Minecraft-server staat het tabblad **Plugins en mods**. Klanten zoeken daar in [Modrinth](https://modrinth.com) en installeren met één klik. Ze hebben het recht **Bestanden** nodig.
+
+- Stacklane leest het servertype uit de naam van de egg, zoals Paper, Purpur, Fabric, Forge of NeoForge. Herkent het de egg niet, dan kiest de klant het zelf.
+- De Minecraft-versie komt uit de startvariabele `MINECRAFT_VERSION` (of `MC_VERSION` of `VERSION`) als daar een vaste versie staat. Anders vult de klant die zelf in.
+- Plugins komen in `/plugins`, mods in `/mods`. Een klant kan daar ook `.jar`-bestanden verwijderen.
+- Na installeren of verwijderen moet de server opnieuw starten.
+
+Stacklane haalt de downloadlink zelf op bij Modrinth en accepteert alleen bestanden van `cdn.modrinth.com`. Daarna laat Stacklane Pterodactyl het bestand ophalen. Een klant kan dus geen eigen URL laten downloaden.
+
+Wat je nodig hebt:
+
+- De server waarop Stacklane draait, moet `api.modrinth.com` kunnen bereiken.
+- Wings moet `cdn.modrinth.com` kunnen bereiken. Wings blokkeert downloads van interne adressen standaard, en dat is goed zo.
+- Wil je een andere spiegel gebruiken, zet dan `MODRINTH_URL` in `/etc/stacklane/stacklane.env`.
+
+Modpacks installeren kan nog niet. Een modpack verandert meer dan losse bestanden, zoals de serverversie en de loader. Daarvoor kun je beter een egg met dat modpack gebruiken.
+
 ## Activiteit
 
 Het tabblad **Activiteit** toont wie de server startte of stopte, de console opende, een bestand wijzigde of een back-up maakte. De eigenaar ziet ook vanaf welk IP-adres.

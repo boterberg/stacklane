@@ -22,6 +22,7 @@ RUST_LOG=stacklane=info,tower_http=info
 | `SMTP_URL` | leeg | Mailserver voor bijvoorbeeld wachtwoordherstel, zoals `smtps://gebruiker:wachtwoord@smtp.jouwbedrijf.nl:465`. Zonder deze instelling verstuurt Stacklane geen e-mail. |
 | `MAIL_FROM` | leeg | Afzender, zoals `Jouw Hosting <noreply@jouwbedrijf.nl>`. |
 | `UPDATE_CHECK_URL` | pakketbron van stacklane.io | Waar Stacklane elke 6 uur kijkt of er een nieuwe versie is. Daarbij stuurt het panel alleen zijn versienummer mee. stacklane.io telt die controles per dag als [actieve panels](/releases/), zonder IP-adressen te bewaren. Leeg laten zet de controle uit. |
+| `MODRINTH_URL` | `https://api.modrinth.com` | Waar het tabblad Plugins en mods zoekt. Daarbij gaan alleen de zoekterm, het servertype en de Minecraft-versie mee. |
 | `DEMO_MODE` | uit | Inloggen in één klik als klant of beheerder, en `stacklane demo-reset` mag de database leegmaken. Zet dit nooit aan op een server met echte klanten. |
 
 Na een wijziging:
