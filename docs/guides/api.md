@@ -50,3 +50,36 @@ Wil je een Nederlandse of Engelse foutmelding, stuur dan `Accept-Language: nl` o
 | `POST` | `/api/support/tickets` | Ticket maken |
 
 Facturen, abonnementen en tickets zijn gepagineerd met `?page=` en `?per_page=`; het antwoord heeft `data` en `meta` met het totaal.
+
+## Je pakketten op je eigen website
+
+Wil je je pakketten en prijzen op je eigen website laten zien, dan hoef je ze niet over te typen. `GET /api/public/catalog` werkt zonder token en geeft alles wat een klant nu kan bestellen:
+
+```sh
+curl https://panel.jouwbedrijf.nl/api/public/catalog
+```
+
+```json
+{
+  "company": "Jouw Bedrijf B.V.",
+  "currency": "EUR",
+  "prices_include_vat": true,
+  "products": [
+    {
+      "id": "…",
+      "kind": "vps",
+      "name": "Cloud S",
+      "description": "Voor een website of een kleine database.",
+      "specs": { "cores": 1, "memory_mb": 2048, "disk_gb": 20 },
+      "monthly_price_cents": 650,
+      "order_url": "https://panel.jouwbedrijf.nl/vps/servers/order?product=…"
+    }
+  ],
+  "domains": [{ "extension": "nl", "register_cents": 799, "renew_cents": 799, "transfer_cents": 0 }],
+  "domain_order_url": "https://panel.jouwbedrijf.nl/domains/register"
+}
+```
+
+Bedragen zijn in centen en inclusief btw. Een knop **Bestellen** op je site linkt naar `order_url`. Een nieuwe klant maakt daar eerst een account aan en komt daarna direct bij dat pakket uit.
+
+De catalogus mag vanaf elk domein worden opgehaald (CORS), en browsers bewaren hem vijf minuten. Er staan alleen actieve producten in die aan een koppeling hangen, zonder interne instellingen.
