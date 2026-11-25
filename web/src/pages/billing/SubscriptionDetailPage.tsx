@@ -149,7 +149,7 @@ export function SubscriptionDetailPage() {
       />
 
       {tab === 'overview' ? (
-        <div className="grid max-w-5xl gap-6 lg:grid-cols-2 lg:items-start">
+        <div className="grid grid-cols-1 max-w-5xl gap-6 lg:grid-cols-2 lg:items-start">
           <Card title={t('Verlenging en betaling')}>
             <dl className="divide-y divide-zinc-200 dark:divide-white/10">
               <Row label={expired ? t('Verlopen op') : t('Verloopt op')}>

@@ -97,7 +97,7 @@ export function WebsitePage() {
           }
         />
       ) : (
-        <div className="grid max-w-5xl gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 max-w-5xl gap-6 lg:grid-cols-2">
           <Card title={t('Pakket')}>
             <dl className="divide-y divide-zinc-200 dark:divide-white/10">
               <Row label={t('Domein')}>{website.name}</Row>

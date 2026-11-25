@@ -72,7 +72,7 @@ function Overview({
   const password = useRootPassword(server.id)
   const isOwner = useVpsAccess().data?.is_owner !== false
   return (
-    <div className="grid max-w-5xl gap-6 lg:grid-cols-2">
+    <div className="grid grid-cols-1 max-w-5xl gap-6 lg:grid-cols-2">
       <Card title={t('Server')}>
         <dl className="divide-y divide-zinc-200 dark:divide-white/10">
           <Row label={t('IP-adres')}>{server.details.ipv4 ?? '-'}</Row>

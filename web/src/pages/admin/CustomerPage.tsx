@@ -101,7 +101,7 @@ export function CustomerPage() {
         </div>
       </div>
 
-      <div className="grid max-w-6xl gap-6 lg:grid-cols-2 lg:items-start">
+      <div className="grid grid-cols-1 max-w-6xl gap-6 lg:grid-cols-2 lg:items-start">
         <Card title={t('Gegevens')}>
           <dl className="divide-y divide-zinc-200 dark:divide-white/10">
             <Row label={t('Adres')}>{address.length > 0 ? address.join(', ') : '-'}</Row>

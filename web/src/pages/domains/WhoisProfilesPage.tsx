@@ -49,7 +49,7 @@ function ProfilePanel({ open, profile, onClose }: { open: boolean; profile: Whoi
       }
     >
       <div className="space-y-6">
-        <div className="grid gap-6 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <Field label={t('Voornaam')} error={errors.first_name}>
             {(id) => <Input id={id} autoComplete="given-name" disabled={locked} {...text('first_name')} />}
           </Field>
@@ -67,7 +67,7 @@ function ProfilePanel({ open, profile, onClose }: { open: boolean; profile: Whoi
         <Field label={t('Telefoonnummer')} description={t('Met landcode, zoals +31 612345678.')} error={errors.phone}>
           {(id) => <Input id={id} type="tel" autoComplete="tel" {...text('phone')} />}
         </Field>
-        <div className="grid gap-6 sm:grid-cols-[2fr_1fr]">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-[2fr_1fr]">
           <Field label={t('Straat')} error={errors.street}>
             {(id) => <Input id={id} autoComplete="address-line1" {...text('street')} />}
           </Field>
@@ -75,7 +75,7 @@ function ProfilePanel({ open, profile, onClose }: { open: boolean; profile: Whoi
             {(id) => <Input id={id} {...text('house_number')} />}
           </Field>
         </div>
-        <div className="grid gap-6 sm:grid-cols-[1fr_2fr]">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-[1fr_2fr]">
           <Field label={t('Postcode')} error={errors.zipcode}>
             {(id) => <Input id={id} autoComplete="postal-code" {...text('zipcode')} />}
           </Field>

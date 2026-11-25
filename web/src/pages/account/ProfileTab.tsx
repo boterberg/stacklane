@@ -121,7 +121,7 @@ function ProfileForm({ initial }: { initial: AccountDetails }) {
           <Field label={t('Adresregel 2')} error={errors.address_line2}>
             {(id) => <Input id={id} autoComplete="address-line2" {...text('address_line2')} />}
           </Field>
-          <div className="grid gap-6 sm:grid-cols-[10rem_1fr]">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-[10rem_1fr]">
             <Field label={t('Postcode')} error={errors.postal_code}>
               {(id) => <Input id={id} autoComplete="postal-code" {...text('postal_code')} />}
             </Field>

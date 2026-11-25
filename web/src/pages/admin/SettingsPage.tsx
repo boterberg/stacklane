@@ -49,7 +49,7 @@ function CompanyForm({ initial }: { initial: Company }) {
       <Field label={t('Adres')} description={t('Op één regel, bijvoorbeeld Kerkstraat 1, 1234 AB Amsterdam.')}>
         {(id) => <Input id={id} {...field('address')} />}
       </Field>
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <Field label={t('E-mailadres')}>{(id) => <Input id={id} type="email" {...field('email')} />}</Field>
         <Field label={t('Website')}>{(id) => <Input id={id} {...field('website')} />}</Field>
         <Field label={t('KVK-nummer')}>{(id) => <Input id={id} {...field('coc_number')} />}</Field>
@@ -78,7 +78,7 @@ function BillingForm({ initial }: { initial: BillingSettings }) {
       pending={save.isPending}
       saved={save.isSuccess}
     >
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <Field label={t('Land van je bedrijf')} error={errors.home_country}>
           {(id) => (
             <Select id={id} value={billing.home_country} onChange={(event) => setBilling({ ...billing, home_country: event.target.value })}>

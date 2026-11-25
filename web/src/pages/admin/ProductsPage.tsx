@@ -135,7 +135,7 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
             </Select>
           )}
         </Field>
-        <div className="grid gap-6 sm:grid-cols-[2fr_1fr]">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-[2fr_1fr]">
           <Field label={t('Naam')} error={errors.name}>
             {(id) => (
               <Input
@@ -180,7 +180,7 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
         {form.kind === 'gameserver' && form.integration_id && (
           <>
             {isFetching && <p className="text-sm text-zinc-500">{t('Locaties en eggs ophalen...')}</p>}
-            <div className="grid gap-6 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
               <Field label={t('Locatie')}>
                 {(id) => (
                   <Select id={id} value={form.location_id} onChange={(event) => update('location_id', event.target.value)}>
@@ -268,19 +268,19 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
             {t('Bij Proxmox VE komt het adres uit de IP-reeks van de koppeling. Bij OpenStack uit het externe netwerk dat je bij de koppeling hebt ingesteld.')}
           </p>
         ) : form.kind === 'vps' ? (
-          <div className="grid gap-6 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
             <Field label={t('Processors')}>{(id) => <Input id={id} inputMode="numeric" value={form.cores} onChange={(event) => update('cores', event.target.value)} />}</Field>
             <Field label={t('Geheugen (MB)')}>{(id) => <Input id={id} inputMode="numeric" value={form.memory_mb} onChange={(event) => update('memory_mb', event.target.value)} />}</Field>
             <Field label={t('Schijf (GB)')}>{(id) => <Input id={id} inputMode="numeric" value={form.disk_gb} onChange={(event) => update('disk_gb', event.target.value)} />}</Field>
           </div>
         ) : (
           <>
-            <div className="grid gap-6 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
               <Field label={t('Geheugen (MB)')}>{(id) => <Input id={id} inputMode="numeric" value={form.memory} onChange={(event) => update('memory', event.target.value)} />}</Field>
               <Field label={t('Opslag (MB)')}>{(id) => <Input id={id} inputMode="numeric" value={form.disk} onChange={(event) => update('disk', event.target.value)} />}</Field>
               <Field label={t('Processor (%)')}>{(id) => <Input id={id} inputMode="numeric" value={form.cpu} onChange={(event) => update('cpu', event.target.value)} />}</Field>
             </div>
-            <div className="grid gap-6 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
               <Field label="Databases">{(id) => <Input id={id} inputMode="numeric" value={form.databases} onChange={(event) => update('databases', event.target.value)} />}</Field>
               <Field label={t('Back-ups')}>{(id) => <Input id={id} inputMode="numeric" value={form.backups} onChange={(event) => update('backups', event.target.value)} />}</Field>
             </div>

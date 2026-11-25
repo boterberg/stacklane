@@ -83,7 +83,7 @@ function ExtensionPanel({ extension, onClose }: { extension: DomainExtension | n
         <Field label={t('Extensie')} error={errors.extension}>
           {(id) => <Input id={id} placeholder="nl" invalid={!!errors.extension} value={form.extension} onChange={(event) => setForm({ ...form, extension: event.target.value })} />}
         </Field>
-        <div className="grid gap-6 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
           <Field label={t('Registreren')} error={errors.register_cents}>
             {(id) => <Input id={id} inputMode="decimal" placeholder="7,99" value={form.register} onChange={(event) => setForm({ ...form, register: event.target.value })} />}
           </Field>

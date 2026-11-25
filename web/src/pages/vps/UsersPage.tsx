@@ -151,7 +151,7 @@ export function UsersPage() {
         title={t('Gebruikers')}
         description={t('Geef anderen toegang tot je VPS-omgeving en kies per persoon wat ze mogen.')}
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <ButtonLink size="sm" icon={ShareIcon} to="/account/shared-access">
               {t('Gedeelde toegang')}
             </ButtonLink>

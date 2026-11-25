@@ -13,7 +13,7 @@ export function RuleForm({ onAdd, pending, errors }: { onAdd: (rule: NewRule, do
   return (
     <form
       noValidate
-      className="grid gap-4 sm:grid-cols-3"
+      className="grid grid-cols-1 gap-4 sm:grid-cols-3"
       onSubmit={(event) => {
         event.preventDefault()
         onAdd(rule, () => setRule(emptyRule))

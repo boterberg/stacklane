@@ -59,7 +59,7 @@ export function RegisterDomainPage() {
           order.reset()
         }}
       />
-      <div className="grid max-w-5xl gap-6 lg:grid-cols-[1fr_20rem]">
+      <div className="grid grid-cols-1 max-w-5xl gap-6 lg:grid-cols-[1fr_20rem]">
         <div className="space-y-6">
           <form onSubmit={submitSearch} className="flex gap-3">
             <div className="flex-1">

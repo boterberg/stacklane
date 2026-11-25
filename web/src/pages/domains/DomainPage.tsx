@@ -30,7 +30,7 @@ function Overview({ domain, registry }: { domain: Domain; registry: Registry | n
   const profile = profiles.find((option) => option.id === domain.details.whois_profile_id)
   const expires = registry?.expires_on ?? domain.details.expires_on
   return (
-    <div className="grid max-w-5xl gap-6 lg:grid-cols-2">
+    <div className="grid grid-cols-1 max-w-5xl gap-6 lg:grid-cols-2">
       <Card title={t('Domein')}>
         <dl className="divide-y divide-zinc-200 dark:divide-white/10">
           <Row label={t('Verloopt op')}>{expires ? formatDate(expires) : '-'}</Row>

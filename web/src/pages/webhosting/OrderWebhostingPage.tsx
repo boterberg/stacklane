@@ -54,10 +54,10 @@ export function OrderWebhostingPage() {
   return (
     <>
       <PageHeader title={t('Webhosting bestellen')} description={t('Kies een pakket. Na betaling staat je webhosting binnen een paar minuten klaar.')} />
-      <form onSubmit={submit} noValidate className="grid max-w-5xl gap-6 lg:grid-cols-[1fr_20rem]">
+      <form onSubmit={submit} noValidate className="grid grid-cols-1 max-w-5xl gap-6 lg:grid-cols-[1fr_20rem]">
         <div className="space-y-6">
           <Card title={t('Pakket')}>
-            <RadioGroup value={product?.id ?? null} onChange={setProductId} className="grid gap-3 sm:grid-cols-2" aria-label={t('Pakket')}>
+            <RadioGroup value={product?.id ?? null} onChange={setProductId} className="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label={t('Pakket')}>
               {(products ?? []).map((option) => (
                 <Radio
                   key={option.id}

@@ -20,7 +20,7 @@ type RowCardProps = {
 
 export function RowCard({ to, title, badge, meta, aside }: RowCardProps) {
   return (
-    <li className="relative flex items-center gap-4 rounded-xl border border-zinc-200 bg-white px-6 py-[22px] transition-colors hover:bg-zinc-50 dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/[0.13]">
+    <li className="relative flex flex-col items-stretch gap-4 rounded-xl border border-zinc-200 bg-white px-6 py-[22px] transition-colors hover:bg-zinc-50 dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/[0.13] sm:flex-row sm:items-center">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-3">
           <Link to={to} className="truncate text-sm font-medium text-zinc-800 after:absolute after:inset-0 dark:text-white">

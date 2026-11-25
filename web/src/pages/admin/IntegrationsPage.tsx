@@ -269,7 +269,7 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
             <Field label={t('Geheim van de credential')}>
               {(id) => <Input id={id} type="password" autoComplete="off" value={form.credential_secret} onChange={(event) => setForm({ ...form, credential_secret: event.target.value })} />}
             </Field>
-            <div className="grid gap-6 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <Field label={t('Regio')} description={t('Leeg laten als er maar één is.')}>
                 {(id) => <Input id={id} placeholder="RegionOne" value={form.region} onChange={(event) => setForm({ ...form, region: event.target.value })} />}
               </Field>
@@ -396,7 +396,7 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
             <Field label={t('Geheim van het token')}>
               {(id) => <Input id={id} type="password" autoComplete="off" value={form.token_secret} onChange={(event) => setForm({ ...form, token_secret: event.target.value })} />}
             </Field>
-            <div className="grid gap-6 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
               <Field label={t('Node')}>{(id) => <Input id={id} value={form.node} onChange={(event) => setForm({ ...form, node: event.target.value })} />}</Field>
               <Field label={t('Bridge')}>{(id) => <Input id={id} value={form.bridge} onChange={(event) => setForm({ ...form, bridge: event.target.value })} />}</Field>
               <Field label={t('Opslag')}>{(id) => <Input id={id} value={form.storage} onChange={(event) => setForm({ ...form, storage: event.target.value })} />}</Field>
@@ -404,7 +404,7 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
             <Field label={t("Opslag voor ISO's")} description={t('Een opslag met het type ISO-image, zoals local.')}>
               {(id) => <Input id={id} value={form.iso_storage} onChange={(event) => setForm({ ...form, iso_storage: event.target.value })} />}
             </Field>
-            <div className="grid gap-6 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <Field label={t('Eerste IP-adres')} error={errors.settings}>
                 {(id) => <Input id={id} placeholder="203.0.113.10" value={form.ip_from} onChange={(event) => setForm({ ...form, ip_from: event.target.value })} />}
               </Field>
@@ -422,7 +422,7 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
               {(id) => <Input id={id} placeholder="vmbr1" value={form.private_bridge} onChange={(event) => setForm({ ...form, private_bridge: event.target.value })} />}
             </Field>
             {form.private_bridge.trim() && (
-              <div className="grid gap-6 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <Field label={t('Eerste VLAN')}>{(id) => <Input id={id} inputMode="numeric" value={form.vlan_from} onChange={(event) => setForm({ ...form, vlan_from: event.target.value })} />}</Field>
                 <Field label={t('Laatste VLAN')}>{(id) => <Input id={id} inputMode="numeric" value={form.vlan_to} onChange={(event) => setForm({ ...form, vlan_to: event.target.value })} />}</Field>
               </div>
