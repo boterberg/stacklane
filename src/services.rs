@@ -14,6 +14,7 @@ struct ProvisionContext {
     provisioning: Value,
     details: Value,
     email: String,
+    email_verified: bool,
     first_name: String,
     last_name: String,
     user_id: Uuid,
@@ -82,6 +83,7 @@ async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()>
             let config: pterodactyl::ProductConfig = serde_json::from_value(context.provisioning)?;
             let owner = pterodactyl::Owner {
                 email: &context.email,
+                email_verified: context.email_verified,
                 first_name: &context.first_name,
                 last_name: &context.last_name,
                 stacklane_id: &context.user_id.to_string(),
