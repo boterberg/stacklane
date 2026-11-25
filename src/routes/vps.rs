@@ -19,6 +19,7 @@ pub struct Server {
     name: String,
     status: String,
     details: Value,
+    #[serde(serialize_with = "crate::error::public_error")]
     last_error: Option<String>,
     product_name: Option<String>,
     subscription_code: Option<String>,

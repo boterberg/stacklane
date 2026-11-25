@@ -43,20 +43,18 @@ impl AppError {
 const PLATFORM_FAILED: &str =
     "Er ging iets mis bij het platform. Probeer het later opnieuw of neem contact op met support.";
 
+const CUSTOMER_SAFE: &[&str] = &[
+    "Stacklane werd herstart tijdens het leveren. Probeer het opnieuw.",
+    "Stacklane werd herstart tijdens het importeren.",
+    "De server van dit volume is opgeheven.",
+    "dit bestand is te groot om hier te openen",
+];
+
 pub fn public_message(message: &str) -> String {
-    let internal = [
-        "://",
-        "antwoordde",
-        "error sending",
-        "error decoding",
-        "connection",
-        "dns",
-    ];
-    let lower = message.to_lowercase();
-    if internal.iter().any(|marker| lower.contains(marker)) {
-        PLATFORM_FAILED.to_owned()
-    } else {
+    if CUSTOMER_SAFE.contains(&message) {
         message.to_owned()
+    } else {
+        PLATFORM_FAILED.to_owned()
     }
 }
 
@@ -142,8 +140,12 @@ mod tests {
             super::PLATFORM_FAILED
         );
         assert_eq!(
-            public_message("de schijf staat niet meer bij deze server"),
-            "de schijf staat niet meer bij deze server"
+            public_message("Proxmox-taak mislukt: unable to create VM 105 - storage 'ceph-int' is not online"),
+            super::PLATFORM_FAILED
+        );
+        assert_eq!(
+            public_message("De server van dit volume is opgeheven."),
+            "De server van dit volume is opgeheven."
         );
     }
 }
