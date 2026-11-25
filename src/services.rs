@@ -269,8 +269,7 @@ async fn provision_floating_ip(
     let (external_id, address) = match driver {
         integrations::Driver::Proxmox(client) => {
             let mut transaction = state.db.begin().await?;
-            crate::locks::transaction(&mut transaction, format!("integration {integration_id}"))
-                .await?;
+            crate::locks::transaction(&mut transaction, "proxmox pool").await?;
             let current: Option<String> =
                 sqlx::query_scalar("SELECT details->>'ipv4' FROM services WHERE id = $1")
                     .bind(service_id)
@@ -281,7 +280,7 @@ async fn provision_floating_ip(
                 None => {
                     let taken: Vec<String> = sqlx::query_scalar(
                         "SELECT details->>'ipv4' FROM services
-                         WHERE integration_id = $1 AND id <> $2 AND status <> 'terminated' AND details ? 'ipv4'
+                         WHERE integration_id IN (SELECT id FROM integrations WHERE kind = (SELECT kind FROM integrations WHERE id = $1)) AND id <> $2 AND status <> 'terminated' AND details ? 'ipv4'
          UNION SELECT ip FROM ptr_cleanups",
                     )
                     .bind(integration_id)
@@ -389,7 +388,7 @@ async fn destroy_unfinished(
     };
     let shared: bool = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM services, LATERAL (VALUES (external_id), (details->>'vmid'), (details->>'rebuild_scratch')) AS ids(id)
-                        WHERE integration_id = $1 AND services.id <> $2 AND kind = 'vps'
+                        WHERE integration_id IN (SELECT id FROM integrations WHERE kind = (SELECT kind FROM integrations WHERE id = $1)) AND services.id <> $2 AND kind = 'vps'
                           AND status <> 'terminated' AND ids.id = $3)",
     )
     .bind(integration_id)
@@ -447,10 +446,10 @@ async fn provision_vps(
         .clone();
 
     let mut transaction = state.db.begin().await?;
-    crate::locks::transaction(&mut transaction, format!("integration {integration_id}")).await?;
+    crate::locks::transaction(&mut transaction, "proxmox pool").await?;
     let recorded: Vec<String> = sqlx::query_scalar(
         "SELECT ids.id FROM services, LATERAL (VALUES (external_id), (details->>'vmid'), (details->>'rebuild_scratch')) AS ids(id)
-         WHERE integration_id = $1 AND services.id <> $2 AND kind = 'vps'
+         WHERE integration_id IN (SELECT id FROM integrations WHERE kind = (SELECT kind FROM integrations WHERE id = $1)) AND services.id <> $2 AND kind = 'vps'
            AND status <> 'terminated' AND ids.id IS NOT NULL",
     )
     .bind(integration_id)
@@ -472,7 +471,7 @@ async fn provision_vps(
     }
     let taken: Vec<String> = sqlx::query_scalar(
         "SELECT details->>'ipv4' FROM services
-         WHERE integration_id = $1 AND id <> $2 AND status <> 'terminated' AND details ? 'ipv4'
+         WHERE integration_id IN (SELECT id FROM integrations WHERE kind = (SELECT kind FROM integrations WHERE id = $1)) AND id <> $2 AND status <> 'terminated' AND details ? 'ipv4'
          UNION SELECT ip FROM ptr_cleanups",
     )
     .bind(integration_id)
@@ -681,11 +680,10 @@ async fn rebuild(
             let vmid: u32 = external_id.parse()?;
             let template: u32 = image.parse()?;
             let mut transaction = state.db.begin().await?;
-            crate::locks::transaction(&mut transaction, format!("integration {integration_id}"))
-                .await?;
+            crate::locks::transaction(&mut transaction, "proxmox pool").await?;
             let recorded: Vec<String> = sqlx::query_scalar(
                 "SELECT ids.id FROM services, LATERAL (VALUES (external_id), (details->>'vmid'), (details->>'rebuild_scratch')) AS ids(id)
-                 WHERE integration_id = $1 AND kind = 'vps' AND status <> 'terminated' AND ids.id IS NOT NULL",
+                 WHERE integration_id IN (SELECT id FROM integrations WHERE kind = (SELECT kind FROM integrations WHERE id = $1)) AND kind = 'vps' AND status <> 'terminated' AND ids.id IS NOT NULL",
             )
             .bind(integration_id)
             .fetch_all(&mut *transaction)
