@@ -328,8 +328,8 @@ async fn services(
         };
         let subscription_id = Uuid::new_v4();
         sqlx::query(
-            "INSERT INTO subscriptions (id, code, user_id, status, billing_interval, payment_mode, started_at, expires_at, cancelled_at, import_ref)
-             VALUES ($1, $2, $3, $4, $5, 'manual', $6, $7, CASE WHEN $4 = 'cancelled' THEN $7 END, $8)",
+            "INSERT INTO subscriptions (id, code, user_id, status, billing_interval, payment_mode, started_at, expires_at, cancelled_at, import_ref, suspended_for_payment)
+             VALUES ($1, $2, $3, $4, $5, 'manual', $6, $7, CASE WHEN $4 = 'cancelled' THEN $7 END, $8, $4 = 'suspended')",
         )
         .bind(subscription_id)
         .bind(format!("PM{id}"))
@@ -352,8 +352,8 @@ async fn services(
         .execute(&mut **pg)
         .await?;
         sqlx::query(
-            "INSERT INTO services (id, user_id, product_id, subscription_id, kind, name, status, details, import_ref)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            "INSERT INTO services (id, user_id, product_id, subscription_id, kind, name, status, details, import_ref, suspension_reason)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $7 = 'suspended' THEN 'payment' END)",
         )
         .bind(Uuid::new_v4())
         .bind(user_id)
