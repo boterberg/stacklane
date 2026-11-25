@@ -28,7 +28,7 @@ export type VpsServer = {
 
 export type LiveStatus = { state: string; cpu: number | null; cpus: number; memory: number | null; max_memory: number; uptime: number | null }
 
-export type Features = { snapshots: boolean; firewall: boolean; volumes: boolean; floating_ips: boolean; networks: boolean; rebuild: boolean; panel: boolean }
+export type Features = { snapshots: boolean; firewall: boolean; volumes: boolean; floating_ips: boolean; networks: boolean; rebuild: boolean; graphs: boolean; panel: boolean }
 
 export type Snapshot = { name: string; description: string; created_at: number | null }
 

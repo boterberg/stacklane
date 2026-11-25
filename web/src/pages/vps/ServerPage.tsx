@@ -34,11 +34,12 @@ import {
 import { isManaged } from '../../lib/firewall'
 import { RuleForm, RuleList } from './FirewallRules'
 import { LinkedCard, ServerFloatingIps, ServerNetworks, ServerVolumes } from './ServerAttached'
+import { ServerGraphs } from './ServerGraphs'
 import { ServerIso } from './ServerIso'
 import { ServerRebuild } from './ServerRebuild'
 import { useCan, useVpsAccess } from '../../lib/vpsAccess'
 
-type Tab = 'overview' | 'networks' | 'firewall' | 'floating' | 'volumes' | 'snapshots' | 'rebuild' | 'iso'
+type Tab = 'overview' | 'graphs' | 'networks' | 'firewall' | 'floating' | 'volumes' | 'snapshots' | 'rebuild' | 'iso'
 
 function errorText(error: Error | null) {
   return error instanceof ApiError ? (Object.values(error.fieldErrors)[0] ?? error.message) : error?.message
@@ -356,6 +357,7 @@ export function VpsServerPage() {
           <Tabs
             tabs={[
               { id: 'overview' as const, label: 'Overzicht' },
+              ...(server.features?.graphs ? [{ id: 'graphs' as const, label: 'Grafieken' }] : []),
               ...(linked.networks ? [{ id: 'networks' as const, label: 'Netwerken' }] : []),
               ...(server.features?.firewall === false || !can('firewalls.view') ? [] : [{ id: 'firewall' as const, label: 'Firewalls' }]),
               ...(linked.floating ? [{ id: 'floating' as const, label: 'Floating IPs' }] : []),
@@ -368,6 +370,7 @@ export function VpsServerPage() {
             onChange={setTab}
           />
           {tab === 'overview' && <Overview server={server} live={server.live} features={server.features} linked={linked} onOpen={setTab} />}
+          {tab === 'graphs' && <ServerGraphs serverId={server.id} />}
           {tab === 'networks' && <ServerNetworks serverId={server.id} />}
           {tab === 'firewall' && <Firewall server={server} />}
           {tab === 'floating' && <ServerFloatingIps serverId={server.id} />}
