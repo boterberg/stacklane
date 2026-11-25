@@ -10,6 +10,12 @@ Stacklane installeer je uit onze pakketbron op stacklane.io. Daarna zet `sudo st
 
 PostgreSQL en Caddy hoef je niet vooraf te installeren. Het setup-commando vraagt of het dat voor je mag doen.
 
+### Samen met DirectAdmin, Plesk of cPanel
+
+Zet Stacklane liever op een eigen kleine VPS. Een hostingpanel beheert zelf de webserver op poort 80 en 443, en Caddy wil die poorten ook. Daarnaast werkt een hostingpanel de server zelf bij en kan het PostgreSQL of de firewall aanpassen. Op een eigen VPS kan een update van het ene panel het andere niet raken, en een klantwebsite deelt geen server met je facturatie.
+
+Moet het toch op dezelfde server, laat `stacklane setup` dan geen Caddy installeren. Voeg het panel als reverse proxy toe in de webserver van je hostingpanel, zoals bij [Nginx of een andere webserver](./webserver#nginx-of-een-andere-webserver). Stacklane zelf luistert alleen op `127.0.0.1:8080` en zit verder niets in de weg.
+
 ## De pakketbron toevoegen
 
 De pakketten zijn ondertekend. Haal eerst de sleutel op en voeg dan de bron toe:
