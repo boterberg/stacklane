@@ -8,7 +8,7 @@ type Size = 'base' | 'sm'
 
 const variants: Record<Variant, string> = {
   primary:
-    'bg-zinc-800 text-white hover:bg-zinc-900 shadow-[inset_0px_1px_theme(--color-white/0.2)] dark:bg-white dark:text-zinc-800 dark:hover:bg-zinc-100 dark:shadow-none',
+    'accent-fill bg-zinc-800 text-white hover:bg-zinc-900 shadow-[inset_0px_1px_theme(--color-white/0.2)] dark:bg-white dark:text-zinc-800 dark:hover:bg-zinc-100 dark:shadow-none',
   outline:
     'border border-zinc-200 border-b-zinc-300/80 bg-white text-zinc-800 shadow-xs hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-700 dark:text-white dark:hover:bg-zinc-600/75',
   ghost: 'text-zinc-800 hover:bg-zinc-800/5 dark:text-white dark:hover:bg-white/15',

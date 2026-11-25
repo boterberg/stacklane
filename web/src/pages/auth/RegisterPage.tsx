@@ -6,6 +6,7 @@ import { Checkbox, Field, FormError, Input, Select } from '../../components/ui/F
 import { ApiError } from '../../lib/api'
 import { useAuthMutation } from '../../lib/auth'
 import { countries } from '../../lib/countries'
+import { useMeta } from '../../lib/meta'
 import { AuthFooter, AuthHeading, TextLink } from './AuthLayout'
 import { t } from '../../lib/i18n'
 
@@ -22,6 +23,7 @@ export function RegisterPage() {
   const [form, setForm] = useState<RegisterInput>({ name: '', email: '', password: '', country: 'NL', is_business: false, company_name: '' })
   const register = useAuthMutation<RegisterInput>('/auth/register')
   const navigate = useNavigate()
+  const { data: meta } = useMeta()
   const errors = register.error instanceof ApiError ? register.error.fieldErrors : {}
 
   function update<K extends keyof RegisterInput>(key: K, value: RegisterInput[K]) {
@@ -35,7 +37,7 @@ export function RegisterPage() {
 
   return (
     <>
-      <AuthHeading>{t('Maak een Stacklane account')}</AuthHeading>
+      <AuthHeading>{t('Maak een account bij {name}', { name: meta?.branding.name ?? 'Stacklane' })}</AuthHeading>
       <form onSubmit={submit} className="space-y-6" noValidate>
         <Field label={t('Naam')} error={errors.name}>
           {(id) => <Input id={id} autoComplete="name" invalid={!!errors.name} value={form.name} onChange={(event) => update('name', event.target.value)} />}

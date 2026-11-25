@@ -5,6 +5,7 @@ import type { InvoiceDetail } from './billing'
 import type { Paginated } from './pagination'
 import type { ServiceStatus } from './gameservers'
 import type { TicketStatus } from './labels'
+import type { Branding } from './meta'
 
 export type Integration = {
   id: string
@@ -366,4 +367,23 @@ export function useCustomers({ q, page, perPage }: { q: string; page: number; pe
 
 export function useCustomer(id: string) {
   return useQuery({ queryKey: ['admin', 'customer', id], queryFn: () => api<CustomerDetail>(`/admin/customers/${id}`) })
+}
+
+export type BrandAsset = 'logo' | 'logo_dark' | 'favicon'
+
+export function useSaveBranding() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { name: string; accent: string }) => api<Branding>('/admin/branding', { method: 'PUT', body: input }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meta'] }),
+  })
+}
+
+export function useBrandAsset(kind: BrandAsset) {
+  const queryClient = useQueryClient()
+  const onSuccess = () => queryClient.invalidateQueries({ queryKey: ['meta'] })
+  return {
+    upload: useMutation({ mutationFn: (data: string) => api<Branding>(`/admin/branding/${kind}`, { method: 'PUT', body: { data } }), onSuccess }),
+    remove: useMutation({ mutationFn: () => api<Branding>(`/admin/branding/${kind}`, { method: 'DELETE' }), onSuccess }),
+  }
 }

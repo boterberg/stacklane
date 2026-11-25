@@ -6,7 +6,7 @@ import { Link, Navigate, Outlet, useLocation } from 'react-router'
 import { useMe, type Profile } from '../../lib/auth'
 import { cn } from '../../lib/cn'
 import { useMeta } from '../../lib/meta'
-import { Logo } from '../ui/Logo'
+import { BrandLogo } from '../ui/BrandLogo'
 import { useNotifications } from '../../lib/notifications'
 import { t } from '../../lib/i18n'
 import { isRunning, useUpdateStatus } from '../../lib/system'
@@ -33,7 +33,7 @@ function Sidebar({ profile, onSearch, onNotifications, onNavigate }: SidebarProp
   return (
     <div className="flex h-full flex-col px-4 pt-4 pb-4">
       <Link to="/" onClick={onNavigate} className="flex h-9 items-center px-2">
-        <Logo className="h-[22px] text-zinc-900 dark:text-white" />
+        <BrandLogo className="h-[22px] max-w-44" />
       </Link>
       <button
         type="button"

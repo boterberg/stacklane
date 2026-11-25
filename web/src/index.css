@@ -67,3 +67,17 @@
     cursor: pointer;
   }
 }
+
+html[data-accent] .accent-fill {
+  background-color: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: none;
+}
+
+html[data-accent] .accent-fill:hover:not(:disabled) {
+  background-color: color-mix(in oklab, var(--accent) 88%, black);
+}
+
+html[data-accent] .accent-active {
+  background-color: color-mix(in oklab, var(--accent) 14%, transparent);
+}

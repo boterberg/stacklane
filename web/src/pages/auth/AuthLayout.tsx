@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, Navigate, Outlet } from 'react-router'
 
-import { Logo } from '../../components/ui/Logo'
+import { BrandLogo } from '../../components/ui/BrandLogo'
 import { LanguageSwitch, ThemeSwitch } from '../../components/ui/Preferences'
 import { useMe } from '../../lib/auth'
 
@@ -13,7 +13,7 @@ export function AuthLayout({ guestsOnly = true }: { guestsOnly?: boolean }) {
   return (
     <div className="flex min-h-full flex-col items-center justify-center px-6 py-12">
       <Link to="/login" className="mb-8">
-        <Logo className="h-7 text-zinc-900 dark:text-white" />
+        <BrandLogo className="h-7 max-w-56" />
       </Link>
       <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-8 shadow-xs dark:border-white/10 dark:bg-zinc-800 dark:shadow-none">
         <Outlet />

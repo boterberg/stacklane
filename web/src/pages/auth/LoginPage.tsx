@@ -73,7 +73,7 @@ export function LoginPage() {
 
   return (
     <>
-      <AuthHeading>{t('Inloggen bij Stacklane')}</AuthHeading>
+      <AuthHeading>{t('Inloggen bij {name}', { name: meta?.branding.name ?? 'Stacklane' })}</AuthHeading>
       {meta?.demo && (
         <div className="mb-8">
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/5">
