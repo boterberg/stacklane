@@ -597,6 +597,63 @@ pub async fn detach(
     .await
 }
 
+#[derive(Serialize, sqlx::FromRow)]
+pub struct ServerNetwork {
+    network_id: Uuid,
+    name: String,
+    cidr: String,
+    address: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct ServerNetworks {
+    attached: Vec<ServerNetwork>,
+    available: Vec<ServerNetwork>,
+}
+
+pub async fn server(
+    State(state): State<AppState>,
+    actor: VpsActor,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<ServerNetworks>> {
+    actor.require("networks.view")?;
+    let integration: Option<Uuid> = sqlx::query_scalar(
+        "SELECT integration_id FROM services WHERE id = $1 AND user_id = $2 AND kind = 'vps'",
+    )
+    .bind(id)
+    .bind(actor.owner)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    let attached: Vec<ServerNetwork> = sqlx::query_as(
+        "SELECT n.id AS network_id, n.name, n.cidr, m.address
+         FROM vps_network_servers m JOIN vps_networks n ON n.id = m.network_id
+         WHERE m.service_id = $1 AND n.user_id = $2
+         ORDER BY n.name, n.id",
+    )
+    .bind(id)
+    .bind(actor.owner)
+    .fetch_all(&state.db)
+    .await?;
+    let available: Vec<ServerNetwork> = sqlx::query_as(
+        "SELECT n.id AS network_id, n.name, n.cidr, NULL::text AS address
+         FROM vps_networks n
+         WHERE n.user_id = $1 AND n.integration_id = $2
+           AND NOT EXISTS (SELECT 1 FROM vps_network_servers m
+                           WHERE m.network_id = n.id AND m.service_id = $3)
+         ORDER BY n.name, n.id",
+    )
+    .bind(actor.owner)
+    .bind(integration)
+    .bind(id)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(ServerNetworks {
+        attached,
+        available,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -843,7 +900,27 @@ mod flows {
         assert_eq!(addresses, ["10.8.0.2/24", "10.8.0.3/24"]);
         assert_eq!(detail.body["restart_needed"], true);
 
+        let own = client
+            .send(
+                Method::GET,
+                &format!("/vps/servers/{first}/networks"),
+                Some(&cookie),
+                None,
+            )
+            .await;
+        assert_eq!(own.body["attached"][0]["address"], "10.8.0.2/24");
+        assert_eq!(own.body["available"].as_array().map(Vec::len), Some(0));
+
         let (_, stranger) = client.register("net-stranger@example.test").await;
+        let foreign = client
+            .send(
+                Method::GET,
+                &format!("/vps/servers/{first}/networks"),
+                Some(&stranger),
+                None,
+            )
+            .await;
+        assert_eq!(foreign.status, StatusCode::NOT_FOUND);
         let peek = client.send(Method::GET, &path, Some(&stranger), None).await;
         assert_eq!(peek.status, StatusCode::NOT_FOUND);
 

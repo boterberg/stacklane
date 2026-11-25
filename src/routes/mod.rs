@@ -125,6 +125,7 @@ pub fn router(state: AppState) -> Router {
                 .delete(vps_firewalls::destroy),
         )
         .route("/vps/servers/{id}", get(vps::show))
+        .route("/vps/servers/{id}/networks", get(vps_networks::server))
         .route("/vps/servers/{id}/power", post(vps::power))
         .route("/vps/servers/{id}/password", get(vps::root_password))
         .route("/vps/servers/{id}/panel", post(vps::panel_login))
