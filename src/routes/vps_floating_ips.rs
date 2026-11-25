@@ -365,6 +365,17 @@ mod tests {
             .await;
         assert_eq!(listed.body["used"], 3);
         assert_eq!(listed.body["limit"], 10);
+
+        let around = client
+            .send(
+                Method::POST,
+                "/orders",
+                Some(&cookie),
+                Some(json!({ "product_id": product, "billing_interval": "monthly", "name": "extra" })),
+            )
+            .await;
+        assert_eq!(around.status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(around.body["errors"]["product_id"].is_string());
     }
 
     #[sqlx::test]

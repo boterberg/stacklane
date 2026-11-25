@@ -479,6 +479,9 @@ fn english(message: &str) -> Option<&'static str> {
         "In de demo kun je geen eigen account aanmaken. Log in als klant of beheerder." => {
             "You cannot create your own account in the demo. Sign in as a customer or as an administrator."
         }
+        "Bestel floating IPs onder VPS, Floating IPs." => {
+            "Order floating IPs under VPS, Floating IPs."
+        }
         _ => return None,
     })
 }

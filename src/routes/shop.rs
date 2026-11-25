@@ -541,6 +541,12 @@ async fn place_order(
             "Geef de server een naam van hoogstens 60 tekens.",
         ));
     }
+    if product.kind == "floating_ip" {
+        return Err(AppError::field(
+            "product_id",
+            "Bestel floating IPs onder VPS, Floating IPs.",
+        ));
+    }
     let volume = if product.kind == "volume" {
         Some(volume_order(&state, &user, &product, input.server_id, input.size_gb).await?)
     } else {
