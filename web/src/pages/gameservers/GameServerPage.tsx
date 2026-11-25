@@ -7,15 +7,16 @@ import { Button, ButtonLink } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Tabs } from '../../components/ui/Tabs'
 import { formatBytes, formatDuration, formatMegabytes } from '../../lib/format'
-import { useGameServer, usePower, type GameServerDetail } from '../../lib/gameservers'
+import { useGameServer, usePower, type GameServerDetail, type GamePermission } from '../../lib/gameservers'
 import { powerStateColors, powerStateLabels, serviceStatusColors, serviceStatusLabels } from '../../lib/labels'
 import { ServerActivity } from './ServerActivity'
 import { ServerBackups } from './ServerBackups'
 import { ServerConsole } from './ServerConsole'
 import { ServerFiles } from './ServerFiles'
+import { ServerUsers } from './ServerUsers'
 import { t } from '../../lib/i18n'
 
-type Tab = 'console' | 'files' | 'backups' | 'activity'
+type Tab = 'console' | 'files' | 'backups' | 'activity' | 'users'
 
 function Address({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)
@@ -96,6 +97,15 @@ export function GameServerPage() {
 
   const state = server.resources?.current_state ?? 'offline'
   const ready = server.status === 'active' && !server.install_state
+  const can = (permission: GamePermission) => server.access.permissions.includes(permission)
+  const tabs = [
+    can('console') && { id: 'console' as const, label: 'Console' },
+    can('files') && { id: 'files' as const, label: 'Bestanden' },
+    can('backups') && { id: 'backups' as const, label: 'Back-ups' },
+    can('activity') && { id: 'activity' as const, label: 'Activiteit' },
+    server.access.owner && { id: 'users' as const, label: 'Gebruikers' },
+  ].filter((entry): entry is { id: Tab; label: string } => Boolean(entry))
+  const current = tabs.some((entry) => entry.id === tab) ? tab : tabs[0]?.id
 
   return (
     <>
@@ -115,9 +125,10 @@ export function GameServerPage() {
             {server.details.address && <Address value={server.details.address} />}
             {server.details.egg && <span>{server.details.egg}</span>}
             {server.product_name && <span>{server.product_name}</span>}
+            {server.owner_name && <Badge color="zinc">{t('Gedeeld door {name}', { name: server.owner_name })}</Badge>}
           </div>
         </div>
-        {ready && (
+        {ready && can('power') && (
           <div className="flex gap-2">
             <Button size="sm" icon={PlayIcon} disabled={power.isPending || state !== 'offline'} onClick={() => power.mutate('start')}>
               {t('Starten')}
@@ -143,20 +154,12 @@ export function GameServerPage() {
       {server.status === 'active' && (
         <>
           <Resources server={server} />
-          <Tabs
-            tabs={[
-              { id: 'console', label: 'Console' },
-              { id: 'files', label: 'Bestanden' },
-              { id: 'backups', label: 'Back-ups' },
-              { id: 'activity', label: 'Activiteit' },
-            ]}
-            active={tab}
-            onChange={setTab}
-          />
-          {tab === 'console' && <ServerConsole serverId={server.id} />}
-          {tab === 'files' && <ServerFiles serverId={server.id} />}
-          {tab === 'backups' && <ServerBackups serverId={server.id} />}
-          {tab === 'activity' && <ServerActivity serverId={server.id} />}
+          {current && <Tabs tabs={tabs} active={current} onChange={setTab} />}
+          {current === 'console' && <ServerConsole serverId={server.id} />}
+          {current === 'files' && <ServerFiles serverId={server.id} />}
+          {current === 'backups' && <ServerBackups serverId={server.id} />}
+          {current === 'activity' && <ServerActivity serverId={server.id} />}
+          {current === 'users' && <ServerUsers serverId={server.id} />}
         </>
       )}
     </>

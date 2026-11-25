@@ -10,10 +10,75 @@ import { DataTable } from '../../components/ui/ResourceList'
 import { currentVpsOwner } from '../../lib/api'
 import { formatDate } from '../../lib/format'
 import { t } from '../../lib/i18n'
+import { gamePermissionLabel, useSharedGameServerChanges, useSharedGameServers, type SharedGameServer } from '../../lib/gameservers'
 import { useAcceptInvitation, useLeaveEnvironment, useSharedEnvironments, useSwitchEnvironment, type SharedEnvironment } from '../../lib/vpsAccess'
+
+function SharedGameServers({ servers }: { servers: SharedGameServer[] }) {
+  const { accept, leave } = useSharedGameServerChanges()
+  const navigate = useNavigate()
+  const [confirm, setConfirm] = useState<SharedGameServer | null>(null)
+  return (
+    <section className="mt-10">
+      <h2 className="mb-4 text-base font-medium text-zinc-800 dark:text-white">{t('Gameservers')}</h2>
+      <DataTable<SharedGameServer>
+        rows={servers}
+        rowKey={(item) => item.service_id}
+        columns={[
+          {
+            header: t('Server'),
+            cell: (item) => (
+              <div>
+                <p className="font-medium text-zinc-800 dark:text-white">{item.server}</p>
+                <p className="text-zinc-500 dark:text-white/60">{t('Van {name}', { name: item.owner })}</p>
+              </div>
+            ),
+          },
+          { header: t('Rechten'), cell: (item) => item.permissions.map(gamePermissionLabel).join(', ') },
+          { header: t('Sinds'), cell: (item) => (item.accepted ? formatDate(item.created_at) : t('Uitnodiging')) },
+          {
+            header: '',
+            className: 'text-right',
+            cell: (item) =>
+              item.accepted ? (
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" icon={ArrowRightIcon} onClick={() => navigate(`/gameservers/servers/${item.service_id}`)}>
+                    {t('Openen')}
+                  </Button>
+                  <Button size="sm" icon={XMarkIcon} onClick={() => setConfirm(item)}>
+                    {t('Toegang opgeven')}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" icon={CheckIcon} variant="primary" disabled={accept.isPending} onClick={() => accept.mutate(item.service_id)}>
+                    {t('Accepteren')}
+                  </Button>
+                  <Button size="sm" icon={XMarkIcon} disabled={leave.isPending} onClick={() => leave.mutate(item.service_id)}>
+                    {t('Weigeren')}
+                  </Button>
+                </div>
+              ),
+          },
+        ]}
+      />
+      <ConfirmDialog
+        open={confirm !== null}
+        title={t('Toegang opgeven?')}
+        confirmLabel={t('Opgeven')}
+        danger
+        pending={leave.isPending}
+        onClose={() => setConfirm(null)}
+        onConfirm={() => confirm && leave.mutate(confirm.service_id, { onSettled: () => setConfirm(null) })}
+      >
+        {t('Je kunt daarna niet meer bij de gameserver {name}, tot de eigenaar je opnieuw uitnodigt.', { name: confirm?.server ?? '' })}
+      </ConfirmDialog>
+    </section>
+  )
+}
 
 export function SharedAccessPage() {
   const { data, isPending } = useSharedEnvironments()
+  const { data: games, isPending: gamesPending } = useSharedGameServers()
   const leave = useLeaveEnvironment()
   const accept = useAcceptInvitation()
   const switchTo = useSwitchEnvironment()
@@ -31,7 +96,7 @@ export function SharedAccessPage() {
     <>
       <PageHeader
         title={t('Gedeelde toegang')}
-        description={t('VPS-omgevingen van anderen waar jij toegang toe hebt.')}
+        description={t('VPS-omgevingen en gameservers van anderen waar jij toegang toe hebt.')}
         actions={
           active ? (
             <Button size="sm" onClick={() => open(null)}>
@@ -40,9 +105,10 @@ export function SharedAccessPage() {
           ) : undefined
         }
       />
-      {!isPending && shared.length === 0 ? (
-        <EmptyState title={t('Geen gedeelde toegang')} description={t('Niemand heeft je nog toegang gegeven tot een VPS-omgeving.')} />
-      ) : (
+      {!isPending && !gamesPending && shared.length === 0 && (games ?? []).length === 0 && (
+        <EmptyState title={t('Geen gedeelde toegang')} description={t('Niemand heeft je nog toegang gegeven tot een VPS-omgeving of gameserver.')} />
+      )}
+      {shared.length > 0 && (
         <DataTable<SharedEnvironment>
           rows={shared}
           rowKey={(item) => item.owner_id}
@@ -85,6 +151,7 @@ export function SharedAccessPage() {
           ]}
         />
       )}
+      {games && games.length > 0 && <SharedGameServers servers={games} />}
       <ConfirmDialog
         open={confirm !== null}
         title={t('Toegang opgeven?')}

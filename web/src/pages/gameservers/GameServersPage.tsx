@@ -1,4 +1,4 @@
-import { CpuChipIcon, GlobeAltIcon, PuzzlePieceIcon, ServerIcon } from '@heroicons/react/24/outline'
+import { CpuChipIcon, GlobeAltIcon, PuzzlePieceIcon, ServerIcon, UserGroupIcon } from '@heroicons/react/24/outline'
 
 import { Badge } from '../../components/ui/Badge'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -30,6 +30,7 @@ export function GameServersPage() {
                 ...(server.details.egg ? [{ icon: PuzzlePieceIcon, label: server.details.egg }] : []),
                 ...(server.details.memory ? [{ icon: CpuChipIcon, label: t('{amount} geheugen', { amount: formatMegabytes(server.details.memory) }) }] : []),
                 ...(server.product_name ? [{ icon: ServerIcon, label: server.product_name }] : []),
+                ...(server.owner_name ? [{ icon: UserGroupIcon, label: t('Gedeeld door {name}', { name: server.owner_name }) }] : []),
               ]}
             />
           ))}
