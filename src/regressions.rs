@@ -1323,3 +1323,51 @@ async fn an_older_address_does_not_block_saving_the_profile(db: PgPool) {
         .await;
     assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
 }
+
+const KEPT_ISO: &str = "5a1e0000-0000-4000-8000-000000000001";
+
+fn iso_storage(method: &str, path: &str, _: &str) -> (u16, serde_json::Value) {
+    match (method, path) {
+        ("GET", path) if path.contains("/content?content=iso") => (
+            200,
+            json!({ "data": [
+                { "volid": "local:iso/stacklane-5a1e0000000040008000000000000001.iso" },
+                { "volid": "local:iso/stacklane-0rphan.iso" },
+                { "volid": "local:iso/debian-13.iso" },
+            ] }),
+        ),
+        _ => (200, json!({ "data": null })),
+    }
+}
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn iso_files_nobody_owns_are_removed(db: PgPool) {
+    use crate::testing::{fake_api, proxmox_integration};
+    let client = Client::new(db);
+    let (base, calls) = fake_api(iso_storage).await;
+    let integration = proxmox_integration(&client.state, &base).await;
+    let (user, _) = client.register("iso-sweep@example.test").await;
+    sqlx::query(
+        "INSERT INTO vps_isos (id, user_id, integration_id, name, url, firmware, status, external_id)
+         VALUES ($1, $2, $3, 'kept', 'https://1.1.1.1/x.iso', 'bios', 'ready', 'stacklane-5a1e0000000040008000000000000001.iso')",
+    )
+    .bind(uuid::Uuid::parse_str(KEPT_ISO).unwrap())
+    .bind(user)
+    .bind(integration)
+    .execute(&client.state.db)
+    .await
+    .unwrap();
+    crate::routes::vps_isos::remove_unused(&client.state)
+        .await
+        .unwrap();
+    let deletes: Vec<String> = calls
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|call| call.starts_with("DELETE"))
+        .cloned()
+        .collect();
+    assert_eq!(deletes.len(), 1, "{deletes:?}");
+    assert!(deletes[0].contains("stacklane-0rphan.iso"));
+}

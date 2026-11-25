@@ -395,7 +395,35 @@ pub async fn unmount(
     Ok(StatusCode::NO_CONTENT)
 }
 
+async fn remove_orphans(state: &AppState) -> AppResult<()> {
+    let integrations: Vec<Uuid> =
+        sqlx::query_scalar("SELECT id FROM integrations WHERE kind = 'proxmox'")
+            .fetch_all(&state.db)
+            .await?;
+    for integration_id in integrations {
+        let Ok(isos::IsoStore::Proxmox(client)) = store(state, integration_id).await else {
+            continue;
+        };
+        let Ok(files) = client.stacklane_isos().await else {
+            continue;
+        };
+        let known: Vec<String> = sqlx::query_scalar(
+            "SELECT 'stacklane-' || replace(id::text, '-', '') || '.iso' FROM vps_isos
+             WHERE status <> 'failed' OR created_at > now() - interval '2 hours'",
+        )
+        .fetch_all(&state.db)
+        .await?;
+        for file in files.iter().filter(|file| !known.contains(file)) {
+            client.delete_iso(file).await.ok();
+        }
+    }
+    Ok(())
+}
+
 pub async fn remove_unused(state: &AppState) -> AppResult<usize> {
+    if let Err(error) = remove_orphans(state).await {
+        tracing::warn!(%error, "removing orphaned ISO files failed");
+    }
     let stale: Vec<Uuid> = sqlx::query_scalar(
         "SELECT id FROM vps_isos
          WHERE mounted_on IS NULL AND status <> 'importing' AND last_used_at < now() - make_interval(days => $1)",

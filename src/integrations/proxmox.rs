@@ -540,6 +540,29 @@ impl Proxmox {
         .await
     }
 
+    pub async fn stacklane_isos(&self) -> anyhow::Result<Vec<String>> {
+        let content = self
+            .request(
+                Method::GET,
+                &format!(
+                    "/nodes/{}/storage/{}/content?content=iso",
+                    self.settings.node, self.settings.iso_storage
+                ),
+                None,
+            )
+            .await?;
+        let prefix = format!("{}:iso/", self.settings.iso_storage);
+        Ok(content
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|item| item["volid"].as_str())
+            .filter_map(|volid| volid.strip_prefix(&prefix))
+            .filter(|file| file.starts_with("stacklane-") && file.ends_with(".iso"))
+            .map(str::to_owned)
+            .collect())
+    }
+
     fn iso_volume(&self, file: &str) -> String {
         format!("{}:iso/{file}", self.settings.iso_storage)
     }
