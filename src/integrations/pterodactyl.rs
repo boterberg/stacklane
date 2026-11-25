@@ -35,6 +35,7 @@ fn one() -> i64 {
 
 pub struct Owner<'a> {
     pub email: &'a str,
+    pub email_verified: bool,
     pub first_name: &'a str,
     pub last_name: &'a str,
     pub stacklane_id: &'a str,
@@ -285,6 +286,11 @@ impl Pterodactyl {
             )
             .await?;
         if let Some(id) = matching_user(&existing, owner.email, &external) {
+            if !owner.email_verified {
+                anyhow::bail!(
+                    "er bestaat al een gebruiker met dit e-mailadres in het gamepanel; de klant moet eerst zijn e-mailadres bevestigen"
+                );
+            }
             return Ok(id);
         }
         let created = self
