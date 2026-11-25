@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Link, Navigate, Outlet } from 'react-router'
 
 import { BrandLogo } from '../../components/ui/BrandLogo'
-import { LanguageSwitch, ThemeSwitch } from '../../components/ui/Preferences'
+import { LanguageMenu, ThemeSwitch } from '../../components/ui/Preferences'
 import { useMe } from '../../lib/auth'
 
 export function AuthLayout({ guestsOnly = true }: { guestsOnly?: boolean }) {
@@ -11,20 +11,18 @@ export function AuthLayout({ guestsOnly = true }: { guestsOnly?: boolean }) {
   if (profile && guestsOnly) return <Navigate to="/" replace />
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center px-6 py-12">
+    <div className="relative flex min-h-full flex-col items-center justify-center px-4 py-16 sm:px-6">
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6">
+        <LanguageMenu />
+      </div>
       <Link to="/login" className="mb-8">
         <BrandLogo className="h-7 max-w-56" />
       </Link>
-      <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-8 shadow-xs dark:border-white/10 dark:bg-zinc-800 dark:shadow-none">
+      <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xs sm:p-8 dark:border-white/10 dark:bg-zinc-800 dark:shadow-none">
         <Outlet />
       </div>
-      <div className="mt-6 flex items-center gap-3">
-        <div className="w-28">
-          <ThemeSwitch />
-        </div>
-        <div className="w-24">
-          <LanguageSwitch />
-        </div>
+      <div className="mt-6 w-28">
+        <ThemeSwitch />
       </div>
     </div>
   )

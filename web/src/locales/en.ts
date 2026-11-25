@@ -1242,4 +1242,5 @@ export const en: Record<string, string> = {
   "Voor een volledig eigen thema. Deze CSS laadt na de standaardstijl, op elke pagina en ook op de inlogpagina.": "For a fully custom theme. This CSS loads after the default style, on every page including the sign-in page.",
   "CSS": "CSS",
   "Hoogstens 64 kB. Laat leeg om de eigen CSS uit te zetten. Je kunt de kleurvariabelen gebruiken, zoals var(--accent).": "At most 64 kB. Leave empty to turn custom CSS off. You can use the colour variables, such as var(--accent).",
+  "Taal kiezen": "Choose language",
 }
