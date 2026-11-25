@@ -368,7 +368,7 @@ pub async fn show(
     let members: Vec<Member> = sqlx::query_as(
         "SELECT s.id AS server_id, s.name AS server_name, m.address
          FROM vps_network_servers m JOIN services s ON s.id = m.service_id
-         WHERE m.network_id = $1 ORDER BY s.name, s.id",
+         WHERE m.network_id = $1 ORDER BY s.name, m.created_at, s.id",
     )
     .bind(id)
     .fetch_all(&state.db)
