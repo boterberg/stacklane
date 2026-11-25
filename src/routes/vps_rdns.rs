@@ -172,22 +172,74 @@ pub async fn update(
     Ok(StatusCode::NO_CONTENT)
 }
 
-pub async fn clear(state: &AppState, ip: &str) {
-    let Ok(ip) = ip.parse::<Ipv4Addr>() else {
-        return;
-    };
+async fn cleared(state: &AppState, ip: Ipv4Addr) -> bool {
     let servers = match dns_servers(state).await {
         Ok(servers) => servers,
         Err(error) => {
             tracing::warn!(%ip, ?error, "loading dns servers failed");
-            return;
+            return false;
         }
     };
-    if let Some((server, zone)) = locate(&servers, ip).await
-        && let Err(error) = server.set_ptr(&zone, ip, None).await
-    {
-        tracing::warn!(%ip, error = %format!("{error:#}"), "clearing a ptr record failed");
+    for server in &servers {
+        match server.zone_of(ip).await {
+            Ok(Some(zone)) => {
+                return match server.set_ptr(&zone, ip, None).await {
+                    Ok(()) => true,
+                    Err(error) => {
+                        tracing::warn!(%ip, error = %format!("{error:#}"), "clearing a ptr record failed");
+                        false
+                    }
+                };
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(%ip, error = %format!("{error:#}"), "looking up a reverse zone failed");
+                return false;
+            }
+        }
     }
+    true
+}
+
+pub async fn clear(state: &AppState, ip: &str) {
+    let Ok(ip) = ip.parse::<Ipv4Addr>() else {
+        return;
+    };
+    if !cleared(state, ip).await
+        && let Err(error) =
+            sqlx::query("INSERT INTO ptr_cleanups (ip) VALUES ($1) ON CONFLICT DO NOTHING")
+                .bind(ip.to_string())
+                .execute(&state.db)
+                .await
+    {
+        tracing::warn!(%ip, ?error, "queueing a ptr cleanup failed");
+    }
+}
+
+pub async fn retry_cleanups(state: &AppState) -> AppResult<usize> {
+    let pending: Vec<String> =
+        sqlx::query_scalar("SELECT ip FROM ptr_cleanups ORDER BY created_at")
+            .fetch_all(&state.db)
+            .await?;
+    let mut done = 0;
+    for ip in pending {
+        let Ok(address) = ip.parse::<Ipv4Addr>() else {
+            continue;
+        };
+        if cleared(state, address).await {
+            sqlx::query("DELETE FROM ptr_cleanups WHERE ip = $1")
+                .bind(&ip)
+                .execute(&state.db)
+                .await?;
+            done += 1;
+        } else {
+            sqlx::query("UPDATE ptr_cleanups SET attempts = attempts + 1 WHERE ip = $1")
+                .bind(&ip)
+                .execute(&state.db)
+                .await?;
+        }
+    }
+    Ok(done)
 }
 
 #[cfg(test)]
@@ -295,5 +347,54 @@ mod tests {
         let (_, stranger) = client.register("rdns-other@example.test").await;
         let peek = client.send(Method::GET, &path, Some(&stranger), None).await;
         assert_eq!(peek.status, StatusCode::NOT_FOUND);
+    }
+
+    static DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+    fn flaky(method: &str, path: &str, body: &str) -> (u16, Value) {
+        if DOWN.load(std::sync::atomic::Ordering::SeqCst) {
+            return (503, json!({ "error": "down" }));
+        }
+        dns(method, path, body)
+    }
+
+    #[sqlx::test]
+    #[ignore = "needs DATABASE_URL"]
+    async fn a_ptr_that_could_not_be_cleared_is_retried_until_it_is_gone(db: PgPool) {
+        let client = Client::new(db);
+        let (base, calls) = fake_api(flaky).await;
+        let sealed =
+            crate::integrations::seal_credentials(&client.state, &json!({ "api_key": "k" }))
+                .unwrap();
+        sqlx::query(
+            "INSERT INTO integrations (id, kind, name, base_url, credentials, settings)
+             VALUES ($1, 'powerdns', 'DNS', $2, $3, '{\"server_id\": \"localhost\"}')",
+        )
+        .bind(Uuid::new_v4())
+        .bind(&base)
+        .bind(sealed)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+
+        super::clear(&client.state, "192.0.2.15").await;
+        let queued: Vec<String> = sqlx::query_scalar("SELECT ip FROM ptr_cleanups")
+            .fetch_all(&client.state.db)
+            .await
+            .unwrap();
+        assert_eq!(queued, ["192.0.2.15"]);
+
+        assert_eq!(super::retry_cleanups(&client.state).await.unwrap(), 0);
+        DOWN.store(false, std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(super::retry_cleanups(&client.state).await.unwrap(), 1);
+        let left: i64 = sqlx::query_scalar("SELECT count(*) FROM ptr_cleanups")
+            .fetch_one(&client.state.db)
+            .await
+            .unwrap();
+        assert_eq!(left, 0);
+        assert!(calls.lock().unwrap().iter().any(|call| {
+            call.starts_with("PATCH /api/v1/servers/localhost/zones/2.0.192.in-addr.arpa.")
+                && call.contains("\"changetype\":\"DELETE\"")
+        }));
     }
 }

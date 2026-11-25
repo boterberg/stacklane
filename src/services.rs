@@ -276,7 +276,8 @@ async fn provision_floating_ip(
                 None => {
                     let taken: Vec<String> = sqlx::query_scalar(
                         "SELECT details->>'ipv4' FROM services
-                         WHERE integration_id = $1 AND id <> $2 AND status <> 'terminated' AND details ? 'ipv4'",
+                         WHERE integration_id = $1 AND id <> $2 AND status <> 'terminated' AND details ? 'ipv4'
+         UNION SELECT ip FROM ptr_cleanups",
                     )
                     .bind(integration_id)
                     .bind(service_id)
@@ -464,7 +465,8 @@ async fn provision_vps(
     }
     let taken: Vec<String> = sqlx::query_scalar(
         "SELECT details->>'ipv4' FROM services
-         WHERE integration_id = $1 AND id <> $2 AND status <> 'terminated' AND details ? 'ipv4'",
+         WHERE integration_id = $1 AND id <> $2 AND status <> 'terminated' AND details ? 'ipv4'
+         UNION SELECT ip FROM ptr_cleanups",
     )
     .bind(integration_id)
     .bind(service_id)
