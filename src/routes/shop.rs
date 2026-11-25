@@ -513,14 +513,13 @@ async fn place_order(
             "Kies hoe vaak je wilt betalen.",
         ));
     }
-    let domain = input
-        .name
-        .trim()
+    let lowered = input.name.trim().to_lowercase();
+    let domain = lowered
         .trim_start_matches("https://")
         .trim_start_matches("http://")
         .trim_start_matches("www.")
         .trim_end_matches('/')
-        .to_lowercase();
+        .to_owned();
     let name = if product.kind == "webhosting" {
         domain.as_str()
     } else {
@@ -536,9 +535,10 @@ async fn place_order(
         let taken: bool = sqlx::query_scalar(
             "SELECT EXISTS (
                  SELECT 1 FROM services
-                 WHERE lower(name) = $1
-                   AND ((kind = 'webhosting' AND integration_id = $2 AND status IN ('provisioning', 'active', 'suspended'))
-                        OR (kind = 'domain' AND user_id <> $3 AND status NOT IN ('terminated', 'failed'))))",
+                 WHERE (kind = 'webhosting' AND integration_id = $2 AND lower(name) = $1
+                        AND status IN ('provisioning', 'active', 'suspended'))
+                    OR (kind = 'domain' AND user_id <> $3 AND status NOT IN ('terminated', 'failed')
+                        AND (lower(name) = $1 OR right($1, length(name) + 1) = '.' || lower(name))))",
         )
         .bind(name)
         .bind(product.integration_id)

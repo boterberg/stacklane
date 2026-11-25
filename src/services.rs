@@ -178,11 +178,14 @@ async fn run_provision(state: &AppState, service_id: Uuid) -> anyhow::Result<()>
         "floating_ip" => provision_floating_ip(state, service_id, integration_id, &driver).await?,
         "webhosting" => {
             let taken: bool = sqlx::query_scalar(
-                "SELECT EXISTS (SELECT 1 FROM services WHERE id <> $1 AND lower(name) = lower($3)
+                "SELECT EXISTS (SELECT 1 FROM services WHERE id <> $1
                                 AND ((kind = 'webhosting' AND integration_id = $2
+                                      AND lower(name) = lower($3)
                                       AND status IN ('provisioning', 'active', 'suspended'))
                                      OR (kind = 'domain' AND user_id <> $4
-                                         AND status NOT IN ('terminated', 'failed'))))",
+                                         AND status NOT IN ('terminated', 'failed')
+                                         AND (lower(name) = lower($3)
+                                              OR right(lower($3), length(name) + 1) = '.' || lower(name)))))",
             )
             .bind(service_id)
             .bind(integration_id)

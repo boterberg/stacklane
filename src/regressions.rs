@@ -1347,6 +1347,39 @@ async fn a_domain_on_one_hosting_package_cannot_be_ordered_again(db: PgPool) {
         "{}",
         order.body
     );
+    let domain = service(
+        &client.state,
+        NewService {
+            user: first,
+            subscription: None,
+            kind: "domain",
+            status: "active",
+            integration: None,
+            external_id: None,
+            details: json!({}),
+        },
+    )
+    .await;
+    sqlx::query("UPDATE services SET name = 'eerste-klant.nl' WHERE id = $1")
+        .bind(domain)
+        .execute(&client.state.db)
+        .await
+        .unwrap();
+    for name in [
+        "WWW.eerste-klant.nl",
+        "Www.Eerste-Klant.nl",
+        "shop.eerste-klant.nl",
+    ] {
+        let order = client
+            .send(
+                Method::POST,
+                "/orders",
+                Some(&second),
+                Some(json!({ "product_id": product, "billing_interval": "monthly", "name": name })),
+            )
+            .await;
+        assert_eq!(order.status, StatusCode::UNPROCESSABLE_ENTITY, "{name}");
+    }
 }
 
 #[sqlx::test]
