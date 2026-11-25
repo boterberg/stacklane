@@ -60,6 +60,16 @@ pub const INVITE: Rule = Rule {
     max: 20,
     window: Duration::from_secs(60 * 60),
 };
+pub const CHECKOUT: Rule = Rule {
+    name: "checkout",
+    max: 10,
+    window: Duration::from_secs(10 * 60),
+};
+pub const VAT_CHECK: Rule = Rule {
+    name: "vat-check",
+    max: 10,
+    window: Duration::from_secs(60 * 60),
+};
 pub const PANEL_LOGIN: Rule = Rule {
     name: "panel-login",
     max: 20,
@@ -148,6 +158,8 @@ fn window_of(name: &str) -> Duration {
         REGISTRAR_READ,
         VPS_UPSTREAM,
         PANEL_LOGIN,
+        CHECKOUT,
+        VAT_CHECK,
         DOMAIN_SEARCH,
     ]
     .into_iter()

@@ -462,6 +462,8 @@ async fn order_floating_ips(
     ))
 }
 
+const MAX_WAITING_ORDERS: i64 = 10;
+
 pub async fn place(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -481,6 +483,18 @@ async fn place_order(
         return Err(AppError::field(
             "product_id",
             "In de demo kun je niets bestellen.",
+        ));
+    }
+    let waiting: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM services WHERE user_id = $1 AND status = 'pending'",
+    )
+    .bind(user.id)
+    .fetch_one(&state.db)
+    .await?;
+    if waiting >= MAX_WAITING_ORDERS {
+        return Err(AppError::field(
+            "product_id",
+            "Je hebt al 10 bestellingen die nog niet betaald zijn. Betaal of annuleer die eerst.",
         ));
     }
     let product: ProductRow = sqlx::query_as(sqlx::AssertSqlSafe(format!(

@@ -76,6 +76,9 @@ pub async fn pay(
             "In de demo kun je niet echt betalen.",
         ));
     }
+    state
+        .limits
+        .check(&crate::limits::CHECKOUT, &user.id.to_string())?;
     let checkout_url =
         payments::start_checkout(&state, user.id, id, &input.provider, input.save).await?;
     Ok(Json(Checkout { checkout_url }))
