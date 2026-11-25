@@ -41,28 +41,6 @@ fn say(locale: Locale, dutch: &'static str, english: &'static str) -> &'static s
     }
 }
 
-pub fn money(cents: i64, locale: Locale) -> String {
-    let negative = cents < 0;
-    let cents = cents.unsigned_abs();
-    let (thousands, decimal) = match locale {
-        Locale::Nl => ('.', ','),
-        Locale::En => (',', '.'),
-    };
-    let whole = (cents / 100).to_string();
-    let mut grouped = String::new();
-    for (index, digit) in whole.chars().enumerate() {
-        if index > 0 && (whole.len() - index).is_multiple_of(3) {
-            grouped.push(thousands);
-        }
-        grouped.push(digit);
-    }
-    let sign = if negative { "-" } else { "" };
-    match locale {
-        Locale::Nl => format!("€ {sign}{grouped}{decimal}{:02}", cents % 100),
-        Locale::En => format!("{sign}€{grouped}{decimal}{:02}", cents % 100),
-    }
-}
-
 pub fn date(value: Date, locale: Locale) -> String {
     let (day, month, year) = (value.day(), u8::from(value.month()), value.year());
     match locale {
@@ -242,7 +220,11 @@ pub fn render_invoice(invoice: &InvoiceDetail, company: &Company, locale: Locale
             10.0,
             Font::Regular,
             TEXT,
-            &money(i64::from(line.amount_cents), locale),
+            &crate::money::format(
+                i64::from(line.amount_cents),
+                &invoice.summary.currency,
+                locale,
+            ),
         );
         for (index, text) in details.iter().enumerate() {
             page.text(
@@ -274,7 +256,7 @@ pub fn render_invoice(invoice: &InvoiceDetail, company: &Company, locale: Locale
     let totals = [
         (
             say(locale, "Subtotaal", "Subtotal"),
-            money(total - tax, locale),
+            crate::money::format(total - tax, &invoice.summary.currency, locale),
             Font::Regular,
         ),
         (
@@ -282,12 +264,12 @@ pub fn render_invoice(invoice: &InvoiceDetail, company: &Company, locale: Locale
                 Locale::Nl => "Btw",
                 Locale::En => "VAT",
             },
-            money(tax, locale),
+            crate::money::format(tax, &invoice.summary.currency, locale),
             Font::Regular,
         ),
         (
             say(locale, "Totaal", "Total"),
-            money(total, locale),
+            crate::money::format(total, &invoice.summary.currency, locale),
             Font::Bold,
         ),
     ];
@@ -322,24 +304,24 @@ pub fn render_invoice(invoice: &InvoiceDetail, company: &Company, locale: Locale
         "open" => Some(match (&company.iban, locale) {
             (Some(iban), Locale::Nl) => format!(
                 "Betaal {} voor {} op IBAN {iban} ten name van {company_name}, onder vermelding van factuur {}.",
-                money(total, locale),
+                crate::money::format(total, &invoice.summary.currency, locale),
                 date(invoice.summary.due_at, locale),
                 invoice.summary.id
             ),
             (Some(iban), Locale::En) => format!(
                 "Please pay {} before {} to IBAN {iban} in the name of {company_name}, quoting invoice {}.",
-                money(total, locale),
+                crate::money::format(total, &invoice.summary.currency, locale),
                 date(invoice.summary.due_at, locale),
                 invoice.summary.id
             ),
             (None, Locale::Nl) => format!(
                 "Betaal {} voor {} via het klantpanel.",
-                money(total, locale),
+                crate::money::format(total, &invoice.summary.currency, locale),
                 date(invoice.summary.due_at, locale)
             ),
             (None, Locale::En) => format!(
                 "Please pay {} before {} in the customer panel.",
-                money(total, locale),
+                crate::money::format(total, &invoice.summary.currency, locale),
                 date(invoice.summary.due_at, locale)
             ),
         }),
@@ -439,14 +421,6 @@ pub fn render_invoice(invoice: &InvoiceDetail, company: &Company, locale: Locale
 mod tests {
     use super::*;
     use time::macros::date;
-
-    #[test]
-    fn formats_money_per_locale() {
-        assert_eq!(money(650, Locale::Nl), "€ 6,50");
-        assert_eq!(money(12_345_678, Locale::Nl), "€ 123.456,78");
-        assert_eq!(money(12_345_678, Locale::En), "€123,456.78");
-        assert_eq!(money(-500, Locale::Nl), "€ -5,00");
-    }
 
     #[test]
     fn formats_dates_per_locale() {

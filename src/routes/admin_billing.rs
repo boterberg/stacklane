@@ -31,6 +31,7 @@ pub struct AdminInvoice {
     #[serde(with = "crate::dates::day")]
     due_at: Date,
     total_cents: i32,
+    currency: String,
     customer_name: String,
     customer_email: String,
 }
@@ -91,7 +92,7 @@ pub async fn index(
     .fetch_one(&state.db)
     .await?;
     let rows = sqlx::query_as(AssertSqlSafe(format!(
-        "SELECT v.id, v.status, v.issued_at, v.due_at, v.total_cents,
+        "SELECT v.id, v.status, v.issued_at, v.due_at, v.total_cents, v.currency,
                 COALESCE(NULLIF(trim(u.first_name || ' ' || u.last_name), ''), u.email::text) AS customer_name,
                 u.email::text AS customer_email
          FROM invoices v JOIN users u ON u.id = v.user_id

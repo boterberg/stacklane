@@ -22,6 +22,7 @@ pub struct Meta {
     #[serde(with = "time::serde::rfc3339::option")]
     next_reset_at: Option<OffsetDateTime>,
     company: Option<crate::settings::Company>,
+    currency: String,
 }
 
 #[derive(Deserialize)]
@@ -41,10 +42,12 @@ fn next_full_hour(now: OffsetDateTime) -> OffsetDateTime {
 pub async fn meta(State(state): State<AppState>) -> AppResult<Json<Meta>> {
     let demo = state.config.demo_mode;
     let company: crate::settings::Company = crate::settings::get(&state.db, "company").await?;
+    let billing: crate::settings::Billing = crate::settings::get(&state.db, "billing").await?;
     Ok(Json(Meta {
         demo,
         next_reset_at: demo.then(|| next_full_hour(OffsetDateTime::now_utc())),
         company: (!company.name.is_empty()).then_some(company),
+        currency: billing.currency,
     }))
 }
 

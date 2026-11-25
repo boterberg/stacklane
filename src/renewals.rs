@@ -129,6 +129,10 @@ async fn charge(state: &AppState, invoice_id: i64, total: i64, mandate_id: Uuid)
     let Some((provider, customer, mandate)) = mandate else {
         return Ok(());
     };
+    let currency: String = sqlx::query_scalar("SELECT currency FROM invoices WHERE id = $1")
+        .bind(invoice_id)
+        .fetch_one(&state.db)
+        .await?;
     let providers = payments::providers(state).await?;
     let payment_id = Uuid::new_v4();
     let description = format!("Stacklane {invoice_id}");
@@ -146,6 +150,7 @@ async fn charge(state: &AppState, invoice_id: i64, total: i64, mandate_id: Uuid)
         ("mollie", Some(client), _) => client
             .create_payment(&mollie::NewPayment {
                 amount_cents: total,
+                currency: &currency,
                 description: &description,
                 redirect_url: "",
                 webhook_url: &format!("{}/api/webhooks/mollie", state.config.public_url),
@@ -162,6 +167,7 @@ async fn charge(state: &AppState, invoice_id: i64, total: i64, mandate_id: Uuid)
                 &customer,
                 &mandate,
                 total,
+                &currency,
                 &description,
                 &payment_id.to_string(),
             )

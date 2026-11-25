@@ -14,6 +14,7 @@ mod invoicing;
 mod limits;
 mod locks;
 mod mail;
+mod money;
 mod pagination;
 mod payments;
 mod pdf;

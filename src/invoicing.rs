@@ -76,8 +76,8 @@ pub async fn issue(
     let mut transaction = state.db.begin().await?;
     let invoice_id: i64 = sqlx::query_scalar(
         "INSERT INTO invoices (user_id, status, issued_at, due_at, tax_rate_basis_points, total_cents, tax_cents, billing_snapshot,
-                               vat_scheme, vat_country, customer_vat_number)
-         VALUES ($1, 'open', $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
+                               vat_scheme, vat_country, customer_vat_number, currency)
+         VALUES ($1, 'open', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id",
     )
     .bind(user_id)
     .bind(OffsetDateTime::now_utc().date())
@@ -89,6 +89,7 @@ pub async fn issue(
     .bind(decision.scheme.as_str())
     .bind(&decision.country)
     .bind(customer_vat_number)
+    .bind(&billing.currency)
     .fetch_one(&mut *transaction)
     .await?;
     for (line, amount) in lines.iter().zip(&amounts) {

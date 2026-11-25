@@ -12,6 +12,7 @@ pub struct Client {
 pub struct Checkout<'a> {
     pub customer: &'a str,
     pub amount_cents: i64,
+    pub currency: &'a str,
     pub description: &'a str,
     pub success_url: &'a str,
     pub cancel_url: &'a str,
@@ -85,6 +86,7 @@ impl Client {
         checkout: &Checkout<'_>,
     ) -> anyhow::Result<(String, String)> {
         let amount = checkout.amount_cents.to_string();
+        let currency = checkout.currency.to_lowercase();
         let mut form = vec![
             ("mode", "payment"),
             ("customer", checkout.customer),
@@ -92,7 +94,7 @@ impl Client {
             ("cancel_url", checkout.cancel_url),
             ("client_reference_id", checkout.payment_id),
             ("line_items[0][quantity]", "1"),
-            ("line_items[0][price_data][currency]", "eur"),
+            ("line_items[0][price_data][currency]", currency.as_str()),
             ("line_items[0][price_data][unit_amount]", amount.as_str()),
             (
                 "line_items[0][price_data][product_data][name]",
@@ -139,16 +141,18 @@ impl Client {
         customer: &str,
         payment_method: &str,
         amount_cents: i64,
+        currency: &str,
         description: &str,
         payment_id: &str,
     ) -> anyhow::Result<Value> {
         let amount = amount_cents.to_string();
+        let currency = currency.to_lowercase();
         self.send(
             self.http
                 .post(format!("{}/payment_intents", self.base_url))
                 .form(&[
                     ("amount", amount.as_str()),
-                    ("currency", "eur"),
+                    ("currency", currency.as_str()),
                     ("customer", customer),
                     ("payment_method", payment_method),
                     ("description", description),

@@ -24,6 +24,7 @@ pub struct Billing {
     pub payment_term_days: i32,
     pub renewal_notice_days: i32,
     pub suspend_after_days: i32,
+    pub currency: String,
 }
 
 impl Default for Billing {
@@ -35,6 +36,7 @@ impl Default for Billing {
             payment_term_days: 14,
             renewal_notice_days: 14,
             suspend_after_days: 7,
+            currency: "EUR".to_owned(),
         }
     }
 }

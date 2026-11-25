@@ -65,6 +65,10 @@ pub async fn update(
     }
     if let Some(mut billing) = input.billing {
         billing.home_country = billing.home_country.trim().to_uppercase();
+        billing.currency = billing.currency.trim().to_uppercase();
+        if !crate::money::supported(&billing.currency) {
+            return Err(AppError::field("currency", "Kies een valuta uit de lijst."));
+        }
         if crate::vat::eu_rate(&billing.home_country).is_none() {
             billing.oss = false;
         }

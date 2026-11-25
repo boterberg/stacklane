@@ -63,6 +63,7 @@ pub enum Sequence<'a> {
 
 pub struct NewPayment<'a> {
     pub amount_cents: i64,
+    pub currency: &'a str,
     pub description: &'a str,
     pub redirect_url: &'a str,
     pub webhook_url: &'a str,
@@ -133,7 +134,7 @@ impl Client {
 
     pub async fn create_payment(&self, payment: &NewPayment<'_>) -> anyhow::Result<Payment> {
         let mut body = json!({
-            "amount": { "currency": "EUR", "value": amount(payment.amount_cents) },
+            "amount": { "currency": payment.currency, "value": amount(payment.amount_cents) },
             "description": payment.description,
             "redirectUrl": payment.redirect_url,
             "webhookUrl": payment.webhook_url,

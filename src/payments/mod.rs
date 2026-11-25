@@ -155,8 +155,8 @@ pub async fn start_checkout(
     provider: &str,
     save_mandate: bool,
 ) -> AppResult<String> {
-    let total: i32 = sqlx::query_scalar(
-        "SELECT total_cents FROM invoices WHERE id = $1 AND user_id = $2 AND status = 'open'",
+    let (total, currency): (i32, String) = sqlx::query_as(
+        "SELECT total_cents, currency FROM invoices WHERE id = $1 AND user_id = $2 AND status = 'open'",
     )
     .bind(invoice_id)
     .bind(user_id)
@@ -186,6 +186,7 @@ pub async fn start_checkout(
             let payment = client
                 .create_payment(&mollie::NewPayment {
                     amount_cents: i64::from(total),
+                    currency: &currency,
                     description: &text,
                     redirect_url: &return_url,
                     webhook_url: &format!("{}/api/webhooks/mollie", state.config.public_url),
@@ -211,6 +212,7 @@ pub async fn start_checkout(
                 .create_checkout(&stripe::Checkout {
                     customer: &customer,
                     amount_cents: i64::from(total),
+                    currency: &currency,
                     description: &text,
                     success_url: &return_url,
                     cancel_url: &format!("{return_url}&cancelled=1"),

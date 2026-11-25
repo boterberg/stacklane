@@ -2255,3 +2255,66 @@ async fn admins_see_customers_with_their_services_but_customers_do_not(db: PgPoo
         );
     }
 }
+
+#[sqlx::test]
+#[ignore = "needs DATABASE_URL"]
+async fn invoices_keep_the_currency_they_were_issued_in(db: PgPool) {
+    use crate::invoicing::{Line, issue};
+    use crate::testing::make_admin;
+    let client = Client::new(db);
+    let (user, cookie) = client.register("currency-klant@example.test").await;
+    let (admin, admin_cookie) = client.register("currency-staff@example.test").await;
+    make_admin(&client.state, admin).await;
+    let line = || Line {
+        subscription_id: None,
+        description: "Hosting".to_owned(),
+        period_start: None,
+        period_end: None,
+        amount_cents: 1000,
+    };
+    let today = time::OffsetDateTime::now_utc().date();
+    let billing: crate::settings::Billing = crate::settings::get(&client.state.db, "billing")
+        .await
+        .unwrap();
+    let (euro, _) = issue(&client.state, user, &[line()], today, &billing)
+        .await
+        .unwrap();
+    let refused = client
+        .send(
+            Method::PUT,
+            "/admin/settings",
+            Some(&admin_cookie),
+            Some(json!({ "billing": { "currency": "XYZ" } })),
+        )
+        .await;
+    assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY);
+    let saved = client
+        .send(
+            Method::PUT,
+            "/admin/settings",
+            Some(&admin_cookie),
+            Some(json!({ "billing": { "currency": "usd" } })),
+        )
+        .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
+    assert_eq!(saved.body["billing"]["currency"], "USD");
+    let billing: crate::settings::Billing = crate::settings::get(&client.state.db, "billing")
+        .await
+        .unwrap();
+    let (dollar, _) = issue(&client.state, user, &[line()], today, &billing)
+        .await
+        .unwrap();
+    for (id, currency) in [(euro, "EUR"), (dollar, "USD")] {
+        let invoice = client
+            .send(
+                Method::GET,
+                &format!("/billing/invoices/{id}"),
+                Some(&cookie),
+                None,
+            )
+            .await;
+        assert_eq!(invoice.body["currency"], currency, "{}", invoice.body);
+    }
+    let meta = client.send(Method::GET, "/meta", None, None).await;
+    assert_eq!(meta.body["currency"], "USD");
+}

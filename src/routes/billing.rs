@@ -56,6 +56,7 @@ pub struct InvoiceSummary {
     #[serde(with = "crate::dates::day")]
     pub(crate) due_at: Date,
     pub(crate) total_cents: i32,
+    pub(crate) currency: String,
 }
 
 #[derive(Serialize)]
@@ -192,7 +193,7 @@ pub async fn subscription(
     .fetch_all(&state.db)
     .await?;
     let invoices = sqlx::query_as(
-        "SELECT DISTINCT v.id, v.status, v.issued_at, v.due_at, v.total_cents
+        "SELECT DISTINCT v.id, v.status, v.issued_at, v.due_at, v.total_cents, v.currency
          FROM invoices v JOIN invoice_lines l ON l.invoice_id = v.id
          WHERE v.user_id = $1 AND l.subscription_id = $2
          ORDER BY v.issued_at DESC, v.id DESC",
@@ -227,7 +228,7 @@ pub async fn invoices(
     .fetch_one(&state.db)
     .await?;
     let rows = sqlx::query_as(AssertSqlSafe(format!(
-        "SELECT v.id, v.status, v.issued_at, v.due_at, v.total_cents FROM invoices v
+        "SELECT v.id, v.status, v.issued_at, v.due_at, v.total_cents, v.currency FROM invoices v
          WHERE {condition} ORDER BY v.issued_at DESC, v.id DESC LIMIT $3 OFFSET $4"
     )))
     .bind(user.id)
@@ -246,6 +247,7 @@ struct InvoiceRow {
     issued_at: Date,
     due_at: Date,
     total_cents: i32,
+    currency: String,
     tax_cents: i32,
     tax_rate_basis_points: i32,
     vat_scheme: String,
@@ -262,7 +264,7 @@ pub async fn load_invoice(
     id: i64,
 ) -> AppResult<InvoiceDetail> {
     let row: InvoiceRow = sqlx::query_as(
-        "SELECT id, status, issued_at, due_at, total_cents, tax_cents, tax_rate_basis_points, vat_scheme, vat_country::text,
+        "SELECT id, status, issued_at, due_at, total_cents, currency, tax_cents, tax_rate_basis_points, vat_scheme, vat_country::text,
                 customer_vat_number, paid_at, billing_snapshot, user_id
          FROM invoices WHERE id = $1 AND ($2::uuid IS NULL OR user_id = $2)",
     )
@@ -302,6 +304,7 @@ pub async fn load_invoice(
             issued_at: row.issued_at,
             due_at: row.due_at,
             total_cents: row.total_cents,
+            currency: row.currency,
         },
         tax_cents: row.tax_cents,
         tax_rate_basis_points: row.tax_rate_basis_points,

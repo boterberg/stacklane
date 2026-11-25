@@ -529,6 +529,7 @@ fn english(message: &str) -> Option<&'static str> {
             "You already have 10 orders that are not paid yet. Pay or cancel those first."
         }
         "In de demo voer je dit niet echt uit." => "The demo does not really carry this out.",
+        "Kies een valuta uit de lijst." => "Choose a currency from the list.",
         _ => return None,
     })
 }
