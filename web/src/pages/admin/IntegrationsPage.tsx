@@ -48,6 +48,7 @@ const emptyForm = {
   credential_secret: '',
   region: '',
   network_id: '',
+  floating_network_id: '',
   os_images: '',
   api_token: '',
   hypervisor_group_id: '1',
@@ -121,7 +122,12 @@ function payload(form: typeof emptyForm): IntegrationInput {
       name: form.name,
       base_url: form.base_url,
       credentials: { application_credential_id: form.credential_id.trim(), application_credential_secret: form.credential_secret.trim() },
-      settings: { region: form.region.trim() || null, network_id: form.network_id.trim(), images: parseCloudImages(form.os_images) },
+      settings: {
+        region: form.region.trim() || null,
+        network_id: form.network_id.trim(),
+        floating_network_id: form.floating_network_id.trim() || null,
+        images: parseCloudImages(form.os_images),
+      },
     }
   }
   if (form.kind === 'proxmox') {
@@ -257,6 +263,12 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
                 {(id) => <Input id={id} value={form.network_id} onChange={(event) => setForm({ ...form, network_id: event.target.value })} />}
               </Field>
             </div>
+            <Field
+              label={t('Extern netwerk voor floating IPs')}
+              description={t('De ID van het externe netwerk waar floating IPs vandaan komen. Leeg laten als je geen floating IPs verkoopt.')}
+            >
+              {(id) => <Input id={id} value={form.floating_network_id} onChange={(event) => setForm({ ...form, floating_network_id: event.target.value })} />}
+            </Field>
             <Field label={t('Besturingssystemen')} description={t('Per regel de ID van een image en de naam die klanten zien.')}>
               {(id) => (
                 <textarea

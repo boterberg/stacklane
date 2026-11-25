@@ -18,6 +18,7 @@ import {
   KeyIcon,
   LifebuoyIcon,
   LinkIcon,
+  MapPinIcon,
   PlayCircleIcon,
   QuestionMarkCircleIcon,
   ReceiptPercentIcon,
@@ -128,7 +129,13 @@ export const vpsSection: NavSection = {
         { label: "ISO's", to: '/vps/isos', icon: PlayCircleIcon, permission: 'isos.view' },
       ],
     },
-    { label: 'Netwerk', children: [{ label: 'Firewalls', to: '/vps/firewalls', icon: ShieldCheckIcon, permission: 'firewalls.view' }] },
+    {
+      label: 'Netwerk',
+      children: [
+        { label: 'Floating IPs', to: '/vps/floating-ips', icon: MapPinIcon, permission: 'floating_ips.view' },
+        { label: 'Firewalls', to: '/vps/firewalls', icon: ShieldCheckIcon, permission: 'firewalls.view' },
+      ],
+    },
     {
       label: 'Toegang',
       children: [

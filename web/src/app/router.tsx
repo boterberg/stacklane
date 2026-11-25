@@ -26,6 +26,7 @@ import { VpsServerPage } from '../pages/vps/ServerPage'
 import { VpsServersPage } from '../pages/vps/ServersPage'
 import { FirewallPage } from '../pages/vps/FirewallPage'
 import { FirewallsPage } from '../pages/vps/FirewallsPage'
+import { FloatingIpsPage } from '../pages/vps/FloatingIpsPage'
 import { IsosPage } from '../pages/vps/IsosPage'
 import { UsersPage } from '../pages/vps/UsersPage'
 import { SnapshotsPage } from '../pages/vps/SnapshotsPage'
@@ -90,6 +91,7 @@ export const router = createBrowserRouter([
       { path: '/vps/volumes', element: <VolumesPage /> },
       { path: '/vps/snapshots', element: <SnapshotsPage /> },
       { path: '/vps/isos', element: <IsosPage /> },
+      { path: '/vps/floating-ips', element: <FloatingIpsPage /> },
       { path: '/vps/firewalls', element: <FirewallsPage /> },
       { path: '/vps/firewalls/:id', element: <FirewallPage /> },
       { path: '/vps/ssh-keys', element: <SshKeysPage /> },

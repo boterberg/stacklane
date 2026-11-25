@@ -40,6 +40,7 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
   const virtfusion = form.kind === 'vps' && integrationKind === 'virtfusion'
   const hosting = form.kind === 'webhosting'
   const volume = form.kind === 'volume'
+  const floating = form.kind === 'floating_ip'
   const { data: catalog, isFetching } = useCatalog(form.kind === 'gameserver' || cloud || virtfusion || hosting ? form.integration_id || null : null)
   const flavor = catalog?.flavors?.find((option) => option.id === form.flavor_id)
   const vfPackage = catalog?.packages?.find((option) => String(option.id) === form.package_id)
@@ -70,7 +71,7 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
         name: form.name,
         monthly_price_cents: Math.round(Number(form.price.replace(',', '.')) * 100) || 0,
         integration_id: form.integration_id || null,
-        provisioning: volume
+        provisioning: volume || floating
           ? {}
           : hosting
             ? { plan: form.plan }
@@ -130,6 +131,7 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
               <option value="vps">VPS</option>
               <option value="webhosting">{t('Webhosting')}</option>
               <option value="volume">{t('Volume')}</option>
+              <option value="floating_ip">{t('Floating IP')}</option>
             </Select>
           )}
         </Field>
@@ -138,15 +140,15 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
             {(id) => (
               <Input
                 id={id}
-                placeholder={form.kind === 'vps' ? 'VPS Small' : hosting ? 'Webhosting Basis' : volume ? 'Volume SSD' : 'Minecraft 4 GB'}
+                placeholder={form.kind === 'vps' ? 'VPS Small' : hosting ? 'Webhosting Basis' : volume ? 'Volume SSD' : floating ? 'Floating IP' : 'Minecraft 4 GB'}
                 value={form.name}
                 invalid={!!errors.name}
                 onChange={(event) => update('name', event.target.value)}
               />
             )}
           </Field>
-          <Field label={volume ? t('Prijs per GB per maand') : t('Prijs per maand')} error={errors.monthly_price_cents}>
-            {(id) => <Input id={id} inputMode="decimal" placeholder={volume ? '0,10' : '12,50'} value={form.price} onChange={(event) => update('price', event.target.value)} />}
+          <Field label={volume ? t('Prijs per GB per maand') : floating ? t('Prijs per IP per maand') : t('Prijs per maand')} error={errors.monthly_price_cents}>
+            {(id) => <Input id={id} inputMode="decimal" placeholder={volume ? '0,10' : floating ? '3,00' : '12,50'} value={form.price} onChange={(event) => update('price', event.target.value)} />}
           </Field>
         </div>
         <Field label={t('Koppeling')} error={errors.integration_id}>
@@ -157,13 +159,13 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
                   ? t('Kies een VPS-koppeling...')
                   : hosting
                     ? t('Kies een hostingserver...')
-                    : volume
+                    : volume || floating
                       ? t('Kies een Proxmox- of OpenStack-koppeling...')
                       : t('Kies een Pterodactyl-panel...')}
               </option>
               {integrations
                 .filter((integration) =>
-                  (form.kind === 'vps' ? ['proxmox', 'openstack', 'virtfusion'] : hosting ? ['cpanel', 'directadmin', 'plesk'] : volume ? ['proxmox', 'openstack'] : ['pterodactyl']).includes(
+                  (form.kind === 'vps' ? ['proxmox', 'openstack', 'virtfusion'] : hosting ? ['cpanel', 'directadmin', 'plesk'] : volume || floating ? ['proxmox', 'openstack'] : ['pterodactyl']).includes(
                     integration.kind,
                   ),
                 )
@@ -261,6 +263,10 @@ function CreateProductPanel({ open, onClose }: { open: boolean; onClose: () => v
           </Field>
         ) : volume ? (
           <p className="text-sm text-zinc-500 dark:text-white/60">{t('Klanten kiezen zelf de grootte, tussen 10 en 1000 GB. Ze betalen de prijs per GB keer de grootte.')}</p>
+        ) : floating ? (
+          <p className="text-sm text-zinc-500 dark:text-white/60">
+            {t('Bij Proxmox VE komt het adres uit de IP-reeks van de koppeling. Bij OpenStack uit het externe netwerk dat je bij de koppeling hebt ingesteld.')}
+          </p>
         ) : form.kind === 'vps' ? (
           <div className="grid gap-6 sm:grid-cols-3">
             <Field label={t('Processors')}>{(id) => <Input id={id} inputMode="numeric" value={form.cores} onChange={(event) => update('cores', event.target.value)} />}</Field>
@@ -313,7 +319,9 @@ export function ProductsPage() {
                   <CurrencyEuroIcon className="size-4 text-zinc-400 dark:text-white/40" />
                   {product.kind === 'volume'
                     ? t('{price} per GB per maand', { price: formatEuro(product.monthly_price_cents) })
-                    : t('{price} per maand', {
+                    : product.kind === 'floating_ip'
+                      ? t('{price} per IP per maand', { price: formatEuro(product.monthly_price_cents) })
+                      : t('{price} per maand', {
                         price: formatEuro(product.monthly_price_cents),
                       })}
                 </span>
