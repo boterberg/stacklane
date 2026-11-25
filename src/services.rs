@@ -1403,6 +1403,14 @@ pub async fn change_state_because(
         result.map_err(|error| AppError::field("action", format!("{error:#}")))?;
     }
 
+    let released = (action == "terminate" && matches!(kind.as_str(), "vps" | "floating_ip"))
+        .then(|| details["ipv4"].as_str())
+        .flatten();
+    let mut transaction = state.db.begin().await?;
+    if let Some(ip) = released {
+        crate::locks::transaction(&mut transaction, "proxmox pool").await?;
+        crate::routes::vps_rdns::queue(&mut transaction, ip, service_id).await?;
+    }
     sqlx::query(
         "UPDATE services SET status = $2, updated_at = now(),
                 suspension_reason = CASE WHEN $2 = 'suspended' THEN $3 END,
@@ -1412,12 +1420,11 @@ pub async fn change_state_because(
     .bind(service_id)
     .bind(next)
     .bind(reason)
-    .execute(&state.db)
+    .execute(&mut *transaction)
     .await?;
+    transaction.commit().await?;
     if action == "terminate" {
-        if matches!(kind.as_str(), "vps" | "floating_ip")
-            && let Some(ip) = details["ipv4"].as_str()
-        {
+        if let Some(ip) = released {
             crate::routes::vps_rdns::clear(state, ip).await;
         }
         end_billing(state, service_id).await?;

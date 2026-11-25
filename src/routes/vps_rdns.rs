@@ -158,6 +158,10 @@ pub async fn update(
             ));
         }
     }
+    sqlx::query("DELETE FROM ptr_cleanups WHERE ip = $1")
+        .bind(input.ip.to_string())
+        .execute(&state.db)
+        .await?;
     let servers = dns_servers(&state).await?;
     let Some((server, zone)) = locate(&servers, input.ip).await else {
         return Err(AppError::field(
@@ -201,18 +205,33 @@ async fn cleared(state: &AppState, ip: Ipv4Addr) -> bool {
     true
 }
 
+pub async fn queue(
+    connection: &mut sqlx::PgConnection,
+    ip: &str,
+    service_id: Uuid,
+) -> sqlx::Result<()> {
+    sqlx::query(
+        "INSERT INTO ptr_cleanups (ip, service_id) VALUES ($1, $2)
+         ON CONFLICT (ip) DO UPDATE SET service_id = EXCLUDED.service_id",
+    )
+    .bind(ip)
+    .bind(service_id)
+    .execute(connection)
+    .await?;
+    Ok(())
+}
+
 pub async fn clear(state: &AppState, ip: &str) {
-    let Ok(ip) = ip.parse::<Ipv4Addr>() else {
+    let Ok(address) = ip.parse::<Ipv4Addr>() else {
         return;
     };
-    if !cleared(state, ip).await
-        && let Err(error) =
-            sqlx::query("INSERT INTO ptr_cleanups (ip) VALUES ($1) ON CONFLICT DO NOTHING")
-                .bind(ip.to_string())
-                .execute(&state.db)
-                .await
+    if cleared(state, address).await
+        && let Err(error) = sqlx::query("DELETE FROM ptr_cleanups WHERE ip = $1")
+            .bind(ip)
+            .execute(&state.db)
+            .await
     {
-        tracing::warn!(%ip, ?error, "queueing a ptr cleanup failed");
+        tracing::warn!(%ip, ?error, "finishing a ptr cleanup failed");
     }
 }
 
@@ -226,7 +245,15 @@ pub async fn retry_cleanups(state: &AppState) -> AppResult<usize> {
         let Ok(address) = ip.parse::<Ipv4Addr>() else {
             continue;
         };
-        if cleared(state, address).await {
+        let reissued: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM services s, ptr_cleanups p
+                            WHERE p.ip = $1 AND s.details->>'ipv4' = $1 AND s.status <> 'terminated'
+                              AND s.id IS DISTINCT FROM p.service_id)",
+        )
+        .bind(&ip)
+        .fetch_one(&state.db)
+        .await?;
+        if reissued || cleared(state, address).await {
             sqlx::query("DELETE FROM ptr_cleanups WHERE ip = $1")
                 .bind(&ip)
                 .execute(&state.db)
@@ -377,6 +404,11 @@ mod tests {
         .await
         .unwrap();
 
+        let mut connection = client.state.db.acquire().await.unwrap();
+        super::queue(&mut connection, "192.0.2.15", Uuid::new_v4())
+            .await
+            .unwrap();
+        drop(connection);
         super::clear(&client.state, "192.0.2.15").await;
         let queued: Vec<String> = sqlx::query_scalar("SELECT ip FROM ptr_cleanups")
             .fetch_all(&client.state.db)
@@ -396,5 +428,28 @@ mod tests {
             call.starts_with("PATCH /api/v1/servers/localhost/zones/2.0.192.in-addr.arpa.")
                 && call.contains("\"changetype\":\"DELETE\"")
         }));
+        DOWN.store(true, std::sync::atomic::Ordering::SeqCst);
+        let (owner, _) = client.register("rdns-reissued@example.test").await;
+        crate::testing::service(
+            &client.state,
+            crate::testing::NewService {
+                user: owner,
+                subscription: None,
+                kind: "floating_ip",
+                status: "active",
+                integration: None,
+                external_id: None,
+                details: json!({ "ipv4": "192.0.2.16" }),
+            },
+        )
+        .await;
+        let mut connection = client.state.db.acquire().await.unwrap();
+        super::queue(&mut connection, "192.0.2.16", Uuid::new_v4())
+            .await
+            .unwrap();
+        drop(connection);
+        let before = calls.lock().unwrap().len();
+        assert_eq!(super::retry_cleanups(&client.state).await.unwrap(), 1);
+        assert_eq!(calls.lock().unwrap().len(), before);
     }
 }
