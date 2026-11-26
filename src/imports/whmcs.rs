@@ -503,7 +503,7 @@ type InvoiceRow = (
     i64,
     String,
 );
-type InvoiceItemRow = (String, i64, String, i64);
+type InvoiceItemRow = (String, i64, String, i64, Option<String>);
 
 async fn invoices(
     source: &MySqlPool,
@@ -568,20 +568,27 @@ async fn invoices(
             .await?;
 
         let items: Vec<InvoiceItemRow> = sqlx::query_as(
-            "SELECT CAST(COALESCE(type, '') AS CHAR), CAST(relid AS SIGNED), CAST(description AS CHAR), CAST(amount * 100 AS SIGNED)
+            "SELECT CAST(COALESCE(type, '') AS CHAR), CAST(relid AS SIGNED), CAST(description AS CHAR), CAST(amount * 100 AS SIGNED),
+                    IF(duedate < '1971-01-01', NULL, DATE_FORMAT(duedate, '%Y-%m-%d'))
              FROM tblinvoiceitems WHERE invoiceid = ? ORDER BY id",
         )
         .bind(id)
         .fetch_all(source)
         .await?;
-        for (item_type, relid, description, amount) in items {
+        for (item_type, relid, description, amount, due) in items {
+            let subscription = if item_type == "Hosting" {
+                subscriptions.get(&relid).copied()
+            } else {
+                None
+            };
             sqlx::query(
-                "INSERT INTO invoice_lines (id, invoice_id, subscription_id, description, amount_cents) VALUES ($1, $2, $3, $4, $5)",
+                "INSERT INTO invoice_lines (id, invoice_id, subscription_id, description, period_start, amount_cents) VALUES ($1, $2, $3, $4, $5, $6)",
             )
             .bind(Uuid::new_v4())
             .bind(invoice_id)
-            .bind(if item_type == "Hosting" { subscriptions.get(&relid).copied() } else { None })
+            .bind(subscription)
             .bind(description.chars().take(500).collect::<String>())
+            .bind(subscription.and(date(due)))
             .bind(i32::try_from(amount).unwrap_or(0))
             .execute(&mut **pg)
             .await?;

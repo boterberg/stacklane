@@ -42,7 +42,7 @@ Wat er meekomt:
 | Klanten, met adres en bedrijfsnaam | Klanten. Hun wachtwoord blijft werken en wordt bij de eerste keer inloggen opnieuw versleuteld. |
 | Producten en hun prijs | Producten, met een maandprijs. Verborgen producten worden inactief. |
 | Diensten (`tblhosting`) | Abonnementen en diensten, met status, vervaldatum en interval |
-| Facturen en factuurregels | Facturen, met hetzelfde nummer en dezelfde status |
+| Facturen en factuurregels | Facturen, met hetzelfde nummer en dezelfde status. Een openstaande factuur voor de volgende periode telt in Stacklane als verlengingsfactuur, zodat er geen tweede komt. |
 | Tickets en reacties | Tickets met het hele gesprek. Afdelingen die nog niet bestaan, worden aangemaakt. |
 
 Wat de import overslaat, staat aan het eind van de uitvoer: klanten zonder geldig e-mailadres, klanten van wie het adres al bij een onbevestigd account hoort, tickets van gasten zonder account en losse betalingen. Diensten met een cyclus van twee of drie jaar komen binnen als jaarlijks.

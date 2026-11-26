@@ -18,7 +18,7 @@ CREATE TABLE tblinvoices (
   id INT PRIMARY KEY, userid INT, invoicenum TEXT, date DATE, duedate DATE, datepaid DATETIME, subtotal DECIMAL(16,2),
   tax DECIMAL(16,2), tax2 DECIMAL(16,2), total DECIMAL(16,2), taxrate DECIMAL(10,3), status TEXT
 );
-CREATE TABLE tblinvoiceitems (id INT PRIMARY KEY, invoiceid INT, userid INT, type TEXT, relid INT, description TEXT, amount DECIMAL(16,2));
+CREATE TABLE tblinvoiceitems (id INT PRIMARY KEY, invoiceid INT, userid INT, type TEXT, relid INT, description TEXT, amount DECIMAL(16,2), duedate DATE);
 CREATE TABLE tblticketdepartments (id INT PRIMARY KEY, name TEXT);
 CREATE TABLE tbltickets (id INT PRIMARY KEY, tid TEXT, did INT, userid INT, name TEXT, email TEXT, title TEXT, message TEXT, status TEXT, urgency TEXT, date DATETIME, lastreply DATETIME);
 CREATE TABLE tblticketreplies (id INT PRIMARY KEY, tid INT, userid INT, name TEXT, email TEXT, date DATETIME, message TEXT, admin TEXT);
@@ -50,9 +50,9 @@ INSERT INTO tblinvoices VALUES
   (1002, 1, '2026-0002', '2026-11-20', '2026-12-04', '0000-00-00 00:00:00', 157.02, 32.98, 0, 190.00, 21.000, 'Unpaid'),
   (1003, 2, '', '2024-08-01', '2024-08-15', '2024-08-02 10:00:00', 110.00, 0, 0, 110.00, 0.000, 'Paid');
 INSERT INTO tblinvoiceitems VALUES
-  (1, 1001, 1, 'Hosting', 1, 'Minecraft 4 GB - mc.pietersmedia.nl (10/11/2026 - 09/12/2026)', 12.50),
-  (2, 1002, 1, 'Hosting', 2, 'VPS Medium (01/06/2027 - 31/05/2028)', 190.00),
-  (3, 1003, 2, 'Hosting', 3, 'Webhosting Plus - vermeulen.be', 110.00);
+  (1, 1001, 1, 'Hosting', 1, 'Minecraft 4 GB - mc.pietersmedia.nl (10/11/2026 - 09/12/2026)', 12.50, '2026-11-10'),
+  (2, 1002, 1, 'Hosting', 2, 'VPS Medium (01/06/2027 - 31/05/2028)', 190.00, '2027-06-01'),
+  (3, 1003, 2, 'Hosting', 3, 'Webhosting Plus - vermeulen.be', 110.00, '2024-08-01');
 INSERT INTO tblticketdepartments VALUES (1, 'Technische support'), (2, 'Facturatie');
 INSERT INTO tbltickets VALUES
   (1, '482913', 1, 1, '', '', 'Server start niet na update', 'Hoi,\r\n\r\nNa de update naar 1.21 start mijn server niet meer.\r\nKunnen jullie kijken?', 'Answered', 'High', '2026-11-18 20:11:00', '2026-11-19 08:30:00'),
