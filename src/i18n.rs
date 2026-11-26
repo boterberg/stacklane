@@ -195,6 +195,9 @@ fn english(message: &str) -> Option<&'static str> {
         "Vul de node, de gateway, een geldige reeks IP-adressen en een VLAN-reeks tussen 1 en 4094 in." => {
             "Enter the node, the gateway, a valid range of IP addresses and a VLAN range between 1 and 4094."
         }
+        "Plak het CA-certificaat als PEM, beginnend met -----BEGIN CERTIFICATE-----." => {
+            "Paste the CA certificate as PEM, starting with -----BEGIN CERTIFICATE-----."
+        }
         "In de demo kun je niets bestellen." => "You cannot order anything in the demo.",
         "Kies een pakket." => "Choose a plan.",
         "Kies hoe vaak je wilt betalen." => "Choose how often you want to pay.",

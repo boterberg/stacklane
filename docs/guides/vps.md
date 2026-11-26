@@ -27,7 +27,7 @@ qm template 9000
 3. Vul de node, bridge en opslag in, en de IP-reeks met gateway en prefix. Stacklane deelt de adressen uit van laag naar hoog en geeft er nooit een twee keer uit.
 4. Zet per regel een template en de naam die klanten zien, zoals `9000 Debian 13`.
 
-Stacklane test de verbinding meteen. Het token wordt versleuteld opgeslagen met `SECRET_KEY`. **Certificaat controleren** staat standaard aan. Gebruikt Proxmox een zelfondertekend certificaat, geef de node dan een geldig certificaat, bijvoorbeeld via ACME onder *Node → Certificaten*. Zet je de controle uit, dan kan iedereen op het netwerk tussen Stacklane en Proxmox het token onderscheppen.
+Stacklane test de verbinding meteen. Het token wordt versleuteld opgeslagen met `SECRET_KEY`. **Certificaat controleren** staat standaard aan. Gebruikt Proxmox zijn eigen, zelfondertekende certificaat, plak dan de inhoud van `/etc/pve/pve-root-ca.pem` in **CA-certificaat van Proxmox**. Stacklane vertrouwt dan alleen die CA en controleert het certificaat en de hostnaam gewoon. Een certificaat via ACME onder *Node → Certificaten* werkt ook, dan laat je het veld leeg. Zet je de controle helemaal uit, dan kan iedereen op het netwerk tussen Stacklane en Proxmox het token onderscheppen.
 
 ## Een product maken
 

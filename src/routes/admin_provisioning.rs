@@ -277,7 +277,22 @@ pub async fn create_integration(
                     && settings.vlan_from <= settings.vlan_to
                     && settings.vlan_to <= 4094 =>
             {
-                serde_json::to_value(settings).map_err(anyhow::Error::from)?
+                match proxmox::trusted_roots(&settings) {
+                    Ok(roots) => serde_json::to_value(proxmox::Settings {
+                        verify_tls: settings.verify_tls || roots.is_some(),
+                        ca_certificate: roots.and(settings.ca_certificate),
+                        ..settings
+                    })
+                    .map_err(anyhow::Error::from)?,
+                    Err(_) => {
+                        errors.insert(
+                            "ca_certificate",
+                            "Plak het CA-certificaat als PEM, beginnend met -----BEGIN CERTIFICATE-----."
+                                .to_owned(),
+                        );
+                        Value::Null
+                    }
+                }
             }
             _ => {
                 errors.insert(

@@ -174,6 +174,8 @@ export const en: Record<string, string> = {
   "Btw-overzicht": "VAT overview",
   "Btw-tarief (%)": "VAT rate (%)",
   "Buiten de EU": "Outside the EU",
+  "CA-certificaat van Proxmox": "Proxmox CA certificate",
+  "Gebruikt Proxmox zijn eigen certificaat? Plak dan de inhoud van /etc/pve/pve-root-ca.pem. Stacklane vertrouwt dan alleen die CA en blijft het certificaat controleren.": "Does Proxmox use its own certificate? Paste the contents of /etc/pve/pve-root-ca.pem. Stacklane then trusts only that CA and keeps checking the certificate.",
   "Certificaat van Proxmox controleren": "Verify the Proxmox certificate",
   "Citaat": "Quote",
   "Client API-sleutel": "Client API key",

@@ -44,6 +44,7 @@ const emptyForm = {
   prefix: '24',
   dns: '1.1.1.1',
   verify_tls: true,
+  ca_certificate: '',
   images: '9000 Debian 13',
   wh_username: '',
   wh_secret: '',
@@ -161,6 +162,7 @@ function payload(form: typeof emptyForm): IntegrationInput {
         prefix: Number(form.prefix) || 24,
         dns: form.dns.trim(),
         verify_tls: form.verify_tls,
+        ca_certificate: form.ca_certificate.trim() || null,
         images: parseImages(form.images),
       },
     }
@@ -438,7 +440,21 @@ function CreateIntegrationPanel({ open, onClose }: { open: boolean; onClose: () 
                 />
               )}
             </Field>
-            <Checkbox label={t('Certificaat van Proxmox controleren')} checked={form.verify_tls} onChange={(event) => setForm({ ...form, verify_tls: event.target.checked })} />
+            <Field label={t('CA-certificaat van Proxmox')} description={t('Gebruikt Proxmox zijn eigen certificaat? Plak dan de inhoud van /etc/pve/pve-root-ca.pem. Stacklane vertrouwt dan alleen die CA en blijft het certificaat controleren.')} error={errors.ca_certificate}>
+              {(id) => (
+                <textarea
+                  id={id}
+                  rows={4}
+                  value={form.ca_certificate}
+                  placeholder="-----BEGIN CERTIFICATE-----"
+                  onChange={(event) => setForm({ ...form, ca_certificate: event.target.value })}
+                  className="block w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-sm text-zinc-700 shadow-xs dark:border-white/10 dark:bg-white/10 dark:text-zinc-300"
+                />
+              )}
+            </Field>
+            {!form.ca_certificate.trim() && (
+              <Checkbox label={t('Certificaat van Proxmox controleren')} checked={form.verify_tls} onChange={(event) => setForm({ ...form, verify_tls: event.target.checked })} />
+            )}
           </>
         ) : (
           <>

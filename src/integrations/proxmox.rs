@@ -38,6 +38,8 @@ pub struct Settings {
     pub dns: String,
     #[serde(default = "default_verify_tls")]
     pub verify_tls: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ca_certificate: Option<String>,
     #[serde(default)]
     pub images: Vec<Image>,
     #[serde(default)]
@@ -144,18 +146,39 @@ pub fn ip_range(settings: &Settings) -> impl Iterator<Item = Ipv4Addr> {
     (u32::from(settings.ip_from)..=u32::from(settings.ip_to)).map(Ipv4Addr::from)
 }
 
+pub fn trusted_roots(settings: &Settings) -> anyhow::Result<Option<Vec<reqwest::Certificate>>> {
+    let Some(pem) = settings
+        .ca_certificate
+        .as_deref()
+        .map(str::trim)
+        .filter(|pem| !pem.is_empty())
+    else {
+        return Ok(None);
+    };
+    let roots = reqwest::Certificate::from_pem_bundle(pem.as_bytes())
+        .context("het CA-certificaat is geen geldig PEM-bestand")?;
+    anyhow::ensure!(
+        !roots.is_empty(),
+        "het CA-certificaat is geen geldig PEM-bestand"
+    );
+    Ok(Some(roots))
+}
+
 impl Proxmox {
     pub fn new(
         base_url: &str,
         credentials: Credentials,
         settings: Settings,
     ) -> anyhow::Result<Self> {
-        let http = reqwest::Client::builder()
+        let mut http = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .timeout(Duration::from_secs(60))
-            .danger_accept_invalid_certs(!settings.verify_tls)
-            .user_agent(concat!("stacklane/", env!("CARGO_PKG_VERSION")))
-            .build()?;
+            .user_agent(concat!("stacklane/", env!("CARGO_PKG_VERSION")));
+        http = match trusted_roots(&settings)? {
+            Some(roots) => http.tls_certs_only(roots),
+            None => http.danger_accept_invalid_certs(!settings.verify_tls),
+        };
+        let http = http.build()?;
         Ok(Self {
             base_url: base_url.trim_end_matches('/').to_owned(),
             credentials,
@@ -1343,6 +1366,33 @@ mod tests {
         );
         assert_eq!(super::disk_key(&config, "local-lvm:vm-101-disk-9"), None);
         assert_eq!(super::free_disk_key(&config).unwrap(), "scsi2");
+    }
+
+    const TEST_CA: &str = "-----BEGIN CERTIFICATE-----\nMIIDfDCCAmSgAwIBAgIUazLRdTwFH4CK5UsxK1OCqwGlQyEwDQYJKoZIhvcNAQEL\nBQAwVjEkMCIGA1UEAwwbUHJveG1veCBWaXJ0dWFsIEVudmlyb25tZW50MQ0wCwYD\nVQQLDAR0ZXN0MR8wHQYDVQQKDBZQVkUgQ2x1c3RlciBNYW5hZ2VyIENBMB4XDTI2\nMTEyNjE3NTIxMVoXDTI2MTIyNjE3NTIxMVowVjEkMCIGA1UEAwwbUHJveG1veCBW\naXJ0dWFsIEVudmlyb25tZW50MQ0wCwYDVQQLDAR0ZXN0MR8wHQYDVQQKDBZQVkUg\nQ2x1c3RlciBNYW5hZ2VyIENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC\nAQEAkt66EbtqdxAZdu8M34YKjdDTdc3muDthgKRj7BTriGxAvFkOsdi0U2HT7bHZ\nMlWsgqY2jVKYYSYUaKFauITj8k7MSTWEc2uAdQJJHExbNhqt6wUPt58XiaqCO4yA\npw+eGbUHUsaWIgRvlcJ3Pw8BC8T1k+wePB4LzoPRtilNI3alk2FDhN1WYVun/su5\nH76OGTO4CoiQ1yc0KQVpOFUwS1nIv7OJGaX5ln5kQ15xqogDh1Y1BAUgLi3aJs+9\ncE4QiW5csnhME+SdjkQ2WxU8Id7+9mFP2CRihlV/ji7b0wtzUenY6Mvmc9beWEtK\nyXR2VcidJPpnQnbofh5Gjjw9JQIDAQABo0IwQDAdBgNVHQ4EFgQUNsy9MNfFd81x\n0WLZKAn38qFw4TAwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMCAQYwDQYJ\nKoZIhvcNAQELBQADggEBAGI4plgo8R//H5FswERg4lPFDRnRbaShkjb88jvDZmLn\nbU4dEqUPuRtyPkFW6UZiVIWMNlWXVYR40D9pv54cF9JVrbZj3wQzOsS6a5cm852t\n5uJr93jQkG5u572HgGfUpJozXDv4FwZTyUtqi9hoEgcIjU5dhlfZtHLl0zgyAEDa\nlrUcJAzS2HEg2/HFWDiGB49M8t5nYxbSyt7XtphtbZA/pF32rkR+qAgVjju31YYF\nik43h0RMLuN3maqSlHfXgTcqzJzLP6bKWr8mFJKQGwrCgiyX72CWexgYfOHnmYyE\nMuqw8RuLNBnGijytjUhdOOo0Soi23nzdViXGITVKF9U=\n-----END CERTIFICATE-----";
+
+    #[test]
+    fn trusts_only_a_pasted_ca_certificate() {
+        let mut settings = settings();
+        assert!(trusted_roots(&settings).unwrap().is_none());
+        settings.ca_certificate = Some(format!("\n{TEST_CA}\n"));
+        assert_eq!(trusted_roots(&settings).unwrap().unwrap().len(), 1);
+        settings.ca_certificate = Some("   ".to_owned());
+        assert!(trusted_roots(&settings).unwrap().is_none());
+        settings.ca_certificate = Some("not a certificate".to_owned());
+        assert!(trusted_roots(&settings).is_err());
+        settings.verify_tls = false;
+        settings.ca_certificate = Some(TEST_CA.to_owned());
+        assert!(
+            Proxmox::new(
+                "https://pve.test:8006",
+                Credentials {
+                    token_id: "a@pve!b".into(),
+                    token_secret: "c".into()
+                },
+                settings
+            )
+            .is_ok()
+        );
     }
 
     #[test]
