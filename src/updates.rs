@@ -78,6 +78,7 @@ struct Latest {
 
 pub struct Updates {
     dir: PathBuf,
+    status_dir: PathBuf,
     check_url: Option<String>,
     client: reqwest::Client,
     latest: RwLock<Option<Latest>>,
@@ -109,6 +110,12 @@ pub fn default_check_url() -> Option<String> {
     }
 }
 
+pub fn status_dir() -> PathBuf {
+    std::env::var_os("UPDATE_STATUS_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/var/lib/stacklane-update"))
+}
+
 pub fn write_progress(dir: &Path, progress: &Progress) -> anyhow::Result<()> {
     std::fs::create_dir_all(dir)?;
     let temporary = dir.join("status.json.tmp");
@@ -117,76 +124,27 @@ pub fn write_progress(dir: &Path, progress: &Progress) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub struct UpdateDir {
-    dir: std::fs::File,
-}
-
-impl UpdateDir {
-    pub fn open(path: &Path) -> anyhow::Result<Self> {
-        use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
-        let dir = std::fs::OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
-            .open(path)?;
-        anyhow::ensure!(
-            dir.metadata()?.is_dir() && dir.metadata()?.nlink() >= 2,
-            "geen map"
-        );
-        Ok(Self { dir })
-    }
-
-    fn entry(&self, name: &str) -> PathBuf {
-        use std::os::fd::AsRawFd;
-        PathBuf::from(format!("/proc/self/fd/{}/{name}", self.dir.as_raw_fd()))
-    }
-
-    pub fn take_request(&self) -> Option<String> {
-        use std::io::Read;
-        use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
-        let mut file = std::fs::OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
-            .open(self.entry("request"))
-            .ok()?;
-        let metadata = file.metadata().ok()?;
-        std::fs::remove_file(self.entry("request")).ok();
-        if !metadata.is_file() || metadata.nlink() != 1 || metadata.len() > 64 {
-            return None;
-        }
-        let mut target = String::new();
-        file.by_ref().take(64).read_to_string(&mut target).ok()?;
-        Some(target)
-    }
-
-    pub fn write_progress(&self, progress: &Progress) -> anyhow::Result<()> {
-        use std::io::Write;
-        use std::os::unix::fs::OpenOptionsExt;
-        let temporary = self.entry("status.json.tmp");
-        match std::fs::remove_file(&temporary) {
-            Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error.into()),
-            _ => {}
-        }
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o644)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-            .open(&temporary)?;
-        file.write_all(&serde_json::to_vec(progress)?)?;
-        drop(file);
-        std::fs::rename(&temporary, self.entry("status.json"))?;
-        Ok(())
-    }
-}
-
 pub fn read_progress(dir: &Path) -> Option<Progress> {
     serde_json::from_slice(&std::fs::read(dir.join("status.json")).ok()?).ok()
 }
 
+fn newest(left: Option<Progress>, right: Option<Progress>) -> Option<Progress> {
+    match (left, right) {
+        (Some(left), Some(right)) if right.updated_at >= left.updated_at => Some(right),
+        (Some(left), _) => Some(left),
+        (None, right) => right,
+    }
+}
+
 impl Updates {
     pub fn new(dir: PathBuf, check_url: Option<String>) -> Self {
+        Self::with_status_dir(dir, status_dir(), check_url)
+    }
+
+    pub fn with_status_dir(dir: PathBuf, status_dir: PathBuf, check_url: Option<String>) -> Self {
         Self {
             dir,
+            status_dir,
             check_url,
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(15))
@@ -247,8 +205,12 @@ impl Updates {
             latest: version,
             checked_at: latest.map(|latest| latest.checked_at),
             can_update: Self::panel_unit_installed(),
-            progress: read_progress(&self.dir),
+            progress: self.progress(),
         }
+    }
+
+    fn progress(&self) -> Option<Progress> {
+        newest(read_progress(&self.dir), read_progress(&self.status_dir))
     }
 
     pub fn request(&self, target: &str) -> anyhow::Result<Progress> {
@@ -270,27 +232,19 @@ mod tests {
     }
 
     #[test]
-    fn the_update_dir_never_follows_planted_links() {
-        let root = scratch("links");
-        let update = root.join("update");
-        std::fs::create_dir(&update).unwrap();
-        let secret = root.join("secret");
-        std::fs::write(&secret, "root only").unwrap();
-        let victim = root.join("victim");
-        std::fs::write(&victim, "untouched").unwrap();
-        std::os::unix::fs::symlink(&secret, update.join("request")).unwrap();
-        std::os::unix::fs::symlink(&victim, update.join("status.json.tmp")).unwrap();
+    fn the_updater_reports_progress_outside_the_panel_directory() {
+        let panel = scratch("panel");
+        let root = scratch("root");
+        let updates = Updates::with_status_dir(panel.clone(), root.clone(), None);
+        updates.request("1.2.3.4").unwrap();
+        assert_eq!(updates.progress().unwrap().state, "queued");
 
-        let dir = UpdateDir::open(&update).unwrap();
-        assert_eq!(dir.take_request(), None);
-        dir.write_progress(&Progress::new("running", "checking", "1.2.3.4", None))
-            .unwrap();
-        assert_eq!(std::fs::read_to_string(&victim).unwrap(), "untouched");
-        assert!(read_progress(&update).is_some());
+        std::thread::sleep(Duration::from_millis(5));
+        write_progress(&root, &Progress::new("running", "backup", "1.2.3.4", None)).unwrap();
+        assert_eq!(updates.progress().unwrap().state, "running");
+        assert_eq!(read_progress(&panel).unwrap().state, "queued");
 
-        let linked = root.join("linked");
-        std::os::unix::fs::symlink(&update, &linked).unwrap();
-        assert!(UpdateDir::open(&linked).is_err());
+        std::fs::remove_dir_all(panel).unwrap();
         std::fs::remove_dir_all(root).unwrap();
     }
 

@@ -2,7 +2,7 @@
 Description=Watch for update requests from the Stacklane panel
 
 [Path]
-PathExists=/var/lib/stacklane/update/request
+PathChanged=/var/lib/stacklane/update/request
 Unit=stacklane-update.service
 
 [Install]

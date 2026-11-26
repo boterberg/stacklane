@@ -8,3 +8,7 @@ Type=oneshot
 EnvironmentFile=-/etc/stacklane/stacklane.env
 ExecStart=/usr/bin/stacklane update --from-panel
 TimeoutStartSec=30min
+StateDirectory=stacklane-update
+StateDirectoryMode=0755
+UMask=0022
+PrivateTmp=yes

@@ -5,7 +5,7 @@ use anyhow::Context;
 
 use super::{banner, done, exec, fail, require_root, step, wait_until_ready, warn};
 use crate::config::VERSION;
-use crate::updates::{Progress, UpdateDir};
+use crate::updates::{Progress, status_dir, write_progress};
 
 const BACKUP_DIR: &str = "/var/backups/stacklane";
 
@@ -63,17 +63,13 @@ fn backup() -> anyhow::Result<String> {
 }
 
 struct Panel {
-    dir: Option<UpdateDir>,
-    target: String,
+    dir: PathBuf,
 }
 
 impl Panel {
-    fn report(&self, state: &str, step: &str, message: Option<String>) {
-        let Some(dir) = &self.dir else {
-            return;
-        };
-        let progress = Progress::new(state, step, &self.target, message);
-        if let Err(error) = dir.write_progress(&progress) {
+    fn report(&self, state: &str, step: &str, target: &str, message: Option<String>) {
+        let progress = Progress::new(state, step, target, message);
+        if let Err(error) = write_progress(&self.dir, &progress) {
             warn(&format!("Status voor het panel niet opgeslagen: {error}"));
         }
     }
@@ -83,33 +79,16 @@ pub async fn run(args: &[String]) -> anyhow::Result<()> {
     if !args.iter().any(|arg| arg == "--from-panel") {
         return update(None);
     }
-    let dir = std::env::var_os("UPDATE_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/var/lib/stacklane/update"));
-    let dir = UpdateDir::open(&dir).ok();
-    let target = dir
-        .as_ref()
-        .and_then(UpdateDir::take_request)
-        .unwrap_or_default();
-    let panel = Panel {
-        dir,
-        target: target.trim().to_owned(),
-    };
-    panel.report("running", "checking", None);
+    let panel = Panel { dir: status_dir() };
+    panel.report("running", "checking", "", None);
     let result = update(Some(&panel));
-    match &result {
-        Ok(()) => panel.report("done", "done", None),
-        Err(error) => panel.report("failed", "failed", Some(error.to_string())),
+    if let Err(error) = &result {
+        panel.report("failed", "failed", "", Some(error.to_string()));
     }
     result
 }
 
 fn update(panel: Option<&Panel>) -> anyhow::Result<()> {
-    let report = |step: &str| {
-        if let Some(panel) = panel {
-            panel.report("running", step, None);
-        }
-    };
     banner("Bijwerken");
     require_root()?;
 
@@ -121,20 +100,26 @@ fn update(panel: Option<&Panel>) -> anyhow::Result<()> {
         );
         anyhow::bail!("geen pakketbron");
     };
+    let report = |state: &str, step: &str| {
+        if let Some(panel) = panel {
+            panel.report(state, step, &candidate, None);
+        }
+    };
     if candidate == VERSION {
         done(&format!("Je draait al de nieuwste versie ({VERSION})"));
+        report("done", "done");
         return Ok(());
     }
     done(&format!(
         "Versie {candidate} staat klaar, je draait nu {VERSION}"
     ));
 
-    report("backup");
+    report("running", "backup");
     step("Back-up van de database");
     let path = backup()?;
     done(&format!("Opgeslagen in {path}"));
 
-    report("installing");
+    report("running", "installing");
     step(&format!("Stacklane {candidate} installeren"));
     let status = Command::new("apt-get")
         .args(["install", "-y", "--only-upgrade", "stacklane"])
@@ -144,7 +129,7 @@ fn update(panel: Option<&Panel>) -> anyhow::Result<()> {
         .context("apt-get starten")?;
     anyhow::ensure!(status.success(), "apt-get install is mislukt");
 
-    report("restarting");
+    report("running", "restarting");
     match wait_until_ready(30) {
         Some(version) => done(&format!("Stacklane {version} draait")),
         None => {
@@ -153,6 +138,7 @@ fn update(panel: Option<&Panel>) -> anyhow::Result<()> {
             anyhow::bail!("de nieuwe versie start niet, de back-up staat in {path}");
         }
     }
+    report("done", "done");
     println!();
     Ok(())
 }
